@@ -1,4 +1,6 @@
+use crate::core::CoreMessage;
 use crate::crypto::PublicKey;
+use crate::messages::Block;
 use crate::store::StoreCommand;
 use ed25519_dalek::ed25519;
 use serde::Serialize;
@@ -23,6 +25,18 @@ macro_rules! diem_ensure {
 
 #[derive(Error, Debug, Serialize)]
 pub enum DiemError {
+    #[error("Serialization error. {0}")]
+    SerializationError(String),
+
+    #[error("Network error. {0}")]
+    NetworkError(String),
+
+    #[error("Store error. {0}")]
+    StoreError(String),
+
+    #[error("Channel error. {0}")]
+    ChannelError(String),
+
     #[error("Invalid signature")]
     InvalidSignature,
 
@@ -38,17 +52,8 @@ pub enum DiemError {
     #[error("Received QC without a quorum")]
     QCRequiresQuorum,
 
-    #[error("Serialization error. {0}")]
-    SerializationError(String),
-
-    #[error("Network error. {0}")]
-    NetworkError(String),
-
-    #[error("Store error. {0}")]
-    StoreError(String),
-
-    #[error("Channel error. {0}")]
-    ChannelError(String),
+    #[error("Received unexpected message {0:?}")]
+    UnexpectedMessage(CoreMessage),
 }
 
 impl From<ed25519::Error> for DiemError {
@@ -75,14 +80,29 @@ impl From<tokio::sync::oneshot::error::RecvError> for DiemError {
     }
 }
 
+impl From<rocksdb::Error> for DiemError {
+    fn from(e: rocksdb::Error) -> Self {
+        DiemError::StoreError(e.to_string())
+    }
+}
+
 impl From<SendError<StoreCommand>> for DiemError {
     fn from(e: SendError<StoreCommand>) -> Self {
         DiemError::ChannelError(format!("Failed to send message to store: {}", e))
     }
 }
 
-impl From<rocksdb::Error> for DiemError {
-    fn from(e: rocksdb::Error) -> Self {
-        DiemError::StoreError(e.to_string())
+impl From<SendError<CoreMessage>> for DiemError {
+    fn from(e: SendError<CoreMessage>) -> Self {
+        DiemError::ChannelError(format!("Core failed to send message to network: {}", e))
+    }
+}
+
+impl From<SendError<Block>> for DiemError {
+    fn from(e: SendError<Block>) -> Self {
+        DiemError::ChannelError(format!(
+            "Core failed to send message to commit channel: {}",
+            e
+        ))
     }
 }

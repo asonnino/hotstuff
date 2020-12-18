@@ -1,4 +1,5 @@
 use crate::error::DiemError;
+use crate::messages::Block;
 use log::error;
 use rocksdb::DB;
 use tokio::sync::mpsc::{channel, Sender};
@@ -54,5 +55,12 @@ impl Store {
         let (sender, receiver) = oneshot::channel();
         self.channel.send(StoreCommand::Read(key, sender)).await?;
         receiver.await?
+    }
+
+    pub async fn get_previous_block(&mut self, block: &Block) -> StoreResult<Block> {
+        // TODO
+        let bytes = self.read(block.qc.hash.to_vec()).await?.unwrap();
+        let previous_block = bincode::deserialize(&bytes)?;
+        Ok(previous_block)
     }
 }

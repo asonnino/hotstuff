@@ -11,11 +11,18 @@ use std::fmt;
 
 #[derive(Serialize, Deserialize)]
 pub struct Block {
-    qc: QC,
-    round: RoundNumber,
+    pub qc: QC,
+    pub round: RoundNumber,
     author: PublicKey,
     payload: Digest,
     signature: Signature,
+}
+
+impl Block {
+    pub fn check(&self, committee: &Committee) -> Result<(), DiemError> {
+        self.signature.check(self, &self.author)?;
+        self.qc.check(committee)
+    }
 }
 
 impl Digestible for Block {
@@ -50,6 +57,17 @@ pub struct Vote {
     author: PublicKey,
 }
 
+impl Vote {
+    pub fn new(block: &Block, author: PublicKey) -> Result<Self, DiemError> {
+        // TODO
+        Ok(Vote {
+            hash: block.digest(),
+            signature: Signature::default(),
+            author,
+        })
+    }
+}
+
 impl Digestible for Vote {
     fn digest(&self) -> Digest {
         self.hash
@@ -64,7 +82,7 @@ impl fmt::Debug for Vote {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct QC {
-    hash: Digest,
+    pub hash: Digest,
     votes: Vec<(PublicKey, Signature)>,
 }
 
@@ -80,7 +98,7 @@ impl QC {
             .collect()
     }
 
-    pub fn check(&self, committee: &Committee) -> Result<(), DiemError> {
+    pub fn check(&self, _committee: &Committee) -> Result<(), DiemError> {
         /*
         // Check the quorum.
         let mut weight = 0;

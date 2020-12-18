@@ -6,7 +6,7 @@ pub trait LeaderElection {
     fn get_leader(&self, round: RoundNumber, committee: &Committee) -> PublicKey;
 }
 
-struct RRLeaderElection {}
+struct RRLeaderElection;
 
 impl LeaderElection for RRLeaderElection {
     fn get_leader(&self, round: RoundNumber, committee: &Committee) -> PublicKey {

@@ -55,7 +55,7 @@ impl<'de> Deserialize<'de> for PublicKey {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 pub struct Signature {
     part1: [u8; 32],
     part2: [u8; 32],
