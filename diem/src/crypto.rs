@@ -2,6 +2,8 @@ use crate::error::DiemError;
 use ed25519_dalek as dalek;
 use ed25519_dalek::ed25519;
 use serde::{de, ser, Deserialize, Serialize};
+use std::convert::TryInto;
+use std::fmt;
 
 #[cfg(test)]
 #[path = "tests/crypto_tests.rs"]
@@ -13,7 +15,7 @@ pub trait Digestible {
     fn digest(&self) -> Digest;
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct PublicKey(pub [u8; 32]);
 
 impl PublicKey {
@@ -23,22 +25,13 @@ impl PublicKey {
 
     pub fn from_base64(s: &str) -> Result<Self, base64::DecodeError> {
         let bytes = base64::decode(s)?;
-        let mut key = [0u8; 32];
-        key.copy_from_slice(&bytes[..32]);
-        Ok(Self(key))
+        Ok(Self(bytes[..32].try_into().unwrap()))
     }
 }
 
-impl From<PublicKey> for Vec<u8> {
-    fn from(x: PublicKey) -> Self {
-        x.0.to_vec()
-    }
-}
-
-impl std::fmt::Debug for PublicKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        write!(f, "{}", self.to_base64())?;
-        Ok(())
+impl fmt::Debug for PublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "{}", self.to_base64())
     }
 }
 

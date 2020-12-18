@@ -2,8 +2,10 @@ use serde::{Deserialize, Serialize};
 //use std::fs::{self, OpenOptions};
 //use std::io::{BufWriter, Write};
 use crate::crypto::PublicKey;
+use std::collections::HashMap;
 
 pub type Stake = u32;
+pub type EpochNumber = u128;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Authority {
@@ -15,7 +17,8 @@ pub struct Authority {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Committee {
-    authorities: Vec<Authority>,
+    pub authorities: HashMap<PublicKey, Authority>,
+    epoch: EpochNumber,
 }
 
 impl Committee {
@@ -24,16 +27,11 @@ impl Committee {
     }
 
     pub fn stake(&self, name: &PublicKey) -> Stake {
-        for auth in &self.authorities {
-            if *name == auth.name {
-                return auth.stake;
-            }
-        }
-        0
+        self.authorities.get(&name).map_or_else(|| 0, |x| x.stake)
     }
 
     fn total_votes(&self) -> Stake {
-        self.authorities.iter().map(|x| x.stake).sum()
+        self.authorities.values().map(|x| x.stake).sum()
     }
 
     pub fn quorum_threshold(&self) -> Stake {

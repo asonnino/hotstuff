@@ -1,20 +1,20 @@
 use crate::committee::{Committee, Stake};
+use crate::core::RoundNumber;
 use crate::crypto::{Digest, Digestible, PublicKey, Signature};
 use crate::error::DiemError;
 use ed25519_dalek::Digest as _;
 use ed25519_dalek::Sha512;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-
-type Transaction = Vec<u8>;
-type RoundNumber = u64;
+use std::convert::TryInto;
+use std::fmt;
 
 #[derive(Serialize, Deserialize)]
-struct Block {
+pub struct Block {
     qc: QC,
     round: RoundNumber,
     author: PublicKey,
-    txs: Vec<Transaction>,
+    payload: Digest,
     signature: Signature,
 }
 
@@ -22,15 +22,24 @@ impl Digestible for Block {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
         let mut hash = [0u8; 64];
-        let mut digest = [0u8; 32];
         hasher.update(self.round.to_le_bytes());
         hasher.update(self.author.0);
-        for tx in &self.txs {
-            hasher.update(tx);
-        }
+        hasher.update(self.payload);
         hash.copy_from_slice(hasher.finalize().as_slice());
-        digest.copy_from_slice(&hash[..32]);
-        digest
+        hash[..32].try_into().unwrap()
+    }
+}
+
+impl fmt::Debug for Block {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(
+            f,
+            "B({:?}, {}, {:?}, {:?})",
+            self.author,
+            self.round,
+            self.qc,
+            &self.payload[..8]
+        )
     }
 }
 
@@ -47,6 +56,12 @@ impl Digestible for Vote {
     }
 }
 
+impl fmt::Debug for Vote {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "V({:?}, {:?})", self.author, self.hash)
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct QC {
     hash: Digest,
@@ -55,6 +70,8 @@ pub struct QC {
 
 impl QC {
     pub fn genesis() -> Vec<Self> {
+        // The genesis has the following structure:
+        // B0 <- |QC0; B1| <- |QC1; B2| <- |QC2; B3| <- ...
         (0..3)
             .map(|x| QC {
                 hash: [x as u8; 32],
@@ -62,11 +79,9 @@ impl QC {
             })
             .collect()
     }
-}
 
-/*
-impl QC {
-    pub fn check(&self, committee: &Committee) -> Result<(), DagError> {
+    pub fn check(&self, committee: &Committee) -> Result<(), DiemError> {
+        /*
         // Check the quorum.
         let mut weight = 0;
         let mut used = HashSet::new();
@@ -88,10 +103,16 @@ impl QC {
         // Check the signatures
         // TODO:
         //Signature::verify_batch(&digest, &self.votes)
-        true
+        */
+        Ok(())
     }
 }
-*/
+
+impl fmt::Debug for QC {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "QC({:?})", self.hash)
+    }
+}
 
 #[derive(Default)]
 pub struct SignatureAggregator {
@@ -104,7 +125,6 @@ pub struct SignatureAggregator {
 impl SignatureAggregator {
     pub fn init(&mut self, hash: Digest) {
         self.clear();
-        self.hash = hash;
         self.partial = Some(QC {
             hash: hash,
             votes: Vec::new(),
@@ -114,7 +134,6 @@ impl SignatureAggregator {
     pub fn clear(&mut self) {
         self.weight = 0;
         self.used.clear();
-        self.hash = Digest::default();
         self.partial = None;
     }
 
@@ -144,7 +163,9 @@ impl SignatureAggregator {
         self.used.insert(author);
         self.weight += voting_rights;
         if self.weight >= committee.quorum_threshold() {
-            Ok(Some(partial.clone()))
+            self.weight = 0;
+            self.used.clear();
+            Ok(self.partial.take())
         } else {
             Ok(None)
         }
