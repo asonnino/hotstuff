@@ -20,7 +20,7 @@ pub struct Block {
 
 impl Block {
     pub fn check(&self, committee: &Committee) -> Result<(), DiemError> {
-        self.signature.check(self, &self.author)?;
+        self.signature.verify(self, &self.author)?;
         self.qc.check(committee)
     }
 }
@@ -126,6 +126,12 @@ impl QC {
     }
 }
 
+impl Digestible for QC {
+    fn digest(&self) -> Digest {
+        self.hash
+    }
+}
+
 impl fmt::Debug for QC {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(f, "QC({:?})", self.hash)
@@ -174,7 +180,7 @@ impl SignatureAggregator {
         diem_ensure!(voting_rights > 0, DiemError::UnknownAuthority(author));
 
         // Check the signature on the vote.
-        vote.signature.check(&vote, &author)?;
+        vote.signature.verify(&vote, &author)?;
 
         let partial = self.partial.as_mut().unwrap();
         partial.votes.push((author, vote.signature));

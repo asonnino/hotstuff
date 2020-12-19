@@ -99,7 +99,7 @@ where
         if b2.round > hightest_qc_round {
             self.highest_qc = (block.qc, b2.round);
         }
-        
+
         // Try to commit ancestors.
         let b0 = self.store.get_previous_block(&b1).await?;
         let mut commit = b0.round + 1 == b1.round;
