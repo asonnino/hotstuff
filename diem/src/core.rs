@@ -4,7 +4,7 @@ use crate::error::{DiemError, DiemResult};
 use crate::leader::LeaderElection;
 use crate::messages::{Block, Vote, QC};
 use crate::store::Store;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -60,7 +60,8 @@ impl<L: LeaderElection> Core<L> {
     async fn get_previous_block(&mut self, block: &Block) -> DiemResult<Block> {
         // TODO
         let bytes = self.store.read(block.qc.hash.to_vec()).await?.unwrap();
-        let previous_block = bincode::deserialize(&bytes)?;
+        let previous_block =
+            bincode::deserialize(&bytes).map_err(|e| DiemError::StoreError(e.to_string()))?;
         Ok(previous_block)
     }
 
@@ -87,10 +88,11 @@ impl<L: LeaderElection> Core<L> {
             debug!("Cannot vote on {:?}", block);
             return Ok(());
         }
-
         info!("Voting for block {:?}", block);
         let vote = Vote::new(&block, self.name)?;
-        self.sender.send(CoreMessage::Vote(vote)).await?;
+        if let Err(e) = self.sender.send(CoreMessage::Vote(vote)).await {
+            panic!("Core failed to send vote to the network: {}", e);
+        }
         let b1 = self.get_previous_block(&b2).await?;
         self.preferred_round = max(self.preferred_round, b1.round);
         self.last_voted_round = block.round;
@@ -106,7 +108,12 @@ impl<L: LeaderElection> Core<L> {
         commit &= b1.round + 1 == b2.round;
         commit &= b2.round + 1 == block.round;
         if commit {
-            self.commit_channel.send(b0).await?
+            if let Err(e) = self.commit_channel.send(b0).await {
+                warn!(
+                    "Core failed to send block through the commit channel: {}",
+                    e
+                );
+            }
         }
         Ok(())
     }
@@ -125,7 +132,10 @@ impl<L: LeaderElection> Core<L> {
             };
             match result {
                 Ok(()) => debug!("Message successfully processed."),
-                Err(e) => error!("{}", e),
+                Err(e) => match e {
+                    DiemError::StoreError(e) => error!("{}", e),
+                    _ => warn!("{}", e),
+                },
             }
         }
     }
