@@ -73,7 +73,7 @@ impl<L: LeaderElection> Core<L> {
         // Ensure we are the leader for this round.
         ensure!(
             self.name == self.leader_election.get_leader(block.round),
-            DiemError::UnexpectedMessage(CoreMessage::Propose(block, vote))
+            DiemError::UnexpectedMessage(Box::new(CoreMessage::Propose(block, vote)))
         );
 
         // Check the block is well-formed.

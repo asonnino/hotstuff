@@ -1,4 +1,3 @@
-use rocksdb;
 use thiserror::Error;
 use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::{channel, Sender};

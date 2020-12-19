@@ -54,7 +54,7 @@ pub enum DiemError {
     QCRequiresQuorum,
 
     #[error("Received unexpected message {0:?}")]
-    UnexpectedMessage(CoreMessage),
+    UnexpectedMessage(Box<CoreMessage>),
 }
 
 impl From<Box<bincode::ErrorKind>> for DiemError {

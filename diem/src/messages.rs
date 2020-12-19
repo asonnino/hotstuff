@@ -143,7 +143,7 @@ impl SignatureAggregator {
     pub fn init(&mut self, hash: Digest) {
         self.clear();
         self.partial = Some(QC {
-            hash: hash,
+            hash,
             votes: Vec::new(),
         });
     }
