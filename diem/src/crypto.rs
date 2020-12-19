@@ -159,9 +159,7 @@ impl<D: Digestible> SignatureService<D> {
     pub async fn run(&mut self) {
         while let Some((data, sender)) = self.receiver.recv().await {
             let signature = Signature::new(&data, &self.secret);
-            sender
-                .send(signature)
-                .expect("Failed to reply to signature request: Receiver dropped");
+            let _ = sender.send(signature);
         }
     }
 }

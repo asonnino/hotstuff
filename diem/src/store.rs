@@ -1,36 +1,8 @@
-use thiserror::Error;
-use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::sync::oneshot;
 
+pub type StoreError = rocksdb::Error;
 type StoreResult<T> = Result<T, StoreError>;
-
-#[derive(Error, Debug)]
-pub enum StoreError {
-    #[error("RocksDB internal error: {0}")]
-    RocksDBError(rocksdb::Error),
-
-    #[error("Internal store channel Error: {0}")]
-    ChannelError(String),
-}
-
-impl From<rocksdb::Error> for StoreError {
-    fn from(e: rocksdb::Error) -> Self {
-        StoreError::RocksDBError(e)
-    }
-}
-
-impl From<oneshot::error::RecvError> for StoreError {
-    fn from(e: oneshot::error::RecvError) -> Self {
-        StoreError::ChannelError(e.to_string())
-    }
-}
-
-impl From<SendError<StoreCommand>> for StoreError {
-    fn from(e: SendError<StoreCommand>) -> Self {
-        StoreError::ChannelError(e.to_string())
-    }
-}
 
 type Key = Vec<u8>;
 type Value = Vec<u8>;
@@ -52,16 +24,12 @@ impl Store {
             while let Some(command) = rx.recv().await {
                 match command {
                     StoreCommand::Write(key, value, sender) => {
-                        let response = db.put(key, value).map_err(StoreError::from);
-                        sender
-                            .send(response)
-                            .expect("Failed to reply to store write command: Receiver dropped");
+                        let response = db.put(key, value);
+                        let _ = sender.send(response);
                     }
                     StoreCommand::Read(key, sender) => {
-                        let response = db.get(key).map_err(StoreError::from);
-                        sender
-                            .send(response)
-                            .expect("Failed to reply to store read command: Receiver dropped");
+                        let response = db.get(key);
+                        let _ = sender.send(response);
                     }
                 }
             }
@@ -71,15 +39,25 @@ impl Store {
 
     pub async fn write(&mut self, key: Key, value: Value) -> StoreResult<()> {
         let (sender, receiver) = oneshot::channel();
-        self.channel
+        if let Err(e) = self
+            .channel
             .send(StoreCommand::Write(key, value, sender))
-            .await?;
-        receiver.await?
+            .await
+        {
+            panic!("Failed to send Write Command to store: {}", e);
+        }
+        receiver
+            .await
+            .expect("Failed to receive reply to Write Command from store")
     }
 
     pub async fn read(&mut self, key: Key) -> StoreResult<Option<Value>> {
         let (sender, receiver) = oneshot::channel();
-        self.channel.send(StoreCommand::Read(key, sender)).await?;
-        receiver.await?
+        if let Err(e) = self.channel.send(StoreCommand::Read(key, sender)).await {
+            panic!("Failed to send Read Command to store: {}", e);
+        }
+        receiver
+            .await
+            .expect("Failed to receive reply to Read Command from store")
     }
 }
