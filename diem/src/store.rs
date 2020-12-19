@@ -1,3 +1,4 @@
+use std::collections::{HashMap, VecDeque};
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::sync::oneshot;
 
@@ -10,6 +11,7 @@ type Value = Vec<u8>;
 pub enum StoreCommand {
     Write(Key, Value, oneshot::Sender<StoreResult<()>>),
     Read(Key, oneshot::Sender<StoreResult<Option<Value>>>),
+    NotifyRead(Key, oneshot::Sender<StoreResult<Value>>),
 }
 
 pub struct Store {
@@ -18,18 +20,38 @@ pub struct Store {
 
 impl Store {
     pub async fn new(path: String) -> StoreResult<Self> {
+        let mut pending: HashMap<Key, VecDeque<oneshot::Sender<StoreResult<Value>>>> =
+            HashMap::new();
+
         let db = rocksdb::DB::open_default(path)?;
         let (tx, mut rx) = channel(100);
         tokio::spawn(async move {
             while let Some(command) = rx.recv().await {
                 match command {
                     StoreCommand::Write(key, value, sender) => {
-                        let response = db.put(key, value);
+                        let response = db.put(&key, &value);
                         let _ = sender.send(response);
+                        if let Some(mut senders) = pending.remove(&key) {
+                            while let Some(s) = senders.pop_front() {
+                                let _ = s.send(Ok(value.clone()));
+                            }
+                        }
                     }
                     StoreCommand::Read(key, sender) => {
-                        let response = db.get(key);
+                        let response = db.get(&key);
                         let _ = sender.send(response);
+                    }
+                    StoreCommand::NotifyRead(key, sender) => {
+                        let response = db.get(&key);
+                        match response {
+                            Ok(None) => pending
+                                .entry(key)
+                                .or_insert_with(VecDeque::new)
+                                .push_back(sender),
+                            _ => {
+                                let _ = sender.send(response.map(|x| x.unwrap()));
+                            }
+                        }
                     }
                 }
             }
@@ -44,20 +66,34 @@ impl Store {
             .send(StoreCommand::Write(key, value, sender))
             .await
         {
-            panic!("Failed to send Write Command to store: {}", e);
+            panic!("Failed to send Write command to store: {}", e);
         }
         receiver
             .await
-            .expect("Failed to receive reply to Write Command from store")
+            .expect("Failed to receive reply to Write command from store")
     }
 
     pub async fn read(&mut self, key: Key) -> StoreResult<Option<Value>> {
         let (sender, receiver) = oneshot::channel();
         if let Err(e) = self.channel.send(StoreCommand::Read(key, sender)).await {
-            panic!("Failed to send Read Command to store: {}", e);
+            panic!("Failed to send Read command to store: {}", e);
         }
         receiver
             .await
-            .expect("Failed to receive reply to Read Command from store")
+            .expect("Failed to receive reply to Read command from store")
+    }
+
+    pub async fn notify_read(&mut self, key: Key) -> StoreResult<Value> {
+        let (sender, receiver) = oneshot::channel();
+        if let Err(e) = self
+            .channel
+            .send(StoreCommand::NotifyRead(key, sender))
+            .await
+        {
+            panic!("Failed to send NotifyRead command to store: {}", e);
+        }
+        receiver
+            .await
+            .expect("Failed to receive reply to NotifyRead command from store")
     }
 }
