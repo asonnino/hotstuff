@@ -8,17 +8,17 @@ use thiserror::Error;
 use tokio::sync::mpsc::error::SendError;
 
 #[macro_export]
-macro_rules! diem_bail {
+macro_rules! bail {
     ($e:expr) => {
         return Err($e);
     };
 }
 
 #[macro_export(local_inner_macros)]
-macro_rules! diem_ensure {
+macro_rules! ensure {
     ($cond:expr, $e:expr) => {
         if !($cond) {
-            diem_bail!($e);
+            bail!($e);
         }
     };
 }

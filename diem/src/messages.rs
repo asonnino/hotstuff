@@ -103,13 +103,13 @@ impl QC {
         let mut weight = 0;
         let mut used = HashSet::new();
         for (name, _) in self.votes.iter() {
-            diem_ensure!(!used.contains(name), DiemError::AuthorityReuse(*name));
+            ensure!(!used.contains(name), DiemError::AuthorityReuse(*name));
             let voting_rights = committee.stake(name);
-            diem_ensure!(voting_rights > 0, DiemError::UnknownAuthority(*name));
+            ensure!(voting_rights > 0, DiemError::UnknownAuthority(*name));
             used.insert(*name);
             weight += voting_rights;
         }
-        diem_ensure!(
+        ensure!(
             weight >= committee.quorum_threshold(),
             DiemError::QCRequiresQuorum
         );
@@ -157,20 +157,20 @@ impl SignatureAggregator {
     /// Try to append a signature to a (partial) QC.
     pub fn append(&mut self, vote: Vote, committee: &Committee) -> Result<Option<QC>, DiemError> {
         let author = vote.author;
-        diem_ensure!(
+        ensure!(
             self.partial.is_some(),
             DiemError::UnexpectedOrLateVote(author)
         );
 
         // Check that each authority only appears once.
-        diem_ensure!(
+        ensure!(
             !self.used.contains(&author),
             DiemError::AuthorityReuse(author)
         );
 
         // Ensure the authority has voting rights.
         let voting_rights = committee.stake(&author);
-        diem_ensure!(voting_rights > 0, DiemError::UnknownAuthority(author));
+        ensure!(voting_rights > 0, DiemError::UnknownAuthority(author));
 
         // Check the signature on the vote.
         vote.signature.verify(&vote, &author)?;

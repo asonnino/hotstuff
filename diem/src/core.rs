@@ -71,7 +71,7 @@ where
         let leader = self
             .leader_election
             .get_leader(block.round, &self.committee);
-        diem_ensure!(
+        ensure!(
             self.name == leader,
             DiemError::UnexpectedMessage(CoreMessage::Propose(block, vote))
         );
