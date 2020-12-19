@@ -1,4 +1,3 @@
-use crate::error::DiemError;
 use ed25519_dalek as dalek;
 use ed25519_dalek::ed25519;
 use ed25519_dalek::Signer as _;
@@ -28,7 +27,10 @@ impl PublicKey {
 
     pub fn from_base64(s: &str) -> Result<Self, base64::DecodeError> {
         let bytes = base64::decode(s)?;
-        Ok(Self(bytes[..32].try_into().unwrap()))
+        let array = bytes[..32]
+            .try_into()
+            .map_err(|_| base64::DecodeError::InvalidLength)?;
+        Ok(Self(array))
     }
 }
 
@@ -63,7 +65,10 @@ pub struct SecretKey([u8; 64]);
 impl SecretKey {
     pub fn from_base64(s: &str) -> Result<Self, base64::DecodeError> {
         let bytes = base64::decode(s)?;
-        Ok(Self(bytes[..64].try_into().unwrap()))
+        let array = bytes[..64]
+            .try_into()
+            .map_err(|_| base64::DecodeError::InvalidLength)?;
+        Ok(Self(array))
     }
 
     pub fn encode_base64(&self) -> String {
@@ -111,15 +116,18 @@ impl Signature {
         [self.part1, self.part2].concat().try_into().unwrap()
     }
 
-    pub fn verify<D: Digestible>(&self, data: &D, public_key: &PublicKey) -> Result<(), DiemError> {
+    pub fn verify<D: Digestible>(
+        &self,
+        data: &D,
+        public_key: &PublicKey,
+    ) -> Result<(), ed25519::Error> {
         let signature = ed25519::signature::Signature::from_bytes(&self.flatten())?;
-        let public_key = dalek::PublicKey::from_bytes(&public_key.0)?;
+        let key = dalek::PublicKey::from_bytes(&public_key.0)?;
         let digest = data.digest();
-        public_key.verify_strict(&digest, &signature)?;
-        Ok(())
+        key.verify_strict(&digest, &signature)
     }
 
-    pub fn verify_batch<'a, I, D>(data: &'a D, votes: I) -> Result<(), DiemError>
+    pub fn verify_batch<'a, I, D>(data: &'a D, votes: I) -> Result<(), ed25519::Error>
     where
         I: IntoIterator<Item = &'a (PublicKey, Signature)>,
         D: Digestible,
@@ -127,13 +135,12 @@ impl Signature {
         let digest = data.digest();
         let mut messages: Vec<&[u8]> = Vec::new();
         let mut signatures: Vec<dalek::Signature> = Vec::new();
-        let mut public_keys: Vec<dalek::PublicKey> = Vec::new();
+        let mut keys: Vec<dalek::PublicKey> = Vec::new();
         for (key, sig) in votes.into_iter() {
             messages.push(&digest[..]);
             signatures.push(ed25519::signature::Signature::from_bytes(&sig.flatten())?);
-            public_keys.push(dalek::PublicKey::from_bytes(&key.0)?);
+            keys.push(dalek::PublicKey::from_bytes(&key.0)?);
         }
-        dalek::verify_batch(&messages[..], &signatures[..], &public_keys[..])?;
-        Ok(())
+        dalek::verify_batch(&messages[..], &signatures[..], &keys[..])
     }
 }

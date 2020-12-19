@@ -1,6 +1,6 @@
 use crate::committee::Committee;
 use crate::crypto::PublicKey;
-use crate::error::DiemError;
+use crate::error::{DiemError, DiemResult};
 use crate::leader::LeaderElection;
 use crate::messages::{Block, Vote, QC};
 use crate::store::Store;
@@ -10,7 +10,6 @@ use std::cmp::max;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 pub type RoundNumber = u64;
-type CoreResult = Result<(), DiemError>;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum CoreMessage {
@@ -61,7 +60,14 @@ where
         }
     }
 
-    async fn handle_propose(&mut self, block: Block, vote: Vote) -> CoreResult {
+    async fn get_previous_block(&mut self, block: &Block) -> DiemResult<Block> {
+        // TODO
+        let bytes = self.store.read(block.qc.hash.to_vec()).await?.unwrap();
+        let previous_block = bincode::deserialize(&bytes)?;
+        Ok(previous_block)
+    }
+
+    async fn handle_propose(&mut self, block: Block, vote: Vote) -> DiemResult<()> {
         // Ignore old messages.
         if block.round < self.round {
             return Ok(());
@@ -80,7 +86,7 @@ where
         block.check(&self.committee)?;
 
         // Vote for this block if we can
-        let b2 = self.store.get_previous_block(&block).await?;
+        let b2 = self.get_previous_block(&block).await?;
         let mut can_vote = b2.round >= self.preferred_round;
         can_vote &= block.round > self.last_voted_round;
         if !can_vote {
@@ -91,7 +97,7 @@ where
         info!("Voting for block {:?}", block);
         let vote = Vote::new(&block, self.name)?;
         self.sender.send(CoreMessage::Vote(vote)).await?;
-        let b1 = self.store.get_previous_block(&b2).await?;
+        let b1 = self.get_previous_block(&b2).await?;
         self.preferred_round = max(self.preferred_round, b1.round);
         self.last_voted_round = block.round;
         self.round = max(self.round, b2.round + 1);
@@ -101,7 +107,7 @@ where
         }
 
         // Try to commit ancestors.
-        let b0 = self.store.get_previous_block(&b1).await?;
+        let b0 = self.get_previous_block(&b1).await?;
         let mut commit = b0.round + 1 == b1.round;
         commit &= b1.round + 1 == b2.round;
         commit &= b2.round + 1 == block.round;
@@ -111,7 +117,7 @@ where
         Ok(())
     }
 
-    async fn handle_vote(&self, _vote: Vote) -> CoreResult {
+    async fn handle_vote(&self, _vote: Vote) -> DiemResult<()> {
         // TODO
         Ok(())
     }

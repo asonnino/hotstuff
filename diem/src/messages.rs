@@ -1,7 +1,7 @@
 use crate::committee::{Committee, Stake};
 use crate::core::RoundNumber;
 use crate::crypto::{Digest, Digestible, PublicKey, Signature};
-use crate::error::DiemError;
+use crate::error::{DiemError, DiemResult};
 use ed25519_dalek::Digest as _;
 use ed25519_dalek::Sha512;
 use serde::{Deserialize, Serialize};
@@ -19,7 +19,7 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn check(&self, committee: &Committee) -> Result<(), DiemError> {
+    pub fn check(&self, committee: &Committee) -> DiemResult<()> {
         self.signature.verify(self, &self.author)?;
         self.qc.check(committee)
     }
@@ -58,7 +58,7 @@ pub struct Vote {
 }
 
 impl Vote {
-    pub fn new(block: &Block, author: PublicKey) -> Result<Self, DiemError> {
+    pub fn new(block: &Block, author: PublicKey) -> DiemResult<Self> {
         // TODO
         Ok(Vote {
             hash: block.digest(),
@@ -98,7 +98,7 @@ impl QC {
             .collect()
     }
 
-    pub fn check(&self, committee: &Committee) -> Result<(), DiemError> {
+    pub fn check(&self, committee: &Committee) -> DiemResult<()> {
         // Ensure the QC has a quorum.
         let mut weight = 0;
         let mut used = HashSet::new();
@@ -115,7 +115,7 @@ impl QC {
         );
 
         // Check the signatures
-        Signature::verify_batch(self, &self.votes)
+        Signature::verify_batch(self, &self.votes).map_err(DiemError::from)
     }
 }
 
@@ -155,7 +155,7 @@ impl SignatureAggregator {
     }
 
     /// Try to append a signature to a (partial) QC.
-    pub fn append(&mut self, vote: Vote, committee: &Committee) -> Result<Option<QC>, DiemError> {
+    pub fn append(&mut self, vote: Vote, committee: &Committee) -> DiemResult<Option<QC>> {
         let author = vote.author;
         ensure!(
             self.partial.is_some(),

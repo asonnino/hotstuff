@@ -1,9 +1,8 @@
 use crate::core::CoreMessage;
 use crate::crypto::PublicKey;
 use crate::messages::Block;
-use crate::store::StoreCommand;
+use crate::store::StoreError;
 use ed25519_dalek::ed25519;
-use serde::Serialize;
 use thiserror::Error;
 use tokio::sync::mpsc::error::SendError;
 
@@ -23,16 +22,18 @@ macro_rules! ensure {
     };
 }
 
-#[derive(Error, Debug, Serialize)]
+pub type DiemResult<T> = Result<T, DiemError>;
+
+#[derive(Error, Debug)]
 pub enum DiemError {
     #[error("Serialization error. {0}")]
-    SerializationError(String),
+    SerializationError(Box<bincode::ErrorKind>),
 
     #[error("Network error. {0}")]
-    NetworkError(String),
+    NetworkError(std::io::Error),
 
     #[error("Store error. {0}")]
-    StoreError(String),
+    StoreError(StoreError),
 
     #[error("Channel error. {0}")]
     ChannelError(String),
@@ -56,21 +57,15 @@ pub enum DiemError {
     UnexpectedMessage(CoreMessage),
 }
 
-impl From<ed25519::Error> for DiemError {
-    fn from(_e: ed25519::Error) -> Self {
-        DiemError::InvalidSignature
-    }
-}
-
 impl From<Box<bincode::ErrorKind>> for DiemError {
     fn from(e: Box<bincode::ErrorKind>) -> Self {
-        DiemError::SerializationError(e.to_string())
+        DiemError::SerializationError(e)
     }
 }
 
 impl From<std::io::Error> for DiemError {
     fn from(e: std::io::Error) -> Self {
-        DiemError::NetworkError(e.to_string())
+        DiemError::NetworkError(e)
     }
 }
 
@@ -80,15 +75,15 @@ impl From<tokio::sync::oneshot::error::RecvError> for DiemError {
     }
 }
 
-impl From<rocksdb::Error> for DiemError {
-    fn from(e: rocksdb::Error) -> Self {
-        DiemError::StoreError(e.to_string())
+impl From<ed25519::Error> for DiemError {
+    fn from(_e: ed25519::Error) -> Self {
+        DiemError::InvalidSignature
     }
 }
 
-impl From<SendError<StoreCommand>> for DiemError {
-    fn from(e: SendError<StoreCommand>) -> Self {
-        DiemError::ChannelError(format!("Failed to send message to store: {}", e))
+impl From<StoreError> for DiemError {
+    fn from(e: StoreError) -> Self {
+        DiemError::StoreError(e)
     }
 }
 
