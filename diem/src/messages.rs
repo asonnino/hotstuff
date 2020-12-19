@@ -98,31 +98,24 @@ impl QC {
             .collect()
     }
 
-    pub fn check(&self, _committee: &Committee) -> Result<(), DiemError> {
-        /*
-        // Check the quorum.
+    pub fn check(&self, committee: &Committee) -> Result<(), DiemError> {
+        // Ensure the QC has a quorum.
         let mut weight = 0;
         let mut used = HashSet::new();
         for (name, _) in self.votes.iter() {
-            // Check that each authority only appears once.
-            diem_ensure!(
-                !used.contains(name),
-                DiemError::AuthorityReuse(name)
-            );
+            diem_ensure!(!used.contains(name), DiemError::AuthorityReuse(*name));
             let voting_rights = committee.stake(name);
-            dag_ensure!(voting_rights > 0, DiemError::UnknownAuthority(name));
+            diem_ensure!(voting_rights > 0, DiemError::UnknownAuthority(*name));
             used.insert(*name);
             weight += voting_rights;
         }
-        dag_ensure!(
+        diem_ensure!(
             weight >= committee.quorum_threshold(),
             DiemError::QCRequiresQuorum
         );
+
         // Check the signatures
-        // TODO:
-        //Signature::verify_batch(&digest, &self.votes)
-        */
-        Ok(())
+        Signature::verify_batch(self, &self.votes)
     }
 }
 
