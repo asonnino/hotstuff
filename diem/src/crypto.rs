@@ -6,6 +6,8 @@ use rand::{CryptoRng, Rng};
 use serde::{de, ser, Deserialize, Serialize};
 use std::convert::TryInto;
 use std::fmt;
+use tokio::sync::mpsc::Receiver;
+use tokio::sync::oneshot;
 
 #[cfg(test)]
 #[path = "tests/crypto_tests.rs"]
@@ -96,7 +98,7 @@ where
     (public, secret)
 }
 
-#[derive(Serialize, Deserialize, Clone, Default)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct Signature {
     part1: [u8; 32],
     part2: [u8; 32],
@@ -142,5 +144,21 @@ impl Signature {
             keys.push(dalek::PublicKey::from_bytes(&key.0)?);
         }
         dalek::verify_batch(&messages[..], &signatures[..], &keys[..])
+    }
+}
+
+pub struct SignatureFactory<D: Digestible> {
+    secret: SecretKey,
+    receiver: Receiver<(D, oneshot::Sender<Signature>)>,
+}
+
+impl<D: Digestible> SignatureFactory<D> {
+    pub async fn run(&mut self) {
+        while let Some((data, sender)) = self.receiver.recv().await {
+            let signature = Signature::new(&data, &self.secret);
+            sender
+                .send(signature)
+                .expect("Failed to reply to signature request: Receiver dropped");
+        }
     }
 }
