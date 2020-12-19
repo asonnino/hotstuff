@@ -3,15 +3,17 @@ use crate::core::RoundNumber;
 use crate::crypto::PublicKey;
 
 pub trait LeaderElection {
-    fn get_leader(&self, round: RoundNumber, committee: &Committee) -> PublicKey;
+    fn get_leader(&self, round: RoundNumber) -> PublicKey;
 }
 
-struct RRLeaderElection;
+struct RRLeaderElection {
+    committee: Committee,
+}
 
 impl LeaderElection for RRLeaderElection {
-    fn get_leader(&self, round: RoundNumber, committee: &Committee) -> PublicKey {
-        let mut keys: Vec<_> = committee.authorities.keys().cloned().collect();
+    fn get_leader(&self, round: RoundNumber) -> PublicKey {
+        let mut keys: Vec<_> = self.committee.authorities.keys().cloned().collect();
         keys.sort();
-        keys[round as usize % committee.size()]
+        keys[round as usize % self.committee.size()]
     }
 }

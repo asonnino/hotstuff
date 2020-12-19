@@ -74,11 +74,8 @@ where
         }
 
         // Ensure we are the leader for this round.
-        let leader = self
-            .leader_election
-            .get_leader(block.round, &self.committee);
         ensure!(
-            self.name == leader,
+            self.name == self.leader_election.get_leader(block.round),
             DiemError::UnexpectedMessage(CoreMessage::Propose(block, vote))
         );
 
