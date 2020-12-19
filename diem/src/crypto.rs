@@ -147,12 +147,12 @@ impl Signature {
     }
 }
 
-pub struct SignatureFactory<D: Digestible> {
+pub struct SignatureService<D: Digestible> {
     secret: SecretKey,
     receiver: Receiver<(D, oneshot::Sender<Signature>)>,
 }
 
-impl<D: Digestible> SignatureFactory<D> {
+impl<D: Digestible> SignatureService<D> {
     pub async fn run(&mut self) {
         while let Some((data, sender)) = self.receiver.recv().await {
             let signature = Signature::new(&data, &self.secret);

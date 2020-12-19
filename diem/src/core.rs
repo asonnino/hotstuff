@@ -31,10 +31,7 @@ pub struct Core<L: LeaderElection> {
     commit_channel: Sender<Block>,
 }
 
-impl<L> Core<L>
-where
-    L: LeaderElection,
-{
+impl<L: LeaderElection> Core<L> {
     pub fn new(
         name: PublicKey,
         store: Store,
