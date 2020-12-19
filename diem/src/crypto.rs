@@ -106,16 +106,19 @@ pub struct Signature {
 
 impl Signature {
     pub fn new<D: Digestible>(data: &D, secret: &SecretKey) -> Self {
-        let keypair = dalek::Keypair::from_bytes(&secret.0).unwrap();
+        let keypair = dalek::Keypair::from_bytes(&secret.0).expect("Unable to load secret key");
         let digest = data.digest();
-        let signature = keypair.sign(&digest).to_bytes();
-        let part1 = signature[..32].try_into().unwrap();
-        let part2 = signature[32..64].try_into().unwrap();
+        let sig = keypair.sign(&digest).to_bytes();
+        let part1 = sig[..32].try_into().expect("Unexpected signature length");
+        let part2 = sig[32..64].try_into().expect("Unexpected signature length");
         Signature { part1, part2 }
     }
 
     fn flatten(&self) -> [u8; 64] {
-        [self.part1, self.part2].concat().try_into().unwrap()
+        [self.part1, self.part2]
+            .concat()
+            .try_into()
+            .expect("Unexpected signature length")
     }
 
     pub fn verify<D: Digestible>(

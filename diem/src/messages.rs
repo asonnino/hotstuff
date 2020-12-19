@@ -33,7 +33,7 @@ impl Digestible for Block {
         hasher.update(self.author.0);
         hasher.update(self.payload);
         hash.copy_from_slice(hasher.finalize().as_slice());
-        hash[..32].try_into().unwrap()
+        hash[..32].try_into().expect("Unexpected hash length")
     }
 }
 
@@ -175,7 +175,10 @@ impl SignatureAggregator {
         // Check the signature on the vote.
         vote.signature.verify(&vote, &author)?;
 
-        let partial = self.partial.as_mut().unwrap();
+        let partial = self
+            .partial
+            .as_mut()
+            .expect("Partial QC should not be null at this stage");
         partial.votes.push((author, vote.signature));
         self.used.insert(author);
         self.weight += voting_rights;
