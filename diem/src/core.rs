@@ -13,7 +13,7 @@ pub type RoundNumber = u64;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum CoreMessage {
-    Propose(Block, Vote),
+    Block(Block),
     Vote(Vote),
 }
 
@@ -58,24 +58,16 @@ impl<L: LeaderElection> Core<L> {
     }
 
     async fn get_previous_block(&mut self, block: &Block) -> DiemResult<Block> {
-        // TODO
-        let bytes = self.store.read(block.qc.hash.to_vec()).await?.unwrap();
-        let previous_block =
-            bincode::deserialize(&bytes).map_err(|e| DiemError::StoreError(e.to_string()))?;
-        Ok(previous_block)
+        // TODO: If we don't ask for the block, it may never come.
+        let bytes = self.store.notify_read(block.qc.hash.to_vec()).await?;
+        bincode::deserialize(&bytes).map_err(|e| DiemError::StoreError(e.to_string()))
     }
 
-    async fn handle_propose(&mut self, block: Block, vote: Vote) -> DiemResult<()> {
+    async fn handle_propose(&mut self, block: Block) -> DiemResult<()> {
         // Ignore old messages.
         if block.round < self.round {
             return Ok(());
         }
-
-        // Ensure we are the leader for this round.
-        ensure!(
-            self.name == self.leader_election.get_leader(block.round),
-            DiemError::UnexpectedMessage(Box::new(CoreMessage::Propose(block, vote)))
-        );
 
         // Check the block is well-formed.
         block.check(&self.committee)?;
@@ -120,6 +112,13 @@ impl<L: LeaderElection> Core<L> {
 
     async fn handle_vote(&self, _vote: Vote) -> DiemResult<()> {
         // TODO
+        /*
+        // Ensure we are the leader for this round.
+        ensure!(
+            self.name == self.leader_election.get_leader(block.round),
+            DiemError::UnexpectedMessage(Box::new(CoreMessage::Propose(block, vote)))
+        );
+        */
         Ok(())
     }
 
@@ -127,7 +126,7 @@ impl<L: LeaderElection> Core<L> {
         while let Some(message) = self.receiver.recv().await {
             info!("Received message: {:?}", message);
             let result = match message {
-                CoreMessage::Propose(block, vote) => self.handle_propose(block, vote).await,
+                CoreMessage::Block(block) => self.handle_propose(block).await,
                 CoreMessage::Vote(vote) => self.handle_vote(vote).await,
             };
             match result {
