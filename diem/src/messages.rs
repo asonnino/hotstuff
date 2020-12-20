@@ -185,6 +185,15 @@ pub struct SignatureAggregator {
 }
 
 impl SignatureAggregator {
+    pub fn new(hash: Digest) -> Self {
+        Self {
+            weight: 0,
+            used: HashSet::new(),
+            hash,
+            partial: None,
+        }
+    }
+
     pub fn init(&mut self, hash: Digest) {
         self.clear();
         self.partial = Some(QC {
@@ -218,6 +227,8 @@ impl SignatureAggregator {
         ensure!(voting_rights > 0, DiemError::UnknownAuthority(author));
 
         // Check the signature on the vote.
+        // TODO: use self.hash instead of &vote to verify vote.
+        // We currently do not know if all votes are on the same message.
         vote.signature.verify(&vote, &author)?;
 
         let partial = self

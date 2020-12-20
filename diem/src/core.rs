@@ -3,7 +3,7 @@ use crate::crypto::Digestible;
 use crate::crypto::{Digest, PublicKey, Signature};
 use crate::error::{DiemError, DiemResult};
 use crate::leader::LeaderElection;
-use crate::messages::{Block, Vote, QC};
+use crate::messages::{Block, SignatureAggregator, Vote, QC};
 use crate::network::NetMessage;
 use crate::store::Store;
 use log::{debug, error, info, warn};
@@ -29,6 +29,7 @@ pub struct Core<L: LeaderElection> {
     committee: Committee,
     store: Store,
     leader_election: L,
+    aggregator: Option<SignatureAggregator>,
     sender: Sender<NetMessage>,
     receiver: Receiver<CoreMessage>,
     commit_channel: Sender<Block>,
@@ -55,6 +56,7 @@ impl<L: LeaderElection> Core<L> {
             committee,
             store,
             leader_election,
+            aggregator: None,
             sender,
             receiver,
             commit_channel,
@@ -68,14 +70,18 @@ impl<L: LeaderElection> Core<L> {
         self.store.write(key, value).await.map_err(DiemError::from)
     }
 
-    async fn get_previous_block(&mut self, block: &Block) -> DiemResult<Block> {
+    async fn get_block(&mut self, hash: Digest) -> DiemResult<Block> {
         // TODO: If we don't ask for the block, it may never come.
         // Also we do not want to block this thread until we get our block.
+        let bytes = self.store.notify_read(hash.to_vec()).await?;
+        bincode::deserialize(&bytes).map_err(|e| DiemError::StoreError(e.to_string()))
+    }
+
+    async fn get_previous_block(&mut self, block: &Block) -> DiemResult<Block> {
         if block.qc == QC::genesis() {
             return Ok(Block::genesis());
         }
-        let bytes = self.store.notify_read(block.qc.hash.to_vec()).await?;
-        bincode::deserialize(&bytes).map_err(|e| DiemError::StoreError(e.to_string()))
+        self.get_block(block.qc.hash).await
     }
 
     async fn handle_propose(&mut self, block: Block) -> DiemResult<()> {
@@ -148,7 +154,7 @@ impl<L: LeaderElection> Core<L> {
         Ok(())
     }
 
-    async fn make_block(&self) -> (Block, Vote) {
+    async fn make_block(&self) {
         let (highest_qc, _) = &self.highest_qc;
         let payload = Digest::default();
         let block = Block::new(
@@ -160,22 +166,38 @@ impl<L: LeaderElection> Core<L> {
         )
         .await;
         let vote = Vote::new(&block, self.name, self.signature_channel.clone()).await;
-        (block, vote)
+        let message = NetMessage::Block(block, vote, PublicKey::default());
+        if let Err(e) = self.sender.send(message).await {
+            panic!("Core failed to send block to the network: {}", e);
+        }
     }
 
-    async fn handle_vote(&self, _vote: Vote) -> DiemResult<()> {
-        // TODO
+    async fn handle_vote(&mut self, vote: Vote) -> DiemResult<()> {
+        if self.aggregator.is_none() {
+            let block = self.get_block(vote.hash).await?;
+            ensure!(
+                self.name == self.leader_election.get_leader(block.round),
+                DiemError::UnexpectedMessage(Box::new(CoreMessage::Vote(vote)))
+            );
+            self.aggregator = Some(SignatureAggregator::new(vote.hash));
+        }
+
+        if let Some(_qc) = self
+            .aggregator
+            .as_mut()
+            .unwrap()
+            .append(vote, &self.committee)?
+        {
+            // TODO: Update highest QC with _qc.
+            self.make_block().await;
+        }
         Ok(())
     }
 
     pub async fn run(&mut self) {
         // Send the very first block.
         if self.name == self.leader_election.get_leader(1) {
-            let (block, vote) = self.make_block().await;
-            let message = NetMessage::Block(block, vote, PublicKey::default());
-            if let Err(e) = self.sender.send(message).await {
-                panic!("Core failed to send block to the network: {}", e);
-            }
+            self.make_block().await;
         }
 
         // Main loop.
