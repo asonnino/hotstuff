@@ -13,7 +13,7 @@ use std::fmt;
 pub struct Block {
     pub qc: QC,
     pub round: RoundNumber,
-    author: PublicKey,
+    pub author: PublicKey,
     payload: Digest,
     signature: Signature,
 }

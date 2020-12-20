@@ -1,4 +1,5 @@
 use crate::committee::Committee;
+use crate::crypto::Digestible;
 use crate::crypto::PublicKey;
 use crate::error::{DiemError, DiemResult};
 use crate::leader::LeaderElection;
@@ -57,8 +58,15 @@ impl<L: LeaderElection> Core<L> {
         }
     }
 
+    async fn store_block(&mut self, block: &Block) -> DiemResult<()> {
+        let key = block.digest().to_vec();
+        let value = bincode::serialize(block).expect("Failed to serialize valid block");
+        self.store.write(key, value).await.map_err(DiemError::from)
+    }
+
     async fn get_previous_block(&mut self, block: &Block) -> DiemResult<Block> {
         // TODO: If we don't ask for the block, it may never come.
+        // Also we do not want to block this thread until we get our block.
         let bytes = self.store.notify_read(block.qc.hash.to_vec()).await?;
         bincode::deserialize(&bytes).map_err(|e| DiemError::StoreError(e.to_string()))
     }
@@ -69,29 +77,40 @@ impl<L: LeaderElection> Core<L> {
             return Ok(());
         }
 
-        // Check the block is well-formed.
+        // Check the block is well-formed and created by the right leader.
         block.check(&self.committee)?;
+        ensure!(
+            block.author == self.leader_election.get_leader(block.round),
+            DiemError::UnexpectedMessage(Box::new(CoreMessage::Block(block)))
+        );
 
-        // Vote for this block if we can
+        // Vote for this block if we can. The ancestors of the incoming block
+        // are note as follows: B0 <- |QC0; B1| <- |QC1; B2| <- |QC2; Block|
         let b2 = self.get_previous_block(&block).await?;
-        let mut can_vote = b2.round >= self.preferred_round;
-        can_vote &= block.round > self.last_voted_round;
-        if !can_vote {
+        let safety_rule_1 = b2.round >= self.preferred_round;
+        let safety_rule_2 = block.round > self.last_voted_round;
+        if !(safety_rule_1 && safety_rule_2) {
             debug!("Cannot vote on {:?}", block);
             return Ok(());
         }
-        info!("Voting for block {:?}", block);
+        debug!("Voting for block {:?}", block);
         let vote = Vote::new(&block, self.name)?;
         if let Err(e) = self.sender.send(CoreMessage::Vote(vote)).await {
             panic!("Core failed to send vote to the network: {}", e);
         }
+
+        // Update state.
+        self.store_block(&block).await?;
         let b1 = self.get_previous_block(&b2).await?;
         self.preferred_round = max(self.preferred_round, b1.round);
         self.last_voted_round = block.round;
-        self.round = max(self.round, b2.round + 1);
         let (_, hightest_qc_round) = self.highest_qc;
         if b2.round > hightest_qc_round {
             self.highest_qc = (block.qc, b2.round);
+        }
+        if b2.round + 1 > self.round {
+            self.round = b2.round + 1;
+            info!("Moved to round {}", self.round);
         }
 
         // Try to commit ancestors.
@@ -100,11 +119,9 @@ impl<L: LeaderElection> Core<L> {
         commit &= b1.round + 1 == b2.round;
         commit &= b2.round + 1 == block.round;
         if commit {
+            info!("Committed {:?}", b0);
             if let Err(e) = self.commit_channel.send(b0).await {
-                warn!(
-                    "Core failed to send block through the commit channel: {}",
-                    e
-                );
+                warn!("Failed to send block through the commit channel: {}", e);
             }
         }
         Ok(())
@@ -112,19 +129,12 @@ impl<L: LeaderElection> Core<L> {
 
     async fn handle_vote(&self, _vote: Vote) -> DiemResult<()> {
         // TODO
-        /*
-        // Ensure we are the leader for this round.
-        ensure!(
-            self.name == self.leader_election.get_leader(block.round),
-            DiemError::UnexpectedMessage(Box::new(CoreMessage::Propose(block, vote)))
-        );
-        */
         Ok(())
     }
 
     pub async fn run(&mut self) {
         while let Some(message) = self.receiver.recv().await {
-            info!("Received message: {:?}", message);
+            debug!("Received message: {:?}", message);
             let result = match message {
                 CoreMessage::Block(block) => self.handle_propose(block).await,
                 CoreMessage::Vote(vote) => self.handle_vote(vote).await,
