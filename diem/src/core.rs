@@ -4,6 +4,7 @@ use crate::crypto::PublicKey;
 use crate::error::{DiemError, DiemResult};
 use crate::leader::LeaderElection;
 use crate::messages::{Block, Vote, QC};
+use crate::network::NetMessage;
 use crate::store::Store;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
@@ -27,7 +28,7 @@ pub struct Core<L: LeaderElection> {
     committee: Committee,
     store: Store,
     leader_election: L,
-    sender: Sender<CoreMessage>,
+    sender: Sender<NetMessage>,
     receiver: Receiver<CoreMessage>,
     commit_channel: Sender<Block>,
 }
@@ -38,7 +39,7 @@ impl<L: LeaderElection> Core<L> {
         store: Store,
         committee: Committee,
         leader_election: L,
-        sender: Sender<CoreMessage>,
+        sender: Sender<NetMessage>,
         receiver: Receiver<CoreMessage>,
         commit_channel: Sender<Block>,
     ) -> Self {
@@ -72,49 +73,20 @@ impl<L: LeaderElection> Core<L> {
     }
 
     async fn handle_propose(&mut self, block: Block) -> DiemResult<()> {
-        // Ignore old messages.
-        if block.round < self.round {
-            return Ok(());
-        }
-
-        // Check the block is well-formed and created by the right leader.
         block.check(&self.committee)?;
-        ensure!(
-            block.author == self.leader_election.get_leader(block.round),
-            DiemError::UnexpectedMessage(Box::new(CoreMessage::Block(block)))
-        );
-
-        // Vote for this block if we can. The ancestors of the incoming block
-        // are note as follows: B0 <- |QC0; B1| <- |QC1; B2| <- |QC2; Block|
-        let b2 = self.get_previous_block(&block).await?;
-        let safety_rule_1 = b2.round >= self.preferred_round;
-        let safety_rule_2 = block.round > self.last_voted_round;
-        if !(safety_rule_1 && safety_rule_2) {
-            debug!("Cannot vote on {:?}", block);
-            return Ok(());
-        }
-        debug!("Voting for block {:?}", block);
-        let vote = Vote::new(&block, self.name)?;
-        if let Err(e) = self.sender.send(CoreMessage::Vote(vote)).await {
-            panic!("Core failed to send vote to the network: {}", e);
-        }
-
-        // Update state.
         self.store_block(&block).await?;
+
+        // Get the ancestors of the incoming block:
+        // B0 <- |QC0; B1| <- |QC1; B2| <- |QC2; Block|
+        let b2 = self.get_previous_block(&block).await?;
         let b1 = self.get_previous_block(&b2).await?;
-        self.preferred_round = max(self.preferred_round, b1.round);
-        self.last_voted_round = block.round;
-        let (_, hightest_qc_round) = self.highest_qc;
-        if b2.round > hightest_qc_round {
-            self.highest_qc = (block.qc, b2.round);
-        }
-        if b2.round + 1 > self.round {
-            self.round = b2.round + 1;
-            info!("Moved to round {}", self.round);
-        }
+        let b0 = self.get_previous_block(&b1).await?;
+
+        //
+        // Process the new QC.
+        //
 
         // Try to commit ancestors.
-        let b0 = self.get_previous_block(&b1).await?;
         let mut commit = b0.round + 1 == b1.round;
         commit &= b1.round + 1 == b2.round;
         commit &= b2.round + 1 == block.round;
@@ -124,6 +96,49 @@ impl<L: LeaderElection> Core<L> {
                 warn!("Failed to send block through the commit channel: {}", e);
             }
         }
+
+        // Update the hightest QC and round number of the node.
+        let (_, hightest_qc_round) = self.highest_qc;
+        if b2.round > hightest_qc_round {
+            self.highest_qc = (block.qc.clone(), b2.round);
+        }
+        if b2.round + 1 > self.round {
+            self.round = b2.round + 1;
+            info!("Moved to round {}", self.round);
+        }
+
+        //
+        // Process the new block.
+        //
+
+        // Prevents bad leaders from proposing blocks with very high round numbers.
+        ensure!(
+            block.round == self.round,
+            DiemError::UnexpectedMessage(Box::new(CoreMessage::Block(block)))
+        );
+
+        // Ensure the block proposer is the right leader for the round.
+        ensure!(
+            block.author == self.leader_election.get_leader(block.round),
+            DiemError::UnexpectedMessage(Box::new(CoreMessage::Block(block)))
+        );
+
+        // Check the safety rules.
+        let safety_rule_1 = b2.round >= self.preferred_round;
+        let safety_rule_2 = block.round > self.last_voted_round;
+        if safety_rule_1 && safety_rule_2 {
+            debug!("Voting for block {:?}", block);
+            let vote = Vote::new(&block, self.name)?;
+            let next_leader = self.leader_election.get_leader(self.round + 1);
+            if let Err(e) = self.sender.send(NetMessage::Vote(vote, next_leader)).await {
+                panic!("Core failed to send vote to the network: {}", e);
+            }
+
+            // Update state preventing to vote for conflicting block.
+            self.preferred_round = max(self.preferred_round, b1.round);
+            self.last_voted_round = block.round;
+        }
+
         Ok(())
     }
 
