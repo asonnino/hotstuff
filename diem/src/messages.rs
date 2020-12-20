@@ -8,20 +8,50 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fmt;
+use tokio::sync::mpsc::Sender;
+use tokio::sync::oneshot;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Block {
     pub qc: QC,
-    pub round: RoundNumber,
     pub author: PublicKey,
-    payload: Digest,
-    signature: Signature,
+    pub round: RoundNumber,
+    pub payload: Digest,
+    pub signature: Signature,
 }
 
 impl Block {
+    pub async fn new(
+        qc: QC,
+        author: PublicKey,
+        round: RoundNumber,
+        payload: Digest,
+        signature_channel: Sender<(Digest, oneshot::Sender<Signature>)>,
+    ) -> Self {
+        let mut block = Block {
+            qc,
+            author,
+            round,
+            payload,
+            signature: Signature::default(),
+        };
+        let (sender, receiver) = oneshot::channel();
+        if let Err(e) = signature_channel.send((block.digest(), sender)).await {
+            panic!("Failed to send Block command to Signature Service: {}", e);
+        }
+        block.signature = receiver
+            .await
+            .expect("Failed to receive signature from Signature Service");
+        block
+    }
+
     pub fn check(&self, committee: &Committee) -> DiemResult<()> {
         self.signature.verify(self, &self.author)?;
         self.qc.check(committee)
+    }
+
+    pub fn genesis() -> Self {
+        Block::default()
     }
 }
 
@@ -29,8 +59,8 @@ impl Digestible for Block {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
         let mut hash = [0u8; 64];
-        hasher.update(self.round.to_le_bytes());
         hasher.update(self.author.0);
+        hasher.update(self.round.to_le_bytes());
         hasher.update(self.payload);
         hash.copy_from_slice(hasher.finalize().as_slice());
         hash[..32].try_into().expect("Unexpected hash length")
@@ -52,19 +82,35 @@ impl fmt::Debug for Block {
 
 #[derive(Serialize, Deserialize)]
 pub struct Vote {
-    hash: Digest,
-    signature: Signature,
-    author: PublicKey,
+    pub hash: Digest,
+    pub signature: Signature,
+    pub author: PublicKey,
 }
 
 impl Vote {
-    pub fn new(block: &Block, author: PublicKey) -> DiemResult<Self> {
-        // TODO
-        Ok(Vote {
-            hash: block.digest(),
+    pub async fn new(
+        block: &Block,
+        author: PublicKey,
+        signature_channel: Sender<(Digest, oneshot::Sender<Signature>)>,
+    ) -> Self {
+        let hash = block.digest();
+        let mut vote = Vote {
+            hash,
             signature: Signature::default(),
             author,
-        })
+        };
+        if author == block.author {
+            vote.signature = block.signature.clone();
+        } else {
+            let (sender, receiver) = oneshot::channel();
+            if let Err(e) = signature_channel.send((hash, sender)).await {
+                panic!("Failed to send Block command to Signature Service: {}", e);
+            }
+            vote.signature = receiver
+                .await
+                .expect("Failed to receive signature from Signature Service");
+        }
+        vote
     }
 }
 
@@ -80,24 +126,13 @@ impl fmt::Debug for Vote {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Default)]
 pub struct QC {
     pub hash: Digest,
     votes: Vec<(PublicKey, Signature)>,
 }
 
 impl QC {
-    pub fn genesis() -> Vec<Self> {
-        // The genesis has the following structure:
-        // B0 <- |QC0; B1| <- |QC1; B2| <- |QC2; B3| <- ...
-        (0..3)
-            .map(|x| QC {
-                hash: [x as u8; 32],
-                votes: Vec::new(),
-            })
-            .collect()
-    }
-
     pub fn check(&self, committee: &Committee) -> DiemResult<()> {
         // Ensure the QC has a quorum.
         let mut weight = 0;
@@ -117,6 +152,10 @@ impl QC {
         // Check the signatures
         Signature::verify_batch(self, &self.votes).map_err(DiemError::from)
     }
+
+    pub fn genesis() -> Self {
+        QC::default()
+    }
 }
 
 impl Digestible for QC {
@@ -128,6 +167,12 @@ impl Digestible for QC {
 impl fmt::Debug for QC {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(f, "QC({:?})", self.hash)
+    }
+}
+
+impl PartialEq for QC {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::committee::Committee;
 use crate::crypto::Digestible;
-use crate::crypto::PublicKey;
+use crate::crypto::{Digest, PublicKey, Signature};
 use crate::error::{DiemError, DiemResult};
 use crate::leader::LeaderElection;
 use crate::messages::{Block, Vote, QC};
@@ -10,6 +10,7 @@ use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
 use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::oneshot;
 
 pub type RoundNumber = u64;
 
@@ -31,6 +32,7 @@ pub struct Core<L: LeaderElection> {
     sender: Sender<NetMessage>,
     receiver: Receiver<CoreMessage>,
     commit_channel: Sender<Block>,
+    signature_channel: Sender<(Digest, oneshot::Sender<Signature>)>,
 }
 
 impl<L: LeaderElection> Core<L> {
@@ -42,20 +44,21 @@ impl<L: LeaderElection> Core<L> {
         sender: Sender<NetMessage>,
         receiver: Receiver<CoreMessage>,
         commit_channel: Sender<Block>,
+        signature_channel: Sender<(Digest, oneshot::Sender<Signature>)>,
     ) -> Self {
-        // TODO: add genesis to the store?
         Self {
             name,
-            round: 3,
-            last_voted_round: 2,
-            preferred_round: 1,
-            highest_qc: (QC::genesis().pop().unwrap(), 1),
+            round: 0,
+            last_voted_round: 0,
+            preferred_round: 0,
+            highest_qc: (QC::genesis(), 0),
             committee,
             store,
             leader_election,
             sender,
             receiver,
             commit_channel,
+            signature_channel,
         }
     }
 
@@ -68,6 +71,9 @@ impl<L: LeaderElection> Core<L> {
     async fn get_previous_block(&mut self, block: &Block) -> DiemResult<Block> {
         // TODO: If we don't ask for the block, it may never come.
         // Also we do not want to block this thread until we get our block.
+        if block.qc == QC::genesis() {
+            return Ok(Block::genesis());
+        }
         let bytes = self.store.notify_read(block.qc.hash.to_vec()).await?;
         bincode::deserialize(&bytes).map_err(|e| DiemError::StoreError(e.to_string()))
     }
@@ -98,8 +104,8 @@ impl<L: LeaderElection> Core<L> {
         }
 
         // Update the hightest QC and round number of the node.
-        let (_, hightest_qc_round) = self.highest_qc;
-        if b2.round > hightest_qc_round {
+        let (_, highest_qc_round) = self.highest_qc;
+        if b2.round > highest_qc_round {
             self.highest_qc = (block.qc.clone(), b2.round);
         }
         if b2.round + 1 > self.round {
@@ -128,7 +134,7 @@ impl<L: LeaderElection> Core<L> {
         let safety_rule_2 = block.round > self.last_voted_round;
         if safety_rule_1 && safety_rule_2 {
             debug!("Voting for block {:?}", block);
-            let vote = Vote::new(&block, self.name)?;
+            let vote = Vote::new(&block, self.name, self.signature_channel.clone()).await;
             let next_leader = self.leader_election.get_leader(self.round + 1);
             if let Err(e) = self.sender.send(NetMessage::Vote(vote, next_leader)).await {
                 panic!("Core failed to send vote to the network: {}", e);
@@ -142,12 +148,37 @@ impl<L: LeaderElection> Core<L> {
         Ok(())
     }
 
+    async fn make_block(&self) -> (Block, Vote) {
+        let (highest_qc, _) = &self.highest_qc;
+        let payload = Digest::default();
+        let block = Block::new(
+            highest_qc.clone(),
+            self.name,
+            self.round + 1,
+            payload,
+            self.signature_channel.clone(),
+        )
+        .await;
+        let vote = Vote::new(&block, self.name, self.signature_channel.clone()).await;
+        (block, vote)
+    }
+
     async fn handle_vote(&self, _vote: Vote) -> DiemResult<()> {
         // TODO
         Ok(())
     }
 
     pub async fn run(&mut self) {
+        // Send the very first block.
+        if self.name == self.leader_election.get_leader(1) {
+            let (block, vote) = self.make_block().await;
+            let message = NetMessage::Block(block, vote, PublicKey::default());
+            if let Err(e) = self.sender.send(message).await {
+                panic!("Core failed to send block to the network: {}", e);
+            }
+        }
+
+        // Main loop.
         while let Some(message) = self.receiver.recv().await {
             debug!("Received message: {:?}", message);
             let result = match message {

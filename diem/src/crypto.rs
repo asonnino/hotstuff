@@ -19,7 +19,7 @@ pub trait Digestible {
     fn digest(&self) -> Digest;
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Default)]
 pub struct PublicKey(pub [u8; 32]);
 
 impl PublicKey {
