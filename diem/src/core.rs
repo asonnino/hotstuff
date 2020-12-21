@@ -3,9 +3,11 @@ use crate::crypto::Digestible;
 use crate::crypto::{Digest, PublicKey, Signature};
 use crate::error::{DiemError, DiemResult};
 use crate::leader::LeaderElection;
+use crate::mempool::Mempool;
 use crate::messages::{Block, SignatureAggregator, Vote, QC};
 use crate::network::NetMessage;
 use crate::store::Store;
+use crate::synchronizer::Synchronizer;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
@@ -34,6 +36,8 @@ pub struct Core<L: LeaderElection> {
     receiver: Receiver<CoreMessage>,
     commit_channel: Sender<Block>,
     signature_channel: Sender<(Digest, oneshot::Sender<Signature>)>,
+    mempool: Mempool,
+    synchronizer: Synchronizer,
 }
 
 impl<L: LeaderElection> Core<L> {
@@ -46,6 +50,8 @@ impl<L: LeaderElection> Core<L> {
         receiver: Receiver<CoreMessage>,
         commit_channel: Sender<Block>,
         signature_channel: Sender<(Digest, oneshot::Sender<Signature>)>,
+        mempool: Mempool,
+        synchronizer: Synchronizer,
     ) -> Self {
         Self {
             name,
@@ -61,6 +67,8 @@ impl<L: LeaderElection> Core<L> {
             receiver,
             commit_channel,
             signature_channel,
+            mempool,
+            synchronizer,
         }
     }
 
@@ -70,16 +78,24 @@ impl<L: LeaderElection> Core<L> {
         self.store.write(key, value).await.map_err(DiemError::from)
     }
 
-    async fn get_block(&mut self, hash: Digest) -> DiemResult<Block> {
+    async fn get_block(&mut self, hash: Digest) -> DiemResult<Option<Block>> {
         // TODO: If we don't ask for the block, it may never come.
         // Also we do not want to block this thread until we get our block.
-        let bytes = self.store.notify_read(hash.to_vec()).await?;
-        bincode::deserialize(&bytes).map_err(|e| DiemError::StoreError(e.to_string()))
+        match self.store.read(hash.to_vec()).await? {
+            Some(bytes) => {
+                bincode::deserialize(&bytes).map_err(|e| DiemError::StoreError(e.to_string()))
+            }
+            None => {
+                debug!("Requesting sync for block {:?}", hash);
+                self.synchronizer.request(hash).await;
+                Ok(None)
+            }
+        }
     }
 
-    async fn get_previous_block(&mut self, block: &Block) -> DiemResult<Block> {
+    async fn get_previous_block(&mut self, block: &Block) -> DiemResult<Option<Block>> {
         if block.qc == QC::genesis() {
-            return Ok(Block::genesis());
+            return Ok(Some(Block::genesis()));
         }
         self.get_block(block.qc.hash).await
     }
@@ -90,9 +106,20 @@ impl<L: LeaderElection> Core<L> {
 
         // Get the ancestors of the incoming block:
         // B0 <- |QC0; B1| <- |QC1; B2| <- |QC2; Block|
-        let b2 = self.get_previous_block(&block).await?;
-        let b1 = self.get_previous_block(&b2).await?;
-        let b0 = self.get_previous_block(&b1).await?;
+        // TODO: Instead of just returning Ok, we should register an obligation
+        // to process block later.
+        let b2 = match self.get_previous_block(&block).await? {
+            Some(b) => b,
+            None => return Ok(()),
+        };
+        let b1 = match self.get_previous_block(&b2).await? {
+            Some(b) => b,
+            None => return Ok(()),
+        };
+        let b0 = match self.get_previous_block(&b1).await? {
+            Some(b) => b,
+            None => return Ok(()),
+        };
 
         //
         // Process the new QC.
@@ -156,17 +183,16 @@ impl<L: LeaderElection> Core<L> {
 
     async fn make_block(&self) {
         let (highest_qc, _) = &self.highest_qc;
-        let payload = Digest::default();
         let block = Block::new(
             highest_qc.clone(),
             self.name,
             self.round + 1,
-            payload,
+            self.mempool.get_payload().await,
             self.signature_channel.clone(),
         )
         .await;
         let vote = Vote::new(&block, self.name, self.signature_channel.clone()).await;
-        let message = NetMessage::Block(block, vote, PublicKey::default());
+        let message = NetMessage::Block(block, vote);
         if let Err(e) = self.sender.send(message).await {
             panic!("Core failed to send block to the network: {}", e);
         }
@@ -174,12 +200,13 @@ impl<L: LeaderElection> Core<L> {
 
     async fn handle_vote(&mut self, vote: Vote) -> DiemResult<()> {
         if self.aggregator.is_none() {
-            let block = self.get_block(vote.hash).await?;
-            ensure!(
-                self.name == self.leader_election.get_leader(block.round),
-                DiemError::UnexpectedMessage(Box::new(CoreMessage::Vote(vote)))
-            );
-            self.aggregator = Some(SignatureAggregator::new(vote.hash));
+            if let Some(block) = self.get_block(vote.hash).await? {
+                ensure!(
+                    self.name == self.leader_election.get_leader(block.round),
+                    DiemError::UnexpectedMessage(Box::new(CoreMessage::Vote(vote)))
+                );
+                self.aggregator = Some(SignatureAggregator::new(vote.hash));
+            }
         }
 
         if let Some(_qc) = self

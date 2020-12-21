@@ -14,13 +14,14 @@ pub enum StoreCommand {
     NotifyRead(Key, oneshot::Sender<StoreResult<Value>>),
 }
 
+#[derive(Clone)]
 pub struct Store {
     channel: Sender<StoreCommand>,
 }
 
 impl Store {
     pub async fn new(path: String) -> StoreResult<Self> {
-        let mut pending: HashMap<Key, VecDeque<oneshot::Sender<StoreResult<Value>>>> =
+        let mut obligations: HashMap<Key, VecDeque<oneshot::Sender<StoreResult<Value>>>> =
             HashMap::new();
 
         let db = rocksdb::DB::open_default(path)?;
@@ -31,7 +32,7 @@ impl Store {
                     StoreCommand::Write(key, value, sender) => {
                         let response = db.put(&key, &value);
                         let _ = sender.send(response);
-                        if let Some(mut senders) = pending.remove(&key) {
+                        if let Some(mut senders) = obligations.remove(&key) {
                             while let Some(s) = senders.pop_front() {
                                 let _ = s.send(Ok(value.clone()));
                             }
@@ -44,7 +45,7 @@ impl Store {
                     StoreCommand::NotifyRead(key, sender) => {
                         let response = db.get(&key);
                         match response {
-                            Ok(None) => pending
+                            Ok(None) => obligations
                                 .entry(key)
                                 .or_insert_with(VecDeque::new)
                                 .push_back(sender),

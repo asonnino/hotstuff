@@ -1,7 +1,9 @@
-use crate::crypto::PublicKey;
+use crate::crypto::{Digest, PublicKey};
 use crate::messages::{Block, Vote};
 
 pub enum NetMessage {
-    Block(Block, Vote, PublicKey),
+    Block(Block, Vote),
     Vote(Vote, PublicKey),
+    SyncRequest(Digest),
+    SyncReply(Block, PublicKey),
 }
