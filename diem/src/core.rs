@@ -79,8 +79,6 @@ impl<L: LeaderElection> Core<L> {
     }
 
     async fn get_block(&mut self, hash: Digest) -> DiemResult<Option<Block>> {
-        // TODO: If we don't ask for the block, it may never come.
-        // Also we do not want to block this thread until we get our block.
         match self.store.read(hash.to_vec()).await? {
             Some(bytes) => {
                 bincode::deserialize(&bytes).map_err(|e| DiemError::StoreError(e.to_string()))
@@ -236,10 +234,8 @@ impl<L: LeaderElection> Core<L> {
             };
             match result {
                 Ok(()) => debug!("Message successfully processed."),
-                Err(e) => match e {
-                    DiemError::StoreError(e) => error!("{}", e),
-                    _ => warn!("{}", e),
-                },
+                Err(DiemError::StoreError(e)) => error!("{}", e),
+                Err(e) => warn!("{}", e),
             }
         }
     }

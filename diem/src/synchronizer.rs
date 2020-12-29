@@ -32,6 +32,7 @@ impl Synchronizer {
                         }
                     }
                     result = waiting.select_next_some() => {
+                        // TODO: This should be an output channel?
                         if let Err(e) = inner_channel.send(result).await {
                             panic!("Synchronizer failed to send message through output channel: {}", e);
                         }
