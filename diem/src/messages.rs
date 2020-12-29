@@ -53,6 +53,10 @@ impl Block {
     pub fn genesis() -> Self {
         Block::default()
     }
+
+    pub fn previous(&self) -> Digest {
+        self.qc.hash
+    }
 }
 
 impl Digestible for Block {

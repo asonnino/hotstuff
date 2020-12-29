@@ -11,6 +11,7 @@ use crate::synchronizer::Synchronizer;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
+use std::collections::HashMap;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::oneshot;
 
@@ -38,6 +39,7 @@ pub struct Core<L: LeaderElection> {
     signature_channel: Sender<(Digest, oneshot::Sender<Signature>)>,
     mempool: Mempool,
     synchronizer: Synchronizer,
+    pending: HashMap<Digest, Block>,
 }
 
 impl<L: LeaderElection> Core<L> {
@@ -69,6 +71,7 @@ impl<L: LeaderElection> Core<L> {
             signature_channel,
             mempool,
             synchronizer,
+            pending: HashMap::new(),
         }
     }
 
@@ -85,6 +88,7 @@ impl<L: LeaderElection> Core<L> {
             }
             None => {
                 debug!("Requesting sync for block {:?}", hash);
+                // TODO: Do not send sync request if we already have the block in pending.
                 self.synchronizer.request(hash).await;
                 Ok(None)
             }
@@ -95,41 +99,16 @@ impl<L: LeaderElection> Core<L> {
         if block.qc == QC::genesis() {
             return Ok(Some(Block::genesis()));
         }
-        self.get_block(block.qc.hash).await
+        self.get_block(block.previous()).await
     }
 
-    async fn handle_propose(&mut self, block: Block) -> DiemResult<()> {
-        block.check(&self.committee)?;
-        self.store_block(&block).await?;
+    async fn process_qc(&mut self, qc: &QC, ancestors: &(Block, Block, Block)) {
+        let (b0, b1, b2) = ancestors;
 
-        // Get the ancestors of the incoming block:
-        // B0 <- |QC0; B1| <- |QC1; B2| <- |QC2; Block|
-        // TODO: Instead of just returning Ok, we should register an obligation
-        // to process block later.
-        let b2 = match self.get_previous_block(&block).await? {
-            Some(b) => b,
-            None => return Ok(()),
-        };
-        let b1 = match self.get_previous_block(&b2).await? {
-            Some(b) => b,
-            None => return Ok(()),
-        };
-        let b0 = match self.get_previous_block(&b1).await? {
-            Some(b) => b,
-            None => return Ok(()),
-        };
-
-        //
-        // Process the new QC.
-        //
-
-        // Try to commit ancestors.
-        let mut commit = b0.round + 1 == b1.round;
-        commit &= b1.round + 1 == b2.round;
-        commit &= b2.round + 1 == block.round;
-        if commit {
+        // Try to commit b0.
+        if b0.round + 1 == b1.round && b1.round + 1 == b2.round {
             info!("Committed {:?}", b0);
-            if let Err(e) = self.commit_channel.send(b0).await {
+            if let Err(e) = self.commit_channel.send(b0.clone()).await {
                 warn!("Failed to send block through the commit channel: {}", e);
             }
         }
@@ -137,27 +116,31 @@ impl<L: LeaderElection> Core<L> {
         // Update the hightest QC and round number of the node.
         let (_, highest_qc_round) = self.highest_qc;
         if b2.round > highest_qc_round {
-            self.highest_qc = (block.qc.clone(), b2.round);
+            self.highest_qc = (qc.clone(), b2.round);
         }
-        if b2.round + 1 > self.round {
+        if b2.round >= self.round {
             self.round = b2.round + 1;
             info!("Moved to round {}", self.round);
         }
+    }
 
-        //
-        // Process the new block.
-        //
+    async fn process_block(
+        &mut self,
+        block: &Block,
+        ancestors: &(Block, Block, Block),
+    ) -> DiemResult<()> {
+        let (_, b1, b2) = ancestors;
 
         // Prevents bad leaders from proposing blocks with very high round numbers.
         ensure!(
             block.round == self.round,
-            DiemError::UnexpectedMessage(Box::new(CoreMessage::Block(block)))
+            DiemError::UnexpectedMessage(Box::new(CoreMessage::Block(block.clone())))
         );
 
         // Ensure the block proposer is the right leader for the round.
         ensure!(
             block.author == self.leader_election.get_leader(block.round),
-            DiemError::UnexpectedMessage(Box::new(CoreMessage::Block(block)))
+            DiemError::UnexpectedMessage(Box::new(CoreMessage::Block(block.clone())))
         );
 
         // Check the safety rules.
@@ -175,7 +158,38 @@ impl<L: LeaderElection> Core<L> {
             self.preferred_round = max(self.preferred_round, b1.round);
             self.last_voted_round = block.round;
         }
+        Ok(())
+    }
 
+    async fn handle_block(&mut self, block: Block) -> DiemResult<()> {
+        block.check(&self.committee)?;
+
+        // Get the ancestors of the incoming block:
+        // B0 <- |QC0; B1| <- |QC1; B2| <- |QC2; Block|
+        let b2 = match self.get_previous_block(&block).await? {
+            Some(b) => b,
+            None => {
+                self.pending.insert(block.previous(), block);
+                return Ok(());
+            }
+        };
+        let b1 = self
+            .get_previous_block(&b2)
+            .await?
+            .expect("We should have all ancestors of delivered blocks");
+        let b0 = self
+            .get_previous_block(&b1)
+            .await?
+            .expect("We should have all ancestors of delivered blocks");
+
+        // We have all ancestors, deliver the block.
+        self.store_block(&block).await?;
+        let ancestors = (b0, b1, b2);
+        self.process_qc(&block.qc, &ancestors).await;
+        self.process_block(&block, &ancestors).await?;
+        if let Some(_retry) = self.pending.remove(&block.digest()) {
+            // TODO: send back into the channel.
+        }
         Ok(())
     }
 
@@ -229,7 +243,7 @@ impl<L: LeaderElection> Core<L> {
         while let Some(message) = self.receiver.recv().await {
             debug!("Received message: {:?}", message);
             let result = match message {
-                CoreMessage::Block(block) => self.handle_propose(block).await,
+                CoreMessage::Block(block) => self.handle_block(block).await,
                 CoreMessage::Vote(vote) => self.handle_vote(vote).await,
             };
             match result {
