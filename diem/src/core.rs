@@ -11,7 +11,6 @@ use crate::synchronizer::Synchronizer;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
-use std::collections::HashMap;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::oneshot;
 
@@ -23,23 +22,27 @@ pub enum CoreMessage {
     Vote(Vote),
 }
 
+struct HighestQC {
+    qc: QC,
+    round: RoundNumber,
+}
+
 pub struct Core<L: LeaderElection> {
     name: PublicKey,
     round: RoundNumber,
     last_voted_round: RoundNumber,
     preferred_round: RoundNumber,
-    highest_qc: (QC, RoundNumber),
+    highest_qc: HighestQC,
     committee: Committee,
     store: Store,
     leader_election: L,
     aggregator: Option<SignatureAggregator>,
-    sender: Sender<NetMessage>,
+    network_channel: Sender<NetMessage>,
     receiver: Receiver<CoreMessage>,
     commit_channel: Sender<Block>,
     signature_channel: Sender<(Digest, oneshot::Sender<Signature>)>,
     mempool: Mempool,
     synchronizer: Synchronizer,
-    pending: HashMap<Digest, Block>,
 }
 
 impl<L: LeaderElection> Core<L> {
@@ -48,7 +51,7 @@ impl<L: LeaderElection> Core<L> {
         store: Store,
         committee: Committee,
         leader_election: L,
-        sender: Sender<NetMessage>,
+        network_channel: Sender<NetMessage>,
         receiver: Receiver<CoreMessage>,
         commit_channel: Sender<Block>,
         signature_channel: Sender<(Digest, oneshot::Sender<Signature>)>,
@@ -60,18 +63,35 @@ impl<L: LeaderElection> Core<L> {
             round: 0,
             last_voted_round: 0,
             preferred_round: 0,
-            highest_qc: (QC::genesis(), 0),
+            highest_qc: HighestQC {
+                qc: QC::genesis(),
+                round: 0,
+            },
             committee,
             store,
             leader_election,
             aggregator: None,
-            sender,
+            network_channel,
             receiver,
             commit_channel,
             signature_channel,
             mempool,
             synchronizer,
-            pending: HashMap::new(),
+        }
+    }
+
+    async fn make_block(&self) {
+        let block = Block::new(
+            self.highest_qc.qc.clone(),
+            self.name,
+            self.round + 1,
+            self.mempool.get_payload().await,
+            self.signature_channel.clone(),
+        )
+        .await;
+        let message = NetMessage::Block(block);
+        if let Err(e) = self.network_channel.send(message).await {
+            panic!("Core failed to send block to the network: {}", e);
         }
     }
 
@@ -81,28 +101,9 @@ impl<L: LeaderElection> Core<L> {
         self.store.write(key, value).await.map_err(DiemError::from)
     }
 
-    async fn get_block(&mut self, hash: Digest) -> DiemResult<Option<Block>> {
-        match self.store.read(hash.to_vec()).await? {
-            Some(bytes) => {
-                bincode::deserialize(&bytes).map_err(|e| DiemError::StoreError(e.to_string()))
-            }
-            None => {
-                debug!("Requesting sync for block {:?}", hash);
-                // TODO: Do not send sync request if we already have the block in pending.
-                self.synchronizer.request(hash).await;
-                Ok(None)
-            }
-        }
-    }
-
-    async fn get_previous_block(&mut self, block: &Block) -> DiemResult<Option<Block>> {
-        if block.qc == QC::genesis() {
-            return Ok(Some(Block::genesis()));
-        }
-        self.get_block(block.previous()).await
-    }
-
     async fn process_qc(&mut self, qc: &QC, ancestors: &(Block, Block, Block)) {
+        // Get the ancestors of the incoming block:
+        // b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
         let (b0, b1, b2) = ancestors;
 
         // Try to commit b0.
@@ -113,10 +114,12 @@ impl<L: LeaderElection> Core<L> {
             }
         }
 
-        // Update the hightest QC and round number of the node.
-        let (_, highest_qc_round) = self.highest_qc;
-        if b2.round > highest_qc_round {
-            self.highest_qc = (qc.clone(), b2.round);
+        // Update the hightest QC and round number.
+        if b2.round > self.highest_qc.round {
+            self.highest_qc = HighestQC {
+                qc: qc.clone(),
+                round: b2.round,
+            };
         }
         if b2.round >= self.round {
             self.round = b2.round + 1;
@@ -129,6 +132,8 @@ impl<L: LeaderElection> Core<L> {
         block: &Block,
         ancestors: &(Block, Block, Block),
     ) -> DiemResult<()> {
+        // Get the ancestors of the incoming block:
+        // b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
         let (_, b1, b2) = ancestors;
 
         // Prevents bad leaders from proposing blocks with very high round numbers
@@ -151,7 +156,11 @@ impl<L: LeaderElection> Core<L> {
             debug!("Voting for block {:?}", block);
             let vote = Vote::new(&block, self.name, self.signature_channel.clone()).await;
             let next_leader = self.leader_election.get_leader(self.round + 1);
-            if let Err(e) = self.sender.send(NetMessage::Vote(vote, next_leader)).await {
+            if let Err(e) = self
+                .network_channel
+                .send(NetMessage::Vote(vote, next_leader))
+                .await
+            {
                 panic!("Core failed to send vote to the network: {}", e);
             }
 
@@ -163,56 +172,19 @@ impl<L: LeaderElection> Core<L> {
     }
 
     async fn handle_block(&mut self, block: Block) -> DiemResult<()> {
+        // TODO: Unify all checks here (also those in try_vote).
         block.check(&self.committee)?;
-
-        // Get the ancestors of the incoming block:
-        // B0 <- |QC0; B1| <- |QC1; B2| <- |QC2; Block|
-        let b2 = match self.get_previous_block(&block).await? {
-            Some(b) => b,
-            None => {
-                self.pending.insert(block.previous(), block);
-                return Ok(());
-            }
-        };
-        let b1 = self
-            .get_previous_block(&b2)
-            .await?
-            .expect("We should have all ancestors of delivered blocks");
-        let b0 = self
-            .get_previous_block(&b1)
-            .await?
-            .expect("We should have all ancestors of delivered blocks");
-
-        // We have all ancestors, deliver the block.
-        self.store_block(&block).await?;
-        let ancestors = (b0, b1, b2);
-        self.process_qc(&block.qc, &ancestors).await;
-        self.try_vote(&block, &ancestors).await?;
-        if let Some(_retry) = self.pending.remove(&block.digest()) {
-            // TODO: send back into the channel and ideally avoid to 
-            // re-check the block.
+        if let Some(ancestors) = self.synchronizer.get_ancestors(&block).await? {
+            self.store_block(&block).await?;
+            self.process_qc(&block.qc, &ancestors).await;
+            self.try_vote(&block, &ancestors).await?;
         }
         Ok(())
     }
 
-    async fn make_block(&self) {
-        let (highest_qc, _) = &self.highest_qc;
-        let block = Block::new(
-            highest_qc.clone(),
-            self.name,
-            self.round + 1,
-            self.mempool.get_payload().await,
-            self.signature_channel.clone(),
-        )
-        .await;
-        let vote = Vote::new(&block, self.name, self.signature_channel.clone()).await;
-        let message = NetMessage::Block(block, vote);
-        if let Err(e) = self.sender.send(message).await {
-            panic!("Core failed to send block to the network: {}", e);
-        }
-    }
-
     async fn handle_vote(&mut self, vote: Vote) -> DiemResult<()> {
+        
+        /*
         if self.aggregator.is_none() {
             if let Some(block) = self.get_block(vote.hash).await? {
                 ensure!(
@@ -232,6 +204,7 @@ impl<L: LeaderElection> Core<L> {
             // TODO: Update highest QC with _qc.
             self.make_block().await;
         }
+        */
         Ok(())
     }
 
