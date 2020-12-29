@@ -124,16 +124,17 @@ impl<L: LeaderElection> Core<L> {
         }
     }
 
-    async fn process_block(
+    async fn try_vote(
         &mut self,
         block: &Block,
         ancestors: &(Block, Block, Block),
     ) -> DiemResult<()> {
         let (_, b1, b2) = ancestors;
 
-        // Prevents bad leaders from proposing blocks with very high round numbers.
+        // Prevents bad leaders from proposing blocks with very high round numbers
+        // which may cause overflows.
         ensure!(
-            block.round == self.round,
+            block.round < self.round + 100,
             DiemError::UnexpectedMessage(Box::new(CoreMessage::Block(block.clone())))
         );
 
@@ -186,9 +187,10 @@ impl<L: LeaderElection> Core<L> {
         self.store_block(&block).await?;
         let ancestors = (b0, b1, b2);
         self.process_qc(&block.qc, &ancestors).await;
-        self.process_block(&block, &ancestors).await?;
+        self.try_vote(&block, &ancestors).await?;
         if let Some(_retry) = self.pending.remove(&block.digest()) {
-            // TODO: send back into the channel.
+            // TODO: send back into the channel and ideally avoid to 
+            // re-check the block.
         }
         Ok(())
     }
