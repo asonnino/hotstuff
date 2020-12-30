@@ -31,5 +31,5 @@ fn signature_test() {
     let signature = Signature { part1, part2 };
 
     // Verify the signature.
-    assert!(signature.check(&message, &public_key).is_ok());
+    assert!(signature.verify(&message.digest(), &public_key).is_ok());
 }

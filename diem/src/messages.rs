@@ -1,6 +1,6 @@
 use crate::committee::{Committee, Stake};
 use crate::core::RoundNumber;
-use crate::crypto::{Digest, Digestible, PublicKey, Signature};
+use crate::crypto::{Digest, Digestible, PublicKey, Signature, SignatureService};
 use crate::error::{DiemError, DiemResult};
 use ed25519_dalek::Digest as _;
 use ed25519_dalek::Sha512;
@@ -8,8 +8,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fmt;
-use tokio::sync::mpsc::Sender;
-use tokio::sync::oneshot;
 
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Block {
@@ -26,7 +24,7 @@ impl Block {
         author: PublicKey,
         round: RoundNumber,
         payload: Digest,
-        signature_channel: Sender<(Digest, oneshot::Sender<Signature>)>,
+        mut signature_service: SignatureService,
     ) -> Self {
         let mut block = Block {
             qc,
@@ -35,14 +33,7 @@ impl Block {
             payload,
             signature: Signature::default(),
         };
-        let (sender, receiver) = oneshot::channel();
-        // TODO: Make signature on block, not on hash.
-        if let Err(e) = signature_channel.send((block.digest(), sender)).await {
-            panic!("Failed to send Block command to Signature Service: {}", e);
-        }
-        block.signature = receiver
-            .await
-            .expect("Failed to receive signature from Signature Service");
+        block.signature = signature_service.request_signature(block.digest()).await;
         block
     }
 
@@ -92,7 +83,7 @@ impl Vote {
     pub async fn new(
         block: &Block,
         author: PublicKey,
-        signature_channel: Sender<(Digest, oneshot::Sender<Signature>)>,
+        mut signature_service: SignatureService,
     ) -> Self {
         let mut vote = Vote {
             hash: block.digest(),
@@ -100,13 +91,7 @@ impl Vote {
             author,
             round: block.round,
         };
-        let (sender, receiver) = oneshot::channel();
-        if let Err(e) = signature_channel.send((vote.digest(), sender)).await {
-            panic!("Failed to send Block command to Signature Service: {}", e);
-        }
-        vote.signature = receiver
-            .await
-            .expect("Failed to receive signature from Signature Service");
+        vote.signature = signature_service.request_signature(vote.digest()).await;
         vote
     }
 }
@@ -153,7 +138,7 @@ impl QC {
         );
 
         // Check the signatures
-        Signature::verify_batch(self, &self.votes).map_err(DiemError::from)
+        Signature::verify_batch(&self.digest(), &self.votes).map_err(DiemError::from)
     }
 
     pub fn genesis() -> Self {
@@ -219,7 +204,7 @@ impl SignatureAggregator {
         ensure!(voting_rights > 0, DiemError::UnknownAuthority(author));
 
         // Check the signature on the vote.
-        vote.signature.verify(&vote, &author)?;
+        vote.signature.verify(&vote.digest(), &author)?;
 
         self.partial.votes.push((author, vote.signature));
         self.used.insert(author);

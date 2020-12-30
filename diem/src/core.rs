@@ -1,6 +1,6 @@
 use crate::committee::Committee;
-use crate::crypto::Digestible;
-use crate::crypto::{Digest, PublicKey, Signature};
+use crate::crypto::Digestible as _;
+use crate::crypto::{Digest, PublicKey, SignatureService};
 use crate::error::{DiemError, DiemResult};
 use crate::leader::LeaderElection;
 use crate::mempool::Mempool;
@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 use std::cmp::max;
 use std::collections::HashMap;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::oneshot;
 
 pub type RoundNumber = u64;
 
@@ -36,7 +35,7 @@ pub struct Core<L: LeaderElection> {
     network_channel: Sender<NetMessage>,
     receiver: Receiver<CoreMessage>,
     commit_channel: Sender<Block>,
-    signature_channel: Sender<(Digest, oneshot::Sender<Signature>)>,
+    signature_service: SignatureService,
     mempool: Mempool,
     synchronizer: Synchronizer,
 }
@@ -50,7 +49,7 @@ impl<L: LeaderElection> Core<L> {
         network_channel: Sender<NetMessage>,
         receiver: Receiver<CoreMessage>,
         commit_channel: Sender<Block>,
-        signature_channel: Sender<(Digest, oneshot::Sender<Signature>)>,
+        signature_service: SignatureService,
         mempool: Mempool,
         synchronizer: Synchronizer,
     ) -> Self {
@@ -67,7 +66,7 @@ impl<L: LeaderElection> Core<L> {
             network_channel,
             receiver,
             commit_channel,
-            signature_channel,
+            signature_service,
             mempool,
             synchronizer,
         }
@@ -79,7 +78,7 @@ impl<L: LeaderElection> Core<L> {
             self.name,
             self.round,
             self.mempool.get_payload().await,
-            self.signature_channel.clone(),
+            self.signature_service.clone(),
         )
         .await;
         let message = NetMessage::Block(block);
@@ -149,7 +148,7 @@ impl<L: LeaderElection> Core<L> {
         );
 
         // Check the block is correctly signed.
-        block.signature.verify(&block, &block.author)?;
+        block.signature.verify(&block.digest(), &block.author)?;
 
         // Check the safety rules to see if we can vote for this new block. If we can,
         // we send our vote to the next leader.
@@ -158,7 +157,7 @@ impl<L: LeaderElection> Core<L> {
         if safety_rule_1 && safety_rule_2 {
             debug!("Voting for block {:?}", block);
 
-            let vote = Vote::new(&block, self.name, self.signature_channel.clone()).await;
+            let vote = Vote::new(&block, self.name, self.signature_service.clone()).await;
             let next_leader = self.leader_election.get_leader(self.round + 1);
             if let Err(e) = self
                 .network_channel
