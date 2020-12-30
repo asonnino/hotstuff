@@ -36,9 +36,6 @@ pub enum DiemError {
     #[error("Invalid signature")]
     InvalidSignature,
 
-    #[error("Received an unexpected or late vote from {0:?}")]
-    UnexpectedOrLateVote(PublicKey),
-
     #[error("Received more than one vote from {0:?}")]
     AuthorityReuse(PublicKey),
 

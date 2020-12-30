@@ -36,6 +36,7 @@ impl Block {
             signature: Signature::default(),
         };
         let (sender, receiver) = oneshot::channel();
+        // TODO: Make signature on block, not on hash.
         if let Err(e) = signature_channel.send((block.digest(), sender)).await {
             panic!("Failed to send Block command to Signature Service: {}", e);
         }
@@ -89,6 +90,7 @@ pub struct Vote {
     pub hash: Digest,
     pub signature: Signature,
     pub author: PublicKey,
+    pub round: RoundNumber,
 }
 
 impl Vote {
@@ -97,30 +99,31 @@ impl Vote {
         author: PublicKey,
         signature_channel: Sender<(Digest, oneshot::Sender<Signature>)>,
     ) -> Self {
-        let hash = block.digest();
         let mut vote = Vote {
-            hash,
+            hash: block.digest(),
             signature: Signature::default(),
             author,
+            round: block.round,
         };
-        if author == block.author {
-            vote.signature = block.signature.clone();
-        } else {
-            let (sender, receiver) = oneshot::channel();
-            if let Err(e) = signature_channel.send((hash, sender)).await {
-                panic!("Failed to send Block command to Signature Service: {}", e);
-            }
-            vote.signature = receiver
-                .await
-                .expect("Failed to receive signature from Signature Service");
+        let (sender, receiver) = oneshot::channel();
+        if let Err(e) = signature_channel.send((vote.digest(), sender)).await {
+            panic!("Failed to send Block command to Signature Service: {}", e);
         }
+        vote.signature = receiver
+            .await
+            .expect("Failed to receive signature from Signature Service");
         vote
     }
 }
 
 impl Digestible for Vote {
     fn digest(&self) -> Digest {
-        self.hash
+        let mut hasher = Sha512::new();
+        let mut hash = [0u8; 64];
+        hasher.update(self.hash);
+        hasher.update(self.round.to_le_bytes());
+        hash.copy_from_slice(hasher.finalize().as_slice());
+        hash[..32].try_into().expect("Unexpected hash length")
     }
 }
 
@@ -133,6 +136,7 @@ impl fmt::Debug for Vote {
 #[derive(Clone, Serialize, Deserialize, Default)]
 pub struct QC {
     pub hash: Digest,
+    pub round: RoundNumber,
     votes: Vec<(PublicKey, Signature)>,
 }
 
@@ -164,7 +168,12 @@ impl QC {
 
 impl Digestible for QC {
     fn digest(&self) -> Digest {
-        self.hash
+        let mut hasher = Sha512::new();
+        let mut hash = [0u8; 64];
+        hasher.update(self.hash);
+        hasher.update(self.round.to_le_bytes());
+        hash.copy_from_slice(hasher.finalize().as_slice());
+        hash[..32].try_into().expect("Unexpected hash length")
     }
 }
 
@@ -176,7 +185,7 @@ impl fmt::Debug for QC {
 
 impl PartialEq for QC {
     fn eq(&self, other: &Self) -> bool {
-        self.hash == other.hash
+        self.hash == other.hash && self.round == other.round
     }
 }
 
@@ -184,41 +193,25 @@ impl PartialEq for QC {
 pub struct SignatureAggregator {
     weight: Stake,
     used: HashSet<PublicKey>,
-    pub hash: Digest,
-    pub partial: Option<QC>,
+    pub partial: QC,
 }
 
 impl SignatureAggregator {
-    pub fn new(hash: Digest) -> Self {
+    pub fn new(hash: Digest, round: RoundNumber) -> Self {
         Self {
             weight: 0,
             used: HashSet::new(),
-            hash,
-            partial: None,
+            partial: QC {
+                hash,
+                round,
+                votes: Vec::new(),
+            },
         }
-    }
-
-    pub fn init(&mut self, hash: Digest) {
-        self.clear();
-        self.partial = Some(QC {
-            hash,
-            votes: Vec::new(),
-        });
-    }
-
-    pub fn clear(&mut self) {
-        self.weight = 0;
-        self.used.clear();
-        self.partial = None;
     }
 
     /// Try to append a signature to a (partial) QC.
     pub fn append(&mut self, vote: Vote, committee: &Committee) -> DiemResult<Option<QC>> {
         let author = vote.author;
-        ensure!(
-            self.partial.is_some(),
-            DiemError::UnexpectedOrLateVote(author)
-        );
 
         // Check that each authority only appears once.
         ensure!(
@@ -231,21 +224,14 @@ impl SignatureAggregator {
         ensure!(voting_rights > 0, DiemError::UnknownAuthority(author));
 
         // Check the signature on the vote.
-        // TODO: use self.hash instead of &vote to verify vote.
-        // We currently do not know if all votes are on the same message.
         vote.signature.verify(&vote, &author)?;
 
-        let partial = self
-            .partial
-            .as_mut()
-            .expect("Partial QC should not be null at this stage");
-        partial.votes.push((author, vote.signature));
+        self.partial.votes.push((author, vote.signature));
         self.used.insert(author);
         self.weight += voting_rights;
         if self.weight >= committee.quorum_threshold() {
-            self.weight = 0;
-            self.used.clear();
-            Ok(self.partial.take())
+            self.weight = 0; // Ensures QC is only made once.
+            Ok(Some(self.partial.clone()))
         } else {
             Ok(None)
         }

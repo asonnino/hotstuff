@@ -76,6 +76,8 @@ impl Synchronizer {
                 if let Err(e) = self.inner_channel.send(block.clone()).await {
                     panic!("Failed to send request to synchronizer: {}", e);
                 }
+                // TODO: We may send a sync request twice for the same block;
+                // The block may be hanged in the waiter.
                 let sync_request = NetMessage::SyncRequest(previous);
                 if let Err(e) = self.network_channel.send(sync_request).await {
                     panic!("Failed to send Sync Request to network: {}", e);

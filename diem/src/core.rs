@@ -11,6 +11,7 @@ use crate::synchronizer::Synchronizer;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
+use std::collections::HashMap;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::oneshot;
 
@@ -22,21 +23,16 @@ pub enum CoreMessage {
     Vote(Vote),
 }
 
-struct HighestQC {
-    qc: QC,
-    round: RoundNumber,
-}
-
 pub struct Core<L: LeaderElection> {
     name: PublicKey,
     round: RoundNumber,
     last_voted_round: RoundNumber,
     preferred_round: RoundNumber,
-    highest_qc: HighestQC,
+    highest_qc: QC,
     committee: Committee,
     store: Store,
     leader_election: L,
-    aggregator: Option<SignatureAggregator>,
+    aggregators: HashMap<Digest, SignatureAggregator>,
     network_channel: Sender<NetMessage>,
     receiver: Receiver<CoreMessage>,
     commit_channel: Sender<Block>,
@@ -63,14 +59,11 @@ impl<L: LeaderElection> Core<L> {
             round: 0,
             last_voted_round: 0,
             preferred_round: 0,
-            highest_qc: HighestQC {
-                qc: QC::genesis(),
-                round: 0,
-            },
+            highest_qc: QC::genesis(),
             committee,
             store,
             leader_election,
-            aggregator: None,
+            aggregators: HashMap::new(),
             network_channel,
             receiver,
             commit_channel,
@@ -80,11 +73,11 @@ impl<L: LeaderElection> Core<L> {
         }
     }
 
-    async fn make_block(&self) {
+    async fn make_block(&self, qc: QC) {
         let block = Block::new(
-            self.highest_qc.qc.clone(),
+            qc,
             self.name,
-            self.round + 1,
+            self.round,
             self.mempool.get_payload().await,
             self.signature_channel.clone(),
         )
@@ -101,7 +94,17 @@ impl<L: LeaderElection> Core<L> {
         self.store.write(key, value).await.map_err(DiemError::from)
     }
 
-    async fn process_qc(&mut self, qc: &QC, ancestors: &(Block, Block, Block)) {
+    async fn process_qc(&mut self, qc: &QC) {
+        if qc.round > self.highest_qc.round {
+            self.highest_qc = qc.clone();
+        }
+        if qc.round >= self.round {
+            self.round = qc.round + 1;
+            info!("Moved to round {}", self.round);
+        }
+    }
+
+    async fn try_commit(&mut self, ancestors: &(Block, Block, Block)) {
         // Get the ancestors of the incoming block:
         // b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
         let (b0, b1, b2) = ancestors;
@@ -112,18 +115,6 @@ impl<L: LeaderElection> Core<L> {
             if let Err(e) = self.commit_channel.send(b0.clone()).await {
                 warn!("Failed to send block through the commit channel: {}", e);
             }
-        }
-
-        // Update the hightest QC and round number.
-        if b2.round > self.highest_qc.round {
-            self.highest_qc = HighestQC {
-                qc: qc.clone(),
-                round: b2.round,
-            };
-        }
-        if b2.round >= self.round {
-            self.round = b2.round + 1;
-            info!("Moved to round {}", self.round);
         }
     }
 
@@ -139,7 +130,7 @@ impl<L: LeaderElection> Core<L> {
         // Prevents bad leaders from proposing blocks with very high round numbers
         // which may cause overflows.
         ensure!(
-            block.round < self.round + 100,
+            block.round == self.round,
             DiemError::UnexpectedMessage(Box::new(CoreMessage::Block(block.clone())))
         );
 
@@ -174,44 +165,39 @@ impl<L: LeaderElection> Core<L> {
     async fn handle_block(&mut self, block: Block) -> DiemResult<()> {
         // TODO: Unify all checks here (also those in try_vote).
         block.check(&self.committee)?;
+        self.process_qc(&block.qc).await;
         if let Some(ancestors) = self.synchronizer.get_ancestors(&block).await? {
             self.store_block(&block).await?;
-            self.process_qc(&block.qc, &ancestors).await;
+            self.try_commit(&ancestors).await;
             self.try_vote(&block, &ancestors).await?;
         }
         Ok(())
     }
 
     async fn handle_vote(&mut self, vote: Vote) -> DiemResult<()> {
-        
-        /*
-        if self.aggregator.is_none() {
-            if let Some(block) = self.get_block(vote.hash).await? {
-                ensure!(
-                    self.name == self.leader_election.get_leader(block.round),
-                    DiemError::UnexpectedMessage(Box::new(CoreMessage::Vote(vote)))
-                );
-                self.aggregator = Some(SignatureAggregator::new(vote.hash));
+        // TODO: self.aggregators is a potential target for DDoS.
+        // TODO: How do we cleanup self.aggregators.
+        let aggregator = self
+            .aggregators
+            .entry(vote.digest())
+            .or_insert_with(|| SignatureAggregator::new(vote.hash, vote.round));
+        if let Some(qc) = aggregator.append(vote, &self.committee)? {
+            let next_round = qc.round + 1;
+            let mut propose = self.name == self.leader_election.get_leader(next_round);
+            propose &= next_round > self.round;
+            if propose {
+                self.process_qc(&qc).await;
+                self.make_block(qc).await;
             }
         }
-
-        if let Some(_qc) = self
-            .aggregator
-            .as_mut()
-            .unwrap()
-            .append(vote, &self.committee)?
-        {
-            // TODO: Update highest QC with _qc.
-            self.make_block().await;
-        }
-        */
         Ok(())
     }
 
     pub async fn run(&mut self) {
         // Send the very first block.
         if self.name == self.leader_election.get_leader(1) {
-            self.make_block().await;
+            self.round = 1;
+            self.make_block(self.highest_qc.clone()).await;
         }
 
         // Main loop.
