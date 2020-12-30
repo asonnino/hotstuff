@@ -46,11 +46,6 @@ impl Block {
         block
     }
 
-    pub fn check(&self, committee: &Committee) -> DiemResult<()> {
-        self.signature.verify(self, &self.author)?;
-        self.qc.check(committee)
-    }
-
     pub fn genesis() -> Self {
         Block::default()
     }
