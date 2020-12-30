@@ -144,7 +144,7 @@ impl<L: LeaderElector> Core<L> {
         // Ensure the block proposer is the right leader for the round.
         ensure!(
             block.author == self.leader_elector.get_leader(block.round),
-            DiemError::BadLeader(Box::new(CoreMessage::Block(block.clone())))
+            DiemError::WrongLeader(Box::new(CoreMessage::Block(block.clone())))
         );
 
         // Check the block is correctly signed.

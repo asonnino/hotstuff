@@ -46,7 +46,7 @@ pub enum DiemError {
     QCRequiresQuorum,
 
     #[error("Received block from unexpected leader: {0:?}")]
-    BadLeader(Box<CoreMessage>),
+    WrongLeader(Box<CoreMessage>),
 }
 
 impl From<Box<bincode::ErrorKind>> for DiemError {
