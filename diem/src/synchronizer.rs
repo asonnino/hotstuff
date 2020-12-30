@@ -22,14 +22,14 @@ impl Synchronizer {
         network_channel: Sender<NetMessage>,
         core_channel: Sender<CoreMessage>,
     ) -> Self {
-        let (tx, mut rx) = channel(1000);
+        let (tx, mut rx) = channel(100);
         let synchronizer = Self {
             store: store.clone(),
             inner_channel: tx,
             network_channel,
         };
         tokio::spawn(async move {
-            // TODO: The field 'waiting' may be target of DDoS.
+            // TODO: The variable 'waiting' may be a target of DDoS.
             let mut waiting = FuturesUnordered::new();
             loop {
                 select! {

@@ -2,7 +2,7 @@ use crate::committee::Committee;
 use crate::crypto::Digestible as _;
 use crate::crypto::{Digest, PublicKey, SignatureService};
 use crate::error::{DiemError, DiemResult};
-use crate::leader::LeaderElection;
+use crate::leader::LeaderElector;
 use crate::mempool::Mempool;
 use crate::messages::{Block, SignatureAggregator, Vote, QC};
 use crate::network::NetMessage;
@@ -22,7 +22,7 @@ pub enum CoreMessage {
     Vote(Vote),
 }
 
-pub struct Core<L: LeaderElection> {
+pub struct Core<L: LeaderElector> {
     name: PublicKey,
     round: RoundNumber,
     last_voted_round: RoundNumber,
@@ -30,7 +30,7 @@ pub struct Core<L: LeaderElection> {
     highest_qc: QC,
     committee: Committee,
     store: Store,
-    leader_election: L,
+    leader_elector: L,
     aggregators: HashMap<Digest, SignatureAggregator>,
     network_channel: Sender<NetMessage>,
     receiver: Receiver<CoreMessage>,
@@ -40,12 +40,12 @@ pub struct Core<L: LeaderElection> {
     synchronizer: Synchronizer,
 }
 
-impl<L: LeaderElection> Core<L> {
+impl<L: LeaderElector> Core<L> {
     pub fn new(
         name: PublicKey,
         store: Store,
         committee: Committee,
-        leader_election: L,
+        leader_elector: L,
         network_channel: Sender<NetMessage>,
         receiver: Receiver<CoreMessage>,
         commit_channel: Sender<Block>,
@@ -61,7 +61,7 @@ impl<L: LeaderElection> Core<L> {
             highest_qc: QC::genesis(),
             committee,
             store,
-            leader_election,
+            leader_elector,
             aggregators: HashMap::new(),
             network_channel,
             receiver,
@@ -143,7 +143,7 @@ impl<L: LeaderElection> Core<L> {
 
         // Ensure the block proposer is the right leader for the round.
         ensure!(
-            block.author == self.leader_election.get_leader(block.round),
+            block.author == self.leader_elector.get_leader(block.round),
             DiemError::BadLeader(Box::new(CoreMessage::Block(block.clone())))
         );
 
@@ -158,7 +158,7 @@ impl<L: LeaderElection> Core<L> {
             debug!("Voting for block {:?}", block);
 
             let vote = Vote::new(&block, self.name, self.signature_service.clone()).await;
-            let next_leader = self.leader_election.get_leader(self.round + 1);
+            let next_leader = self.leader_elector.get_leader(self.round + 1);
             if let Err(e) = self
                 .network_channel
                 .send(NetMessage::Vote(vote, next_leader))
@@ -189,7 +189,7 @@ impl<L: LeaderElection> Core<L> {
             // are the next leader and if the QC is fresh. The latter condition ensures
             // we only produce a single block for this round (even if votes are replayed).
             let next_round = qc.round + 1;
-            let mut propose = self.name == self.leader_election.get_leader(next_round);
+            let mut propose = self.name == self.leader_elector.get_leader(next_round);
             propose &= next_round > self.round;
             if propose {
                 // Let's first process our new QC before making a new block; this will
@@ -203,7 +203,7 @@ impl<L: LeaderElection> Core<L> {
 
     pub async fn run(&mut self) {
         // Upon booting, send the very first block (if we are the leader).
-        if self.name == self.leader_election.get_leader(1) {
+        if self.name == self.leader_elector.get_leader(1) {
             self.round = 1;
             self.make_block(self.highest_qc.clone()).await;
         }
