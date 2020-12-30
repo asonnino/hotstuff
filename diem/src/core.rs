@@ -31,7 +31,7 @@ pub struct Core<L: LeaderElector> {
     committee: Committee,
     store: Store,
     leader_elector: L,
-    aggregators: HashMap<Digest, SignatureAggregator>,
+    aggregators: HashMap<Digest, Box<SignatureAggregator>>,
     network_channel: Sender<NetMessage>,
     receiver: Receiver<CoreMessage>,
     commit_channel: Sender<Block>,
@@ -152,7 +152,7 @@ impl<L: LeaderElector> Core<L> {
 
         // Check the safety rules to see if we can vote for this new block. If we can,
         // we send our vote to the next leader.
-        let safety_rule_1 = b2.round >= self.preferred_round;
+        let safety_rule_1 = block.qc.round >= self.preferred_round;
         let safety_rule_2 = block.round > self.last_voted_round;
         if safety_rule_1 && safety_rule_2 {
             debug!("Voting for block {:?}", block);
@@ -181,7 +181,7 @@ impl<L: LeaderElector> Core<L> {
         let aggregator = self
             .aggregators
             .entry(vote.digest())
-            .or_insert_with(|| SignatureAggregator::new(vote.hash, vote.round));
+            .or_insert_with(|| Box::new(SignatureAggregator::new(vote.hash, vote.round)));
 
         // Let's add the new vote to our aggregator and see if we have a QC.
         if let Some(qc) = aggregator.append(vote, &self.committee)? {
