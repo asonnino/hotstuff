@@ -45,6 +45,9 @@ pub enum DiemError {
     #[error("Received QC without a quorum")]
     QCRequiresQuorum,
 
+    #[error("Malformed block {0:?}")]
+    MalformedBlock(Digest),
+
     #[error("Received block {digest:?} from leader {leader:?} at round {round}")]
     WrongLeader {
         digest: Digest,
