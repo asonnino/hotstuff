@@ -1,6 +1,7 @@
 #[macro_use]
 pub mod error;
 
+pub mod aggregator;
 pub mod committee;
 pub mod core;
 pub mod crypto;

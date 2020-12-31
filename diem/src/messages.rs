@@ -1,4 +1,4 @@
-use crate::committee::{Committee, Stake};
+use crate::committee::Committee;
 use crate::core::RoundNumber;
 use crate::crypto::{Digest, Hash, PublicKey, Signature, SignatureService};
 use crate::error::{DiemError, DiemResult};
@@ -49,12 +49,10 @@ impl Block {
 impl Hash for Block {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
-        let mut hash = [0u8; 64];
         hasher.update(self.author.0);
         hasher.update(self.round.to_le_bytes());
         hasher.update(self.payload);
-        hash.copy_from_slice(hasher.finalize().as_slice());
-        hash[..32].try_into().expect("Unexpected hash length")
+        hasher.finalize().as_slice()[..32].try_into().unwrap()
     }
 }
 
@@ -99,17 +97,15 @@ impl Vote {
 impl Hash for Vote {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
-        let mut hash = [0u8; 64];
         hasher.update(self.hash);
         hasher.update(self.round.to_le_bytes());
-        hash.copy_from_slice(hasher.finalize().as_slice());
-        hash[..32].try_into().expect("Unexpected hash length")
+        hasher.finalize().as_slice()[..32].try_into().unwrap()
     }
 }
 
 impl fmt::Debug for Vote {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "V({:?}, {:?})", self.author, self.hash)
+        write!(f, "V({:?}, {}. {:?})", self.author, self.round, self.hash)
     }
 }
 
@@ -117,7 +113,7 @@ impl fmt::Debug for Vote {
 pub struct QC {
     pub hash: Digest,
     pub round: RoundNumber,
-    votes: Vec<(PublicKey, Signature)>,
+    pub votes: Vec<(PublicKey, Signature)>,
 }
 
 impl QC {
@@ -149,17 +145,15 @@ impl QC {
 impl Hash for QC {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
-        let mut hash = [0u8; 64];
         hasher.update(self.hash);
         hasher.update(self.round.to_le_bytes());
-        hash.copy_from_slice(hasher.finalize().as_slice());
-        hash[..32].try_into().expect("Unexpected hash length")
+        hasher.finalize().as_slice()[..32].try_into().unwrap()
     }
 }
 
 impl fmt::Debug for QC {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "QC({:?})", self.hash)
+        write!(f, "QC({:?}, {})", self.hash, self.round)
     }
 }
 
@@ -169,51 +163,83 @@ impl PartialEq for QC {
     }
 }
 
-#[derive(Default)]
-pub struct SignatureAggregator {
-    weight: Stake,
-    used: HashSet<PublicKey>,
-    pub partial: QC,
+#[derive(Serialize, Deserialize)]
+pub struct TV {
+    pub signature: Signature,
+    pub author: PublicKey,
+    pub round: RoundNumber,
 }
 
-impl SignatureAggregator {
-    pub fn new(hash: Digest, round: RoundNumber) -> Self {
-        Self {
-            weight: 0,
-            used: HashSet::new(),
-            partial: QC {
-                hash,
-                round,
-                votes: Vec::new(),
-            },
-        }
+impl TV {
+    pub async fn new(
+        round: RoundNumber,
+        author: PublicKey,
+        mut signature_service: SignatureService,
+    ) -> Self {
+        let mut vote = TV {
+            signature: Signature::default(),
+            author,
+            round,
+        };
+        vote.signature = signature_service.request_signature(vote.digest()).await;
+        vote
     }
+}
 
-    /// Try to append a signature to a (partial) QC.
-    pub fn append(&mut self, vote: Vote, committee: &Committee) -> DiemResult<Option<QC>> {
-        let author = vote.author;
+impl Hash for TV {
+    fn digest(&self) -> Digest {
+        let hash = Sha512::digest(&self.round.to_le_bytes());
+        hash.as_slice()[..32].try_into().unwrap()
+    }
+}
 
-        // Check that each authority only appears once.
+impl fmt::Debug for TV {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "TV({:?}, {})", self.author, self.round)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct TC {
+    pub qc: QC,
+    pub round: RoundNumber,
+    pub votes: Vec<(PublicKey, Signature)>,
+}
+
+impl TC {
+    // TODO: This function is a copy-past from QC.
+    pub fn check(&self, committee: &Committee) -> DiemResult<()> {
+        // Ensure the QC has a quorum.
+        let mut weight = 0;
+        let mut used = HashSet::new();
+        for (name, _) in self.votes.iter() {
+            ensure!(!used.contains(name), DiemError::AuthorityReuse(*name));
+            let voting_rights = committee.stake(name);
+            ensure!(voting_rights > 0, DiemError::UnknownAuthority(*name));
+            used.insert(*name);
+            weight += voting_rights;
+        }
         ensure!(
-            !self.used.contains(&author),
-            DiemError::AuthorityReuse(author)
+            weight >= committee.quorum_threshold(),
+            DiemError::QCRequiresQuorum
         );
 
-        // Ensure the authority has voting rights.
-        let voting_rights = committee.stake(&author);
-        ensure!(voting_rights > 0, DiemError::UnknownAuthority(author));
+        // Check the signatures.
+        Signature::verify_batch(&self.digest(), &self.votes).map_err(DiemError::from)
+    }
+}
 
-        // Check the signature on the vote.
-        vote.signature.verify(&vote.digest(), &author)?;
+impl Hash for TC {
+    fn digest(&self) -> Digest {
+        let mut hasher = Sha512::new();
+        hasher.update(self.qc.digest());
+        hasher.update(self.round.to_le_bytes());
+        hasher.finalize().as_slice()[..32].try_into().unwrap()
+    }
+}
 
-        self.partial.votes.push((author, vote.signature));
-        self.used.insert(author);
-        self.weight += voting_rights;
-        if self.weight >= committee.quorum_threshold() {
-            self.weight = 0; // Ensures QC is only made once.
-            Ok(Some(self.partial.clone()))
-        } else {
-            Ok(None)
-        }
+impl fmt::Debug for TC {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "TC({}, {:?})", self.round, self.qc)
     }
 }

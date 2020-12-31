@@ -1,10 +1,11 @@
+use crate::aggregator::QCMaker;
 use crate::committee::Committee;
 use crate::crypto::Hash as _;
 use crate::crypto::{Digest, PublicKey, SignatureService};
 use crate::error::{DiemError, DiemResult};
 use crate::leader::LeaderElector;
 use crate::mempool::Mempool;
-use crate::messages::{Block, SignatureAggregator, Vote, QC};
+use crate::messages::{Block, Vote, QC};
 use crate::network::NetMessage;
 use crate::store::Store;
 use crate::synchronizer::Synchronizer;
@@ -32,7 +33,7 @@ pub struct Core<L: LeaderElector> {
     committee: Committee,
     store: Store,
     leader_elector: L,
-    aggregators: HashMap<Digest, Box<SignatureAggregator>>,
+    aggregators: HashMap<Digest, Box<QCMaker>>,
     network_channel: Sender<NetMessage>,
     receiver: Receiver<CoreMessage>,
     commit_channel: Sender<Block>,
@@ -199,7 +200,7 @@ impl<L: LeaderElector> Core<L> {
         let aggregator = self
             .aggregators
             .entry(vote.digest())
-            .or_insert_with(|| Box::new(SignatureAggregator::new(vote.hash, vote.round)));
+            .or_insert_with(|| Box::new(QCMaker::new(vote.hash, vote.round)));
 
         // Add the new vote to our aggregator and see if we have a QC.
         if let Some(qc) = aggregator.append(vote, &self.committee)? {

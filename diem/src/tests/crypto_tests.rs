@@ -3,14 +3,11 @@ use ed25519_dalek::Digest as _;
 use ed25519_dalek::Signer as _;
 use ed25519_dalek::{Keypair, Sha512};
 use rand::{rngs::StdRng, SeedableRng};
+use std::convert::TryInto;
 
 impl Hash for &[u8] {
     fn digest(&self) -> Digest {
-        let mut hash = [0u8; 64];
-        let mut digest = [0u8; 32];
-        hash.copy_from_slice(Sha512::digest(self).as_slice());
-        digest.copy_from_slice(&hash[..32]);
-        digest
+        Sha512::digest(self).as_slice()[..32].try_into().unwrap()
     }
 }
 
