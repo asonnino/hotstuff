@@ -1,10 +1,10 @@
-use super::{Digest, Digestible, PublicKey, Signature};
+use super::{Digest, Hash, PublicKey, Signature};
 use ed25519_dalek::Digest as _;
 use ed25519_dalek::Signer as _;
 use ed25519_dalek::{Keypair, Sha512};
 use rand::{rngs::StdRng, SeedableRng};
 
-impl Digestible for &[u8] {
+impl Hash for &[u8] {
     fn digest(&self) -> Digest {
         let mut hash = [0u8; 64];
         let mut digest = [0u8; 32];

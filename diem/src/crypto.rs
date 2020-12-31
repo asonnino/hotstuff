@@ -15,7 +15,7 @@ pub mod crypto_tests;
 
 pub type Digest = [u8; 32];
 
-pub trait Digestible {
+pub trait Hash {
     fn digest(&self) -> Digest;
 }
 

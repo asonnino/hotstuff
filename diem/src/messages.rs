@@ -1,6 +1,6 @@
 use crate::committee::{Committee, Stake};
 use crate::core::RoundNumber;
-use crate::crypto::{Digest, Digestible, PublicKey, Signature, SignatureService};
+use crate::crypto::{Digest, Hash, PublicKey, Signature, SignatureService};
 use crate::error::{DiemError, DiemResult};
 use ed25519_dalek::Digest as _;
 use ed25519_dalek::Sha512;
@@ -46,7 +46,7 @@ impl Block {
     }
 }
 
-impl Digestible for Block {
+impl Hash for Block {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
         let mut hash = [0u8; 64];
@@ -96,7 +96,7 @@ impl Vote {
     }
 }
 
-impl Digestible for Vote {
+impl Hash for Vote {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
         let mut hash = [0u8; 64];
@@ -146,7 +146,7 @@ impl QC {
     }
 }
 
-impl Digestible for QC {
+impl Hash for QC {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
         let mut hash = [0u8; 64];

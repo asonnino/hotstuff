@@ -1,5 +1,5 @@
 use crate::committee::Committee;
-use crate::crypto::Digestible as _;
+use crate::crypto::Hash as _;
 use crate::crypto::{Digest, PublicKey, SignatureService};
 use crate::error::{DiemError, DiemResult};
 use crate::leader::LeaderElector;
@@ -144,7 +144,11 @@ impl<L: LeaderElector> Core<L> {
         // Ensure the block proposer is the right leader for the round.
         ensure!(
             block.author == self.leader_elector.get_leader(block.round),
-            DiemError::WrongLeader(Box::new(CoreMessage::Block(block.clone())))
+            DiemError::WrongLeader {
+                digest: block.digest(),
+                leader: block.author,
+                round: block.round
+            }
         );
 
         // Check the block is correctly signed.

@@ -1,5 +1,5 @@
-use crate::core::CoreMessage;
-use crate::crypto::PublicKey;
+use crate::core::RoundNumber;
+use crate::crypto::{Digest, PublicKey};
 use crate::store::StoreError;
 use ed25519_dalek::ed25519;
 use thiserror::Error;
@@ -25,10 +25,10 @@ pub type DiemResult<T> = Result<T, DiemError>;
 #[derive(Error, Debug)]
 pub enum DiemError {
     #[error("Network error: {0}")]
-    NetworkError(std::io::Error),
+    NetworkError(#[from] std::io::Error),
 
     #[error("Serialization error: {0}")]
-    SerializationError(Box<bincode::ErrorKind>),
+    SerializationError(#[from] bincode::ErrorKind),
 
     #[error("Store error: {0}")]
     StoreError(String),
@@ -45,20 +45,12 @@ pub enum DiemError {
     #[error("Received QC without a quorum")]
     QCRequiresQuorum,
 
-    #[error("Received block from unexpected leader: {0:?}")]
-    WrongLeader(Box<CoreMessage>),
-}
-
-impl From<Box<bincode::ErrorKind>> for DiemError {
-    fn from(e: Box<bincode::ErrorKind>) -> Self {
-        DiemError::SerializationError(e)
-    }
-}
-
-impl From<std::io::Error> for DiemError {
-    fn from(e: std::io::Error) -> Self {
-        DiemError::NetworkError(e)
-    }
+    #[error("Received block {digest:?} from leader {leader:?} at round {round}")]
+    WrongLeader {
+        digest: Digest,
+        leader: PublicKey,
+        round: RoundNumber,
+    },
 }
 
 impl From<ed25519::Error> for DiemError {
