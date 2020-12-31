@@ -1,5 +1,5 @@
 use crate::crypto::Digest;
-use rand::Rng;
+use rand::Rng as _;
 use std::convert::TryInto;
 
 pub struct Mempool;

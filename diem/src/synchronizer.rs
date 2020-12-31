@@ -1,4 +1,6 @@
 use crate::core::CoreMessage;
+use crate::crypto::Digest;
+use crate::crypto::Hash as _;
 use crate::error::{DiemError, DiemResult};
 use crate::messages::{Block, QC};
 use crate::network::NetMessage;
@@ -8,12 +10,12 @@ use futures::select;
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
 use log::{debug, error};
+use std::collections::HashSet;
 use tokio::sync::mpsc::{channel, Sender};
 
 pub struct Synchronizer {
     store: Store,
     inner_channel: Sender<Block>,
-    network_channel: Sender<NetMessage>,
 }
 
 impl Synchronizer {
@@ -26,22 +28,29 @@ impl Synchronizer {
         let synchronizer = Self {
             store: store.clone(),
             inner_channel: tx,
-            network_channel,
         };
         tokio::spawn(async move {
-            // TODO: The variable 'waiting' may be a target of DDoS.
             let mut waiting = FuturesUnordered::new();
+            let mut pending = HashSet::new();
             loop {
                 select! {
                     message = rx.next().fuse() => {
                         if let Some(block) = message {
-                            let fut = Self::waiter(store.clone(), block);
-                            waiting.push(fut);
+                            if pending.insert(block.digest()) {
+                                let previous = block.previous();
+                                let fut = Self::waiter(store.clone(), previous, block);
+                                waiting.push(fut);
+                                let sync_request = NetMessage::SyncRequest(previous);
+                                if let Err(e) = network_channel.send(sync_request).await {
+                                    panic!("Failed to send Sync Request to network: {}", e);
+                                }
+                            }
                         }
                     }
                     result = waiting.select_next_some() => {
                         match result {
                             Ok(block) => {
+                                let _ = pending.remove(&block.digest());
                                 let message = CoreMessage::Block(block);
                                 if let Err(e) = core_channel.send(message).await {
                                     panic!("Synchronizer failed to send message through core channel: {}", e);
@@ -56,10 +65,9 @@ impl Synchronizer {
         synchronizer
     }
 
-    async fn waiter(mut store: Store, block: Block) -> DiemResult<Block> {
-        let previous = block.previous();
-        let _ = store.notify_read(previous.to_vec()).await?;
-        Ok(block)
+    async fn waiter(mut store: Store, wait_on: Digest, deliver: Block) -> DiemResult<Block> {
+        let _ = store.notify_read(wait_on.to_vec()).await?;
+        Ok(deliver)
     }
 
     async fn get_previous_block(&mut self, block: &Block) -> DiemResult<Option<Block>> {
@@ -75,12 +83,6 @@ impl Synchronizer {
                 debug!("Requesting sync for block {:?}", previous);
                 if let Err(e) = self.inner_channel.send(block.clone()).await {
                     panic!("Failed to send request to synchronizer: {}", e);
-                }
-                // TODO: We may send a sync request twice for the same block;
-                // The block may be hanged in the waiter.
-                let sync_request = NetMessage::SyncRequest(previous);
-                if let Err(e) = self.network_channel.send(sync_request).await {
-                    panic!("Failed to send Sync Request to network: {}", e);
                 }
                 Ok(None)
             }

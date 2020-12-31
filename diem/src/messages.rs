@@ -137,7 +137,7 @@ impl QC {
             DiemError::QCRequiresQuorum
         );
 
-        // Check the signatures
+        // Check the signatures.
         Signature::verify_batch(&self.digest(), &self.votes).map_err(DiemError::from)
     }
 
