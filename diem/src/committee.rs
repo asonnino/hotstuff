@@ -1,8 +1,8 @@
+use crate::crypto::PublicKey;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 //use std::fs::{self, OpenOptions};
 //use std::io::{BufWriter, Write};
-use crate::crypto::PublicKey;
-use std::collections::HashMap;
 
 pub type Stake = u32;
 pub type EpochNumber = u128;
@@ -44,6 +44,20 @@ impl Committee {
         // If N = 3f + 1 + k (0 <= k < 3)
         // then (N + 2) / 3 = f + 1 + k/3 = f + 1
         (self.total_votes() + 2) / 3
+    }
+
+    pub fn address(&self, name: &PublicKey) -> Option<String> {
+        self.authorities
+            .get(name)
+            .map(|x| format!("{}:{}", x.host, x.port))
+    }
+
+    pub fn broadcast_addresses(&self, myself: &PublicKey) -> Vec<String> {
+        self.authorities
+            .values()
+            .filter(|x| x.name != *myself)
+            .map(|x| format!("{}:{}", x.host, x.port))
+            .collect()
     }
 
     /*
