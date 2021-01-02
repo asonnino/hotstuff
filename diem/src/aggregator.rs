@@ -3,9 +3,49 @@ use crate::core::RoundNumber;
 use crate::crypto::{Digest, Hash, PublicKey};
 use crate::error::{DiemError, DiemResult};
 use crate::messages::{Vote, QC, TC, TV};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-pub struct QCMaker {
+pub struct Aggregator {
+    committee: Committee,
+    qc_aggregators: HashMap<Digest, Box<QCMaker>>,
+    tc_aggregators: HashMap<Digest, Box<TCMaker>>,
+}
+
+impl Aggregator {
+    pub fn new(committee: Committee) -> Self {
+        Self {
+            committee,
+            qc_aggregators: HashMap::new(),
+            tc_aggregators: HashMap::new(),
+        }
+    }
+
+    pub fn add_vote(&mut self, vote: Vote) -> DiemResult<Option<QC>> {
+        // TODO: self.aggregators is a potential target for DDoS.
+        // TODO: How do we cleanup self.aggregators.
+        let aggregator = self
+            .qc_aggregators
+            .entry(vote.digest())
+            .or_insert_with(|| Box::new(QCMaker::new(vote.hash, vote.round)));
+
+        // Add the new vote to our aggregator and see if we have a QC.
+        aggregator.append(vote, &self.committee)
+    }
+
+    pub fn add_timeout(&mut self, timeout: TV, qc: QC) -> DiemResult<Option<TC>> {
+        // TODO: self.aggregators is a potential target for DDoS.
+        // TODO: How do we cleanup self.aggregators.
+        let aggregator = self
+            .tc_aggregators
+            .entry(timeout.digest())
+            .or_insert_with(|| Box::new(TCMaker::new(qc, timeout.round)));
+
+        // Add the new timeout vote to our aggregator and see if we have a TC.
+        aggregator.append(timeout, &self.committee)
+    }
+}
+
+struct QCMaker {
     weight: Stake,
     used: HashSet<PublicKey>,
     pub partial: QC,
@@ -54,7 +94,7 @@ impl QCMaker {
 }
 
 // TODO: Can we avoid code repetition?
-pub struct TCMaker {
+struct TCMaker {
     weight: Stake,
     used: HashSet<PublicKey>,
     pub partial: TC,
@@ -73,7 +113,7 @@ impl TCMaker {
         }
     }
 
-    /// Try to append a signature to a (partial) QC.
+    /// Try to append a signature to a (partial) TC.
     pub fn append(&mut self, vote: TV, committee: &Committee) -> DiemResult<Option<TC>> {
         let author = vote.author;
 

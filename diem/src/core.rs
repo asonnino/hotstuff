@@ -1,19 +1,22 @@
-use crate::aggregator::QCMaker;
+use crate::aggregator::Aggregator;
 use crate::committee::Committee;
 use crate::crypto::Hash as _;
-use crate::crypto::{Digest, PublicKey, SignatureService};
+use crate::crypto::{PublicKey, SignatureService};
 use crate::error::{DiemError, DiemResult};
 use crate::leader::LeaderElector;
 use crate::mempool::Mempool;
-use crate::messages::{Block, Vote, QC};
+use crate::messages::{Block, Vote, QC, TC, TV};
 use crate::network::NetMessage;
 use crate::store::Store;
 use crate::synchronizer::Synchronizer;
+use futures::future::FutureExt as _;
+use futures::select;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
-use std::collections::HashMap;
+use std::time::Duration;
 use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::time::sleep;
 
 pub type RoundNumber = u64;
 
@@ -21,6 +24,7 @@ pub type RoundNumber = u64;
 pub enum CoreMessage {
     Propose(Block),
     Vote(Vote),
+    Timeout(TV),
     LoopBack(Block),
 }
 
@@ -33,7 +37,7 @@ pub struct Core<L: LeaderElector> {
     committee: Committee,
     store: Store,
     leader_elector: L,
-    aggregators: HashMap<Digest, Box<QCMaker>>,
+    aggregator: Aggregator,
     network_channel: Sender<NetMessage>,
     receiver: Receiver<CoreMessage>,
     commit_channel: Sender<Block>,
@@ -61,10 +65,10 @@ impl<L: LeaderElector> Core<L> {
             last_voted_round: 0,
             preferred_round: 0,
             highest_qc: QC::genesis(),
+            aggregator: Aggregator::new(committee.clone()),
             committee,
             store,
             leader_elector,
-            aggregators: HashMap::new(),
             network_channel,
             receiver,
             commit_channel,
@@ -98,7 +102,7 @@ impl<L: LeaderElector> Core<L> {
     }
 
     async fn handle_propose(&mut self, block: &Block) -> DiemResult<()> {
-        // First, reject old blocks.
+        // Reject old blocks.
         if block.round <= self.round {
             return Ok(());
         }
@@ -195,20 +199,45 @@ impl<L: LeaderElector> Core<L> {
             return Ok(());
         }
 
-        // TODO: self.aggregators is a potential target for DDoS.
-        // TODO: How do we cleanup self.aggregators.
-        let aggregator = self
-            .aggregators
-            .entry(vote.digest())
-            .or_insert_with(|| Box::new(QCMaker::new(vote.hash, vote.round)));
-
         // Add the new vote to our aggregator and see if we have a QC.
-        if let Some(qc) = aggregator.append(vote, &self.committee)? {
+        if let Some(qc) = self.aggregator.add_vote(vote)? {
             // If we have a QC, we may use it to propose a new block.
             if self.name == self.leader_elector.get_leader(qc.round + 1) {
                 self.make_block(qc).await?;
             }
         }
+        Ok(())
+    }
+
+    async fn make_timeout(&mut self) {
+        self.round += 1;
+        let timeout = TV::new(self.round, self.name, self.signature_service.clone()).await;
+        let next_leader = self.leader_elector.get_leader(self.round + 1);
+        if let Err(e) = self
+            .network_channel
+            .send(NetMessage::Timeout(timeout, next_leader))
+            .await
+        {
+            panic!("Core failed to send vote to the network: {}", e);
+        }
+    }
+
+    async fn handle_timeout(&mut self, timeout: TV) -> DiemResult<()> {
+        if timeout.round < self.round {
+            return Ok(());
+        }
+
+        // Add the new timeout vote to our aggregator and see if we have a TC.
+        if let Some(tc) = self
+            .aggregator
+            .add_timeout(timeout, self.highest_qc.clone())?
+        {
+            // If we have a TC, we may use it to propose a new block.
+            if self.name == self.leader_elector.get_leader(tc.round + 1) {
+                //self.make_block(qc).await?;
+            }
+        }
+
         Ok(())
     }
 
@@ -221,17 +250,31 @@ impl<L: LeaderElector> Core<L> {
         }
 
         // This is the main loop: it processes incoming blocks and votes.
-        while let Some(message) = self.receiver.recv().await {
-            debug!("Received message: {:?}", message);
-            let result = match message {
-                CoreMessage::Propose(block) => self.handle_propose(&block).await,
-                CoreMessage::Vote(vote) => self.handle_vote(vote).await,
-                CoreMessage::LoopBack(block) => self.process_block(&block).await,
-            };
-            match result {
-                Ok(()) => debug!("Message successfully processed."),
-                Err(DiemError::StoreError(e)) => error!("{}", e),
-                Err(e) => warn!("{}", e),
+        let mut round = self.round;
+        loop {
+            select! {
+                message = self.receiver.recv().fuse() => {
+                    if let Some(message) = message {
+                        debug!("Received message: {:?}", message);
+                        let result = match message {
+                            CoreMessage::Propose(block) => self.handle_propose(&block).await,
+                            CoreMessage::Vote(vote) => self.handle_vote(vote).await,
+                            CoreMessage::Timeout(timeout) => self.handle_timeout(timeout).await,
+                            CoreMessage::LoopBack(block) => self.process_block(&block).await,
+                        };
+                        match result {
+                            Ok(()) => debug!("Message successfully processed."),
+                            Err(DiemError::StoreError(e)) => error!("{}", e),
+                            Err(e) => warn!("{}", e),
+                        }
+                    }
+                }
+                _ = sleep(Duration::from_millis(1_000)).fuse() => {
+                    if self.round == round {
+                        self.make_timeout().await
+                    }
+                    round = self.round;
+                }
             }
         }
     }
