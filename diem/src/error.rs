@@ -28,7 +28,7 @@ pub enum DiemError {
     NetworkError(#[from] std::io::Error),
 
     #[error("Serialization error: {0}")]
-    SerializationError(#[from] bincode::ErrorKind),
+    SerializationError(#[from] Box<bincode::ErrorKind>),
 
     #[error("Store error: {0}")]
     StoreError(String),

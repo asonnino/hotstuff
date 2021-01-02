@@ -162,8 +162,8 @@ impl<L: LeaderElector> Core<L> {
             None => block.qc.round + 1,
         };
         if self.round < possible_new_round {
-            self.round = possible_new_round;
             info!("Moved to round {}", self.round);
+            self.round = possible_new_round;
         }
 
         // Update the highest QC we know.
@@ -295,11 +295,12 @@ impl<L: LeaderElector> Core<L> {
                             Err(e) => warn!("{}", e),
                         }
                     }
-                }
+                },
                 // TODO: This is a bad way to implement timeouts. Some nodes may
-                // potentially wait for 2 sec (instead of 1) before triggering it.
+                // potentially wait for 2 sec (instead of 1) before triggering it,
+                // and it probably recreate a timer at each loop iteration...
                 // TODO: Timeout delay should be a parameter.
-                _ = sleep(Duration::from_millis(1_000)).fuse() => {
+                () = sleep(Duration::from_millis(1_000)).fuse() => {
                     if self.round == round {
                         warn!("Timing out for round {}!", self.round);
                         self.make_timeout().await
