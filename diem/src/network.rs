@@ -9,7 +9,11 @@ use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::io;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::stream::StreamExt as _;
+//use tokio::stream::StreamExt as _;
+use futures::future::FutureExt as _;
+use futures::select;
+use futures::stream::futures_unordered::FuturesUnordered;
+use futures::stream::StreamExt as _;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
@@ -21,72 +25,81 @@ pub enum NetMessage {
     SyncReply(Block, PublicKey),
 }
 
-pub struct NetSender {
-    name: PublicKey,
-    committee: Committee,
-    channel: Receiver<NetMessage>,
-}
+pub struct NetSender;
 
 impl NetSender {
-    pub async fn run(&'static mut self) {
-        let addresses = self.committee.broadcast_addresses(&self.name);
-        while let Some(message) = self.channel.recv().await {
-            debug!("Sending message {:?}", message);
-            let (message, address) = match message {
-                NetMessage::Block(block) => (CoreMessage::Propose(block), None),
-                NetMessage::Vote(vote, to) => {
-                    let message = CoreMessage::Vote(vote);
-                    let address = self
-                        .committee
-                        .address(&to)
-                        .expect("Network address of next leader unknown");
-                    (message, Some(address))
+    pub async fn new(name: PublicKey, committee: Committee, mut rx: Receiver<NetMessage>) {
+        let mut waiting = FuturesUnordered::new();
+        tokio::spawn(async move {
+            loop {
+                select! {
+                    message = rx.recv().fuse() => {
+                        if let Some(message) = message {
+                            for (bytes, address) in Self::make_messages(message, &committee, name) {
+                                let fut = Self::send(bytes, address);
+                                waiting.push(fut);
+                            }
+                        }
+                    }
+                    result = waiting.select_next_some() => {
+                        if let Err(e) = result {
+                            // TODO: We must ensure that at least f+1 nodes received SyncRequests
+                            // to ensure liveness. So we should keep trying until we get enough ACKs.
+                            // Failure of other messages only impact performance.
+                            warn!("Failed to send message. {}", e);
+                        }
+                    }
                 }
-                NetMessage::SyncRequest(digest, from) => {
-                    (CoreMessage::SyncRequest(digest, from), None)
-                }
-                NetMessage::SyncReply(block, to) => {
-                    (CoreMessage::Propose(block), self.committee.address(&to))
-                }
-            };
+            }
+        });
+    }
 
-            let bytes = match bincode::serialize(&message) {
-                Ok(bytes) => bytes,
-                Err(e) => panic!("Failed to serialize Core message: {}", e),
-            };
-            let addresses = addresses.clone();
-            tokio::spawn(async move {
-                let result = match address {
-                    Some(address) => Self::send(bytes, address).await,
-                    None => Self::broadcast(bytes, addresses).await,
-                };
-                match result {
-                    Ok(()) => debug!("Successfully sent message"),
-                    Err(e) => warn!("Failed to send message. {}", e),
-                }
-            });
+    fn make_messages(
+        message: NetMessage,
+        committee: &Committee,
+        name: PublicKey,
+    ) -> Vec<(Bytes, String)> {
+        // Extract the message content and destination address.
+        let (message, address) = match message {
+            NetMessage::Block(block) => (CoreMessage::Propose(block), None),
+            NetMessage::Vote(vote, to) => {
+                let message = CoreMessage::Vote(vote);
+                let address = committee
+                    .address(&to)
+                    .expect("Network address of next leader unknown");
+                (message, Some(address))
+            }
+            NetMessage::SyncRequest(digest, from) => (CoreMessage::SyncRequest(digest, from), None),
+            NetMessage::SyncReply(block, to) => {
+                (CoreMessage::Propose(block), committee.address(&to))
+            }
+        };
+
+        // Encore the message and find the network address of the receiver.
+        let bytes = match bincode::serialize(&message) {
+            Ok(bytes) => Bytes::from(bytes),
+            Err(e) => panic!("Failed to serialize Core message: {}", e),
+        };
+        match address {
+            Some(address) => vec![(bytes, address)],
+            None => committee
+                .broadcast_addresses(&name)
+                .into_iter()
+                .map(|x| (bytes.clone(), x))
+                .collect(),
         }
     }
 
-    async fn send(message: Vec<u8>, address: String) -> DiemResult<()> {
+    /// Send a message to a specific network address.
+    async fn send(message: Bytes, address: String) -> DiemResult<()> {
         let stream = TcpStream::connect(address).await?;
         let (read, write) = stream.into_split();
         let mut transport_write = FramedWrite::new(write, LengthDelimitedCodec::new());
         let mut transport_read = FramedRead::new(read, LengthDelimitedCodec::new());
-        transport_write.send(Bytes::from(message)).await?;
+        transport_write.send(message).await?;
         let _ = transport_read.next().await.ok_or_else(|| {
             io::Error::new(io::ErrorKind::Other, "Failed to receive Ack from peer")
         })?;
-        Ok(())
-    }
-
-    async fn broadcast(message: Vec<u8>, addresses: Vec<String>) -> DiemResult<()> {
-        for address in addresses {
-            let message = message.clone();
-            tokio::spawn(async move {
-                let _ = Self::send(message, address);
-            });
-        }
         Ok(())
     }
 }
