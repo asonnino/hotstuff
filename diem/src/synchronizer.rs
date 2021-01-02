@@ -1,6 +1,6 @@
 use crate::core::CoreMessage;
-use crate::crypto::Digest;
 use crate::crypto::Hash as _;
+use crate::crypto::{Digest, PublicKey};
 use crate::error::{DiemError, DiemResult};
 use crate::messages::{Block, QC};
 use crate::network::NetMessage;
@@ -20,6 +20,7 @@ pub struct Synchronizer {
 
 impl Synchronizer {
     pub async fn new(
+        name: PublicKey,
         store: Store,
         network_channel: Sender<NetMessage>,
         core_channel: Sender<CoreMessage>,
@@ -40,7 +41,7 @@ impl Synchronizer {
                                 let previous = block.previous();
                                 let fut = Self::waiter(store.clone(), previous, block);
                                 waiting.push(fut);
-                                let sync_request = NetMessage::SyncRequest(previous);
+                                let sync_request = NetMessage::SyncRequest(previous, name);
                                 if let Err(e) = network_channel.send(sync_request).await {
                                     panic!("Failed to send Sync Request to network: {}", e);
                                 }

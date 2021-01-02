@@ -1,7 +1,7 @@
 use crate::aggregator::Aggregator;
 use crate::committee::Committee;
 use crate::crypto::Hash as _;
-use crate::crypto::{PublicKey, SignatureService};
+use crate::crypto::{Digest, PublicKey, SignatureService};
 use crate::error::{DiemError, DiemResult};
 use crate::leader::LeaderElector;
 use crate::mempool::Mempool;
@@ -25,6 +25,7 @@ pub enum CoreMessage {
     Propose(Block),
     Vote(Vote),
     LoopBack(Block),
+    SyncRequest(Digest, PublicKey),
 }
 
 pub struct Core<L: LeaderElector> {
@@ -252,6 +253,21 @@ impl<L: LeaderElector> Core<L> {
         }
     }
 
+    async fn handle_sync_request(&mut self, digest: Digest, sender: PublicKey) -> DiemResult<()> {
+        if let Some(bytes) = self.store.read(digest.to_vec()).await? {
+            let block =
+                bincode::deserialize(&bytes).map_err(|e| DiemError::StoreError(e.to_string()))?;
+            if let Err(e) = self
+                .network_channel
+                .send(NetMessage::SyncReply(block, sender))
+                .await
+            {
+                panic!("Core failed to send sync reply to the network: {}", e);
+            }
+        }
+        Ok(())
+    }
+
     pub async fn run(&mut self) {
         // Upon booting, send the very first block (if we are the leader).
         if self.name == self.leader_elector.get_leader(1) {
@@ -271,6 +287,7 @@ impl<L: LeaderElector> Core<L> {
                             CoreMessage::Propose(block) => self.handle_propose(&block).await,
                             CoreMessage::Vote(vote) => self.handle_vote(vote).await,
                             CoreMessage::LoopBack(block) => self.process_block(&block).await,
+                            CoreMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await
                         };
                         match result {
                             Ok(()) => debug!("Message successfully processed."),
@@ -281,6 +298,7 @@ impl<L: LeaderElector> Core<L> {
                 }
                 // TODO: This is a bad way to implement timeouts. Some nodes may
                 // potentially wait for 2 sec (instead of 1) before triggering it.
+                // TODO: Timeout delay should be a parameter.
                 _ = sleep(Duration::from_millis(1_000)).fuse() => {
                     if self.round == round {
                         warn!("Timing out for round {}!", self.round);
