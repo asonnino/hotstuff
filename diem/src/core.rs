@@ -5,7 +5,7 @@ use crate::crypto::{PublicKey, SignatureService};
 use crate::error::{DiemError, DiemResult};
 use crate::leader::LeaderElector;
 use crate::mempool::Mempool;
-use crate::messages::{Block, Vote, QC, TC, TV};
+use crate::messages::{Block, GenericQC, Vote, QC, TC, TV};
 use crate::network::NetMessage;
 use crate::store::Store;
 use crate::synchronizer::Synchronizer;
@@ -152,8 +152,10 @@ impl<L: LeaderElector> Core<L> {
 
         // Enter the new round.
         // TODO: Adapt for: self.round = tc.round + 1;
-        self.round = block.qc.round + 1;
-        info!("Moved to round {}", self.round);
+        if self.round < block.qc.round + 1 {
+            self.round = block.qc.round + 1;
+            info!("Moved to round {}", self.round);
+        }
 
         // Update the highest QC we know.
         if block.qc.round > self.highest_qc.round {
