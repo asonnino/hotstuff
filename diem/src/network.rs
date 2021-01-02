@@ -3,17 +3,17 @@ use crate::core::CoreMessage;
 use crate::crypto::{Digest, PublicKey};
 use crate::error::{DiemError, DiemResult};
 use crate::messages::{Block, Vote};
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
+use futures::future::FutureExt as _;
+use futures::select;
 use futures::sink::SinkExt as _;
+use futures::stream::futures_unordered::FuturesUnordered;
+use futures::stream::StreamExt as _;
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::io;
+use tokio::net::tcp::OwnedWriteHalf;
 use tokio::net::{TcpListener, TcpStream};
-//use tokio::stream::StreamExt as _;
-use futures::future::FutureExt as _;
-use futures::select;
-use futures::stream::futures_unordered::FuturesUnordered;
-use futures::stream::StreamExt as _;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
@@ -35,6 +35,7 @@ impl NetSender {
                 select! {
                     message = rx.recv().fuse() => {
                         if let Some(message) = message {
+                            debug!("Sending message {:?}", message);
                             for (bytes, address) in Self::make_messages(message, &committee, name) {
                                 let fut = Self::send(bytes, address);
                                 waiting.push(fut);
@@ -97,6 +98,8 @@ impl NetSender {
         let mut transport_write = FramedWrite::new(write, LengthDelimitedCodec::new());
         let mut transport_read = FramedRead::new(read, LengthDelimitedCodec::new());
         transport_write.send(message).await?;
+        // TODO: Better error detect; let's make sure we receive Ack for SyncRequests.
+        // Also, let's ensure we don't return Some(Err(e)).
         let _ = transport_read.next().await.ok_or_else(|| {
             io::Error::new(io::ErrorKind::Other, "Failed to receive Ack from peer")
         })?;
@@ -107,7 +110,7 @@ impl NetSender {
 pub struct NetReceiver;
 
 impl NetReceiver {
-    pub async fn run(address: String, core_channel: Sender<CoreMessage>) {
+    pub async fn new(address: String, core_channel: Sender<CoreMessage>) {
         let listener = TcpListener::bind(&address)
             .await
             .expect("Failed to bind to TCP port");
@@ -121,35 +124,37 @@ impl NetReceiver {
                     continue;
                 }
             };
+            info!("Connection established with peer {}", peer);
 
             let core_channel = core_channel.clone();
             tokio::spawn(async move {
-                debug!("Incoming request from {}", peer);
                 let (read, write) = socket.into_split();
                 let mut transport_write = FramedWrite::new(write, LengthDelimitedCodec::new());
                 let mut transport_read = FramedRead::new(read, LengthDelimitedCodec::new());
                 while let Some(frame) = transport_read.next().await {
-                    match frame {
-                        Ok(bytes) => {
-                            match bincode::deserialize(&bytes) {
-                                Ok(message) => {
-                                    if let Err(e) = core_channel.send(message).await {
-                                        panic!("Failed to send message to Core: {}", e);
-                                    }
-                                }
-                                Err(e) => warn!("{}", DiemError::from(e)),
-                            }
-
-                            let response = Bytes::from("Ack");
-                            if let Err(e) = transport_write.send(response).await {
-                                warn!("Failed to reply with read result: {}", e);
-                            }
-                        }
-                        Err(e) => warn!("{}", DiemError::from(e)),
+                    if let Err(e) =
+                        Self::handle_message(frame, &core_channel, &mut transport_write).await
+                    {
+                        warn!("{}", e);
                     }
                 }
-                debug!("Connection closed by peer {}", peer);
+                info!("Connection closed by peer {}", peer);
             });
         }
+    }
+
+    async fn handle_message(
+        frame: Result<BytesMut, io::Error>,
+        core_channel: &Sender<CoreMessage>,
+        transport_write: &mut FramedWrite<OwnedWriteHalf, LengthDelimitedCodec>,
+    ) -> DiemResult<()> {
+        let bytes = frame?;
+        let message = bincode::deserialize(&bytes)?;
+        if let Err(e) = core_channel.send(message).await {
+            panic!("Failed to send message to Core: {}", e);
+        }
+        let response = Bytes::from("Ack");
+        transport_write.send(response).await?;
+        Ok(())
     }
 }
