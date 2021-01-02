@@ -1,13 +1,13 @@
 #[macro_use]
-pub mod error;
+mod error;
 
-pub mod aggregator;
-pub mod committee;
+mod aggregator;
+mod committee;
 pub mod core;
 pub mod crypto;
-pub mod leader;
-pub mod mempool;
-pub mod messages;
+mod leader;
+mod mempool;
+mod messages;
 pub mod network;
-pub mod store;
-pub mod synchronizer;
+mod store;
+mod synchronizer;

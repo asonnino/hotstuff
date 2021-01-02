@@ -12,6 +12,7 @@ use std::fmt;
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Block {
     pub qc: QC,
+    pub tc: Option<TC>,
     pub author: PublicKey,
     pub round: RoundNumber,
     pub payload: Digest,
@@ -21,20 +22,24 @@ pub struct Block {
 impl Block {
     pub async fn new(
         qc: QC,
+        tc: Option<TC>,
         author: PublicKey,
         round: RoundNumber,
         payload: Digest,
         mut signature_service: SignatureService,
     ) -> Self {
-        let mut block = Block {
+        let block = Block {
             qc,
+            tc,
             author,
             round,
             payload,
             signature: Signature::default(),
         };
-        block.signature = signature_service.request_signature(block.digest()).await;
-        block
+        Self {
+            signature: signature_service.request_signature(block.digest()).await,
+            ..block
+        }
     }
 
     pub fn genesis() -> Self {
@@ -69,7 +74,7 @@ impl fmt::Debug for Block {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Vote {
     pub hash: Digest,
     pub signature: Signature,
@@ -83,14 +88,37 @@ impl Vote {
         author: PublicKey,
         mut signature_service: SignatureService,
     ) -> Self {
-        let mut vote = Vote {
+        let vote = Vote {
             hash: block.digest(),
             signature: Signature::default(),
             author,
             round: block.round,
         };
-        vote.signature = signature_service.request_signature(vote.digest()).await;
-        vote
+        Self {
+            signature: signature_service.request_signature(vote.digest()).await,
+            ..vote
+        }
+    }
+
+    pub async fn new_timeout(
+        round: RoundNumber,
+        author: PublicKey,
+        mut signature_service: SignatureService,
+    ) -> Self {
+        let vote = Vote {
+            hash: Digest::default(),
+            signature: Signature::default(),
+            author,
+            round,
+        };
+        Self {
+            signature: signature_service.request_signature(vote.digest()).await,
+            ..vote
+        }
+    }
+
+    pub fn timeout(&self) -> bool {
+        self.hash == Digest::default()
     }
 }
 
@@ -105,43 +133,10 @@ impl Hash for Vote {
 
 impl fmt::Debug for Vote {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "V({:?}, {}. {:?})", self.author, self.round, self.hash)
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct TV {
-    pub signature: Signature,
-    pub author: PublicKey,
-    pub round: RoundNumber,
-}
-
-impl TV {
-    pub async fn new(
-        round: RoundNumber,
-        author: PublicKey,
-        mut signature_service: SignatureService,
-    ) -> Self {
-        let mut vote = TV {
-            signature: Signature::default(),
-            author,
-            round,
-        };
-        vote.signature = signature_service.request_signature(vote.digest()).await;
-        vote
-    }
-}
-
-impl Hash for TV {
-    fn digest(&self) -> Digest {
-        let hash = Sha512::digest(&self.round.to_le_bytes());
-        hash.as_slice()[..32].try_into().unwrap()
-    }
-}
-
-impl fmt::Debug for TV {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "TV({:?}, {})", self.author, self.round)
+        match self.timeout() {
+            true => write!(f, "TV({:?}, {})", self.author, self.round),
+            false => write!(f, "V({:?}, {}, {:?})", self.author, self.round, self.hash),
+        }
     }
 }
 
@@ -211,7 +206,6 @@ impl PartialEq for QC {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct TC {
-    pub qc: QC,
     pub round: RoundNumber,
     pub votes: Vec<(PublicKey, Signature)>,
 }
@@ -224,15 +218,13 @@ impl GenericQC for TC {
 
 impl Hash for TC {
     fn digest(&self) -> Digest {
-        let mut hasher = Sha512::new();
-        hasher.update(self.qc.digest());
-        hasher.update(self.round.to_le_bytes());
-        hasher.finalize().as_slice()[..32].try_into().unwrap()
+        let hash = Sha512::digest(&self.round.to_le_bytes());
+        hash.as_slice()[..32].try_into().unwrap()
     }
 }
 
 impl fmt::Debug for TC {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "TC({}, {:?})", self.round, self.qc)
+        write!(f, "TC({})", self.round)
     }
 }

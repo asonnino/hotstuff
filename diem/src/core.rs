@@ -5,7 +5,7 @@ use crate::crypto::{PublicKey, SignatureService};
 use crate::error::{DiemError, DiemResult};
 use crate::leader::LeaderElector;
 use crate::mempool::Mempool;
-use crate::messages::{Block, GenericQC, Vote, QC, TC, TV};
+use crate::messages::{Block, GenericQC, Vote, QC, TC};
 use crate::network::NetMessage;
 use crate::store::Store;
 use crate::synchronizer::Synchronizer;
@@ -24,7 +24,6 @@ pub type RoundNumber = u64;
 pub enum CoreMessage {
     Propose(Block),
     Vote(Vote),
-    Timeout(TV),
     LoopBack(Block),
 }
 
@@ -78,9 +77,10 @@ impl<L: LeaderElector> Core<L> {
         }
     }
 
-    async fn make_block(&mut self, qc: QC) -> DiemResult<()> {
+    async fn make_block(&mut self, qc: QC, tc: Option<TC>) -> DiemResult<()> {
         let block = Block::new(
             qc,
+            tc,
             self.name,
             self.round + 1,
             self.mempool.get_payload().await,
@@ -109,11 +109,11 @@ impl<L: LeaderElector> Core<L> {
 
         // Check the block's round number is as expected. This prevents bad leaders
         // from proposing blocks with very high round numbers which may cause overflows.
-        // TODO: Check tc.round + 1 == block.round for TC.
-        ensure!(
-            block.round == block.qc.round + 1,
-            DiemError::MalformedBlock(block.digest())
-        );
+        let ok = match block.tc {
+            Some(ref tc) => block.round == tc.round + 1,
+            None => block.round == block.qc.round + 1,
+        };
+        ensure!(ok, DiemError::MalformedBlock(block.digest()));
 
         // Ensure the block proposer is the right leader for the round.
         ensure!(
@@ -130,6 +130,11 @@ impl<L: LeaderElector> Core<L> {
 
         // Check that the QC embedded in the block is valid.
         block.qc.check(&self.committee)?;
+
+        // Check the TC embedded in the block if any.
+        if let Some(tc) = &block.tc {
+            tc.check(&self.committee)?;
+        }
 
         // If all check pass, process the block.
         self.process_block(&block).await
@@ -151,9 +156,12 @@ impl<L: LeaderElector> Core<L> {
         self.store_block(block).await?;
 
         // Enter the new round.
-        // TODO: Adapt for: self.round = tc.round + 1;
-        if self.round < block.qc.round + 1 {
-            self.round = block.qc.round + 1;
+        let possible_new_round = match block.tc {
+            Some(ref tc) => tc.round + 1,
+            None => block.qc.round + 1,
+        };
+        if self.round < possible_new_round {
+            self.round = possible_new_round;
             info!("Moved to round {}", self.round);
         }
 
@@ -164,7 +172,10 @@ impl<L: LeaderElector> Core<L> {
 
         // Check if the last three ancestors of the block form a 3-chain.
         // If so, we commit b0.
-        if b0.round + 1 == b1.round && b1.round + 1 == b2.round {
+        let mut commit_rule = b0.round + 1 == b1.round;
+        commit_rule &= b1.round + 1 == b2.round;
+        commit_rule &= b2.round + 1 == block.round;
+        if commit_rule {
             info!("Committed {:?}", b0);
             if let Err(e) = self.commit_channel.send(b0.clone()).await {
                 warn!("Failed to send block through the commit channel: {}", e);
@@ -201,11 +212,26 @@ impl<L: LeaderElector> Core<L> {
             return Ok(());
         }
 
-        // Add the new vote to our aggregator and see if we have a QC.
-        if let Some(qc) = self.aggregator.add_vote(vote)? {
-            // If we have a QC, we may use it to propose a new block.
-            if self.name == self.leader_elector.get_leader(qc.round + 1) {
-                self.make_block(qc).await?;
+        // Add the new vote to our aggregator and see if we have a quorum.
+        if let Some(quorum) = self.aggregator.add_vote(vote.clone())? {
+            // We propose a new block if we have a QC or TC, and if we are
+            // the leader of the next round.
+            if self.name == self.leader_elector.get_leader(vote.round + 1) {
+                let (qc, tc) = if vote.timeout() {
+                    let tc = TC {
+                        round: vote.round,
+                        votes: quorum,
+                    };
+                    (self.highest_qc.clone(), Some(tc))
+                } else {
+                    let qc = QC {
+                        hash: vote.hash,
+                        round: vote.round,
+                        votes: quorum,
+                    };
+                    (qc, None)
+                };
+                self.make_block(qc, tc).await?;
             }
         }
         Ok(())
@@ -213,40 +239,23 @@ impl<L: LeaderElector> Core<L> {
 
     async fn make_timeout(&mut self) {
         self.round += 1;
-        let timeout = TV::new(self.round, self.name, self.signature_service.clone()).await;
+        info!("Moved to round {}", self.round);
+        let timeout =
+            Vote::new_timeout(self.round, self.name, self.signature_service.clone()).await;
         let next_leader = self.leader_elector.get_leader(self.round + 1);
         if let Err(e) = self
             .network_channel
-            .send(NetMessage::Timeout(timeout, next_leader))
+            .send(NetMessage::Vote(timeout, next_leader))
             .await
         {
             panic!("Core failed to send vote to the network: {}", e);
         }
     }
 
-    async fn handle_timeout(&mut self, timeout: TV) -> DiemResult<()> {
-        if timeout.round < self.round {
-            return Ok(());
-        }
-
-        // Add the new timeout vote to our aggregator and see if we have a TC.
-        if let Some(tc) = self
-            .aggregator
-            .add_timeout(timeout, self.highest_qc.clone())?
-        {
-            // If we have a TC, we may use it to propose a new block.
-            if self.name == self.leader_elector.get_leader(tc.round + 1) {
-                //self.make_block(qc).await?;
-            }
-        }
-
-        Ok(())
-    }
-
     pub async fn run(&mut self) {
         // Upon booting, send the very first block (if we are the leader).
         if self.name == self.leader_elector.get_leader(1) {
-            self.make_block(self.highest_qc.clone())
+            self.make_block(self.highest_qc.clone(), None)
                 .await
                 .expect("Failed to send the first block");
         }
@@ -261,7 +270,6 @@ impl<L: LeaderElector> Core<L> {
                         let result = match message {
                             CoreMessage::Propose(block) => self.handle_propose(&block).await,
                             CoreMessage::Vote(vote) => self.handle_vote(vote).await,
-                            CoreMessage::Timeout(timeout) => self.handle_timeout(timeout).await,
                             CoreMessage::LoopBack(block) => self.process_block(&block).await,
                         };
                         match result {
@@ -271,8 +279,11 @@ impl<L: LeaderElector> Core<L> {
                         }
                     }
                 }
+                // TODO: This is a bad way to implement timeouts. Some nodes may
+                // potentially wait for 2 sec (instead of 1) before triggering it.
                 _ = sleep(Duration::from_millis(1_000)).fuse() => {
                     if self.round == round {
+                        warn!("Timing out for round {}!", self.round);
                         self.make_timeout().await
                     }
                     round = self.round;
