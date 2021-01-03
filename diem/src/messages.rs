@@ -9,6 +9,10 @@ use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fmt;
 
+#[cfg(test)]
+#[path = "tests/messages_tests.rs"]
+pub mod messages_tests;
+
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Block {
     pub qc: QC,
@@ -141,7 +145,7 @@ impl fmt::Debug for Vote {
 }
 
 pub trait GenericQC: Hash {
-    fn check(&self, committee: &Committee) -> DiemResult<()> {
+    fn verify(&self, committee: &Committee) -> DiemResult<()> {
         // Ensure the QC has a quorum.
         let mut weight = 0;
         let mut used = HashSet::new();

@@ -130,11 +130,11 @@ impl<L: LeaderElector> Core<L> {
         block.signature.verify(&block.digest(), &block.author)?;
 
         // Check that the QC embedded in the block is valid.
-        block.qc.check(&self.committee)?;
+        block.qc.verify(&self.committee)?;
 
         // Check the TC embedded in the block if any.
         if let Some(tc) = &block.tc {
-            tc.check(&self.committee)?;
+            tc.verify(&self.committee)?;
         }
 
         // If all check pass, process the block.

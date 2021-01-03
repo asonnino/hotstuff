@@ -1,8 +1,9 @@
 use crate::crypto::PublicKey;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-//use std::fs::{self, OpenOptions};
-//use std::io::{BufWriter, Write};
+use std::fs::{self, OpenOptions};
+use std::io::BufWriter;
+use std::io::Write as _;
 
 pub type Stake = u32;
 pub type EpochNumber = u128;
@@ -60,7 +61,6 @@ impl Committee {
             .collect()
     }
 
-    /*
     /// Create a new committee by reading it from file.
     pub fn read(path: &str) -> Result<Self, std::io::Error> {
         let data = fs::read(path)?;
@@ -77,35 +77,24 @@ impl Committee {
         Ok(())
     }
 
-    /// Create a test committee with equal stake and 1 worker per primary.
-    pub fn debug_new(nodes: Vec<NodeID>, base_port: u16) -> Self {
-        let instance_id = 100;
-        let mut rng = StdRng::from_seed([0; 32]);
-        let authorities = nodes
+    #[cfg(test)]
+    pub fn new(names: Vec<PublicKey>, base_port: u16) -> Self {
+        let authorities = names
             .iter()
             .enumerate()
-            .map(|(i, node)| {
-                let primary = Machine {
-                    name: *node,
+            .map(|(i, name)| {
+                let authority = Authority {
+                    name: *name,
+                    stake: 1,
                     host: "127.0.0.1".to_string(),
                     port: base_port + i as u16,
                 };
-                let worker = Machine {
-                    name: get_keypair(&mut rng).0,
-                    host: "127.0.0.1".to_string(),
-                    port: base_port + (i + nodes.len()) as u16,
-                };
-                Authority {
-                    primary,
-                    workers: vec![(0, worker)],
-                    stake: 1,
-                }
+                (*name, authority)
             })
             .collect();
         Self {
             authorities,
-            instance_id,
+            epoch: 1,
         }
     }
-    */
 }
