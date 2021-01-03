@@ -1,4 +1,5 @@
-use crate::crypto::PublicKey;
+use crate::crypto::{PublicKey, SecretKey};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
@@ -11,6 +12,30 @@ pub mod committee_tests;
 
 pub type Stake = u32;
 pub type EpochNumber = u128;
+
+pub trait Config: Serialize + DeserializeOwned {
+    fn read(path: &str) -> Result<Self, std::io::Error> {
+        let data = fs::read(path)?;
+        Ok(serde_json::from_slice(data.as_slice())?)
+    }
+
+    fn write(&self, path: &str) -> Result<(), std::io::Error> {
+        let file = OpenOptions::new().create(true).write(true).open(path)?;
+        let mut writer = BufWriter::new(file);
+        let data = serde_json::to_string_pretty(self).unwrap();
+        writer.write_all(data.as_ref())?;
+        writer.write_all(b"\n")?;
+        Ok(())
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Secret {
+    pub name: PublicKey,
+    pub secret: SecretKey,
+}
+
+impl Config for Secret {}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Authority {
@@ -65,22 +90,6 @@ impl Committee {
             .collect()
     }
 
-    /// Create a new committee by reading it from file.
-    pub fn read(path: &str) -> Result<Self, std::io::Error> {
-        let data = fs::read(path)?;
-        Ok(serde_json::from_slice(data.as_slice())?)
-    }
-
-    /// Write the committee to a json file.
-    pub fn write(&self, path: &str) -> Result<(), std::io::Error> {
-        let file = OpenOptions::new().create(true).write(true).open(path)?;
-        let mut writer = BufWriter::new(file);
-        let data = serde_json::to_string_pretty(self).unwrap();
-        writer.write_all(data.as_ref())?;
-        writer.write_all(b"\n")?;
-        Ok(())
-    }
-
     #[cfg(test)]
     pub fn new(names: Vec<PublicKey>, base_port: u16) -> Self {
         let authorities = names
@@ -102,3 +111,5 @@ impl Committee {
         }
     }
 }
+
+impl Config for Committee {}

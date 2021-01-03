@@ -45,7 +45,7 @@ fn quorum_threshold() {
 }
 
 #[test]
-fn read_write() {
+fn committee_read_write() {
     let mut rng = StdRng::from_seed([0; 32]);
     let names = (0..4).map(|_| generate_keypair(&mut rng).0).collect();
     let committee = Committee::new(names, 6100);
