@@ -11,7 +11,9 @@ use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
 use log::{debug, error};
 use std::collections::HashSet;
+use std::time::Duration;
 use tokio::sync::mpsc::{channel, Sender};
+use tokio::time::sleep;
 
 pub struct Synchronizer {
     store: Store,
@@ -47,7 +49,7 @@ impl Synchronizer {
                                 }
                             }
                         }
-                    }
+                    },
                     result = waiting.select_next_some() => {
                         match result {
                             Ok(block) => {
@@ -58,6 +60,16 @@ impl Synchronizer {
                                 }
                             },
                             Err(e) => error!("{}", e)
+                        }
+                    },
+                    () = sleep(Duration::from_millis(10_000)).fuse() => {
+                        // This ensure liveness in case Sync Requests are lost.
+                        // It should not happen in theory, but the internet is wild.
+                        for digest in &pending {
+                            let sync_request = NetMessage::SyncRequest(*digest, name);
+                            if let Err(e) = network_channel.send(sync_request).await {
+                                panic!("Failed to send Sync Request to network: {}", e);
+                            }
                         }
                     }
                 }

@@ -44,9 +44,6 @@ impl NetSender {
                     }
                     result = waiting.select_next_some() => {
                         if let Err(e) = result {
-                            // TODO: We must ensure that at least f+1 nodes received SyncRequests
-                            // to ensure liveness. So we should keep trying until we get enough ACKs.
-                            // Failure of other messages only impact performance.
                             warn!("Failed to send message. {}", e);
                         }
                     }
