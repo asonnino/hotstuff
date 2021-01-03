@@ -24,7 +24,7 @@ pub struct Store {
 }
 
 impl Store {
-    pub async fn new(path: String) -> StoreResult<Self> {
+    pub async fn new(path: &str) -> StoreResult<Self> {
         let db = rocksdb::DB::open_default(path)?;
         let mut obligations: HashMap<_, VecDeque<oneshot::Sender<_>>> = HashMap::new();
         let (tx, mut rx) = channel(100);

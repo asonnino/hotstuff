@@ -5,6 +5,10 @@ use std::fs::{self, OpenOptions};
 use std::io::BufWriter;
 use std::io::Write as _;
 
+#[cfg(test)]
+#[path = "tests/committee_tests.rs"]
+pub mod committee_tests;
+
 pub type Stake = u32;
 pub type EpochNumber = u128;
 
