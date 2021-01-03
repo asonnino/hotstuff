@@ -3,11 +3,12 @@ mod error;
 
 mod aggregator;
 mod committee;
-pub mod core;
-pub mod crypto;
+mod core;
+mod crypto;
 mod leader;
 mod mempool;
 mod messages;
-pub mod network;
+mod network;
+pub mod node;
 mod store;
 mod synchronizer;

@@ -7,6 +7,10 @@ pub struct LeaderElector {
 }
 
 impl LeaderElector {
+    pub fn new(committee: Committee) -> Self {
+        Self { committee }
+    }
+
     pub fn get_leader(&self, round: RoundNumber) -> PublicKey {
         let mut keys: Vec<_> = self.committee.authorities.keys().cloned().collect();
         keys.sort();

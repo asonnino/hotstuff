@@ -6,6 +6,10 @@ type PayloadArg = [u8];
 pub struct Mempool;
 
 impl Mempool {
+    pub async fn new() -> Self {
+        Self
+    }
+
     pub async fn get_payload(&self) -> Payload {
         let mut rng = rand::thread_rng();
         [

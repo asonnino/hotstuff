@@ -33,6 +33,9 @@ pub enum DiemError {
     #[error("Store error: {0}")]
     StoreError(String),
 
+    #[error("Failed to read config file {0}: {0}")]
+    ConfigError(String, String),
+
     #[error("Invalid signature")]
     InvalidSignature,
 

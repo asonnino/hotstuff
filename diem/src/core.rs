@@ -7,6 +7,7 @@ use crate::leader::LeaderElector;
 use crate::mempool::Mempool;
 use crate::messages::{Block, GenericQC, Vote, QC, TC};
 use crate::network::NetMessage;
+use crate::node::Parameters;
 use crate::store::Store;
 use crate::synchronizer::Synchronizer;
 use futures::future::FutureExt as _;
@@ -20,20 +21,6 @@ use tokio::time::sleep;
 
 pub type RoundNumber = u64;
 
-pub struct Parameters {
-    timeout_delay: u64,
-    sync_retry_delay: u64,
-}
-
-impl Default for Parameters {
-    fn default() -> Self {
-        Self {
-            timeout_delay: 1_000,
-            sync_retry_delay: 10_000,
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug)]
 pub enum CoreMessage {
     Propose(Block),
@@ -46,9 +33,9 @@ pub struct Core {
     name: PublicKey,
     committee: Committee,
     store: Store,
+    signature_service: SignatureService,
     leader_elector: LeaderElector,
     mempool: Mempool,
-    signature_service: SignatureService,
     network_channel: Sender<NetMessage>,
     commit_channel: Sender<Block>,
     round: RoundNumber,
@@ -66,9 +53,9 @@ impl Core {
         committee: Committee,
         parameters: Parameters,
         store: Store,
+        signature_service: SignatureService,
         leader_elector: LeaderElector,
         mempool: Mempool,
-        signature_service: SignatureService,
         network_channel: Sender<NetMessage>,
         commit_channel: Sender<Block>,
     ) -> Sender<CoreMessage> {
@@ -95,9 +82,9 @@ impl Core {
                 name,
                 committee,
                 store,
+                signature_service,
                 leader_elector,
                 mempool,
-                signature_service,
                 network_channel,
                 commit_channel,
                 round: 0,
