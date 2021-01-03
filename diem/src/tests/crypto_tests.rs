@@ -80,7 +80,7 @@ fn verify_invalid_signature() {
 }
 
 #[test]
-fn verify_batch_valid_signatures() {
+fn verify_valid_batch() {
     // Make keypairs.
     let mut rng = StdRng::from_seed([0; 32]);
     let (pub1, sec1) = generate_keypair(&mut rng);
@@ -100,7 +100,7 @@ fn verify_batch_valid_signatures() {
 }
 
 #[test]
-fn verify_batch_invalid_signatures() {
+fn verify_invalid_batch() {
     // Make keypairs.
     let mut rng = StdRng::from_seed([0; 32]);
     let (pub1, sec1) = generate_keypair(&mut rng);

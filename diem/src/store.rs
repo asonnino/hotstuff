@@ -2,6 +2,10 @@ use std::collections::{HashMap, VecDeque};
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::sync::oneshot;
 
+#[cfg(test)]
+#[path = "tests/store_tests.rs"]
+pub mod store_tests;
+
 pub type StoreError = rocksdb::Error;
 type StoreResult<T> = Result<T, StoreError>;
 
