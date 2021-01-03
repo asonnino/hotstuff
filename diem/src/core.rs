@@ -142,6 +142,12 @@ impl<L: LeaderElector> Core<L> {
     }
 
     async fn process_block(&mut self, block: &Block) -> DiemResult<()> {
+        // Let's see if we have the block's data. If we don't, the mempool
+        // will get it and them make us resume processing this block.
+        if !self.mempool.ready(&block.payload).await {
+            return Ok(());
+        }
+
         // Let's see if we have the last three ancestors of the block, that is:
         //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
         // If we don't, the synchronizer asks for them to other nodes. It will
