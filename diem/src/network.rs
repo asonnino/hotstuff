@@ -73,7 +73,7 @@ impl NetSender {
             }
         };
 
-        // Encore the message and find the network address of the receiver.
+        // Encode the message and find the network address of the receiver.
         let bytes = match bincode::serialize(&message) {
             Ok(bytes) => Bytes::from(bytes),
             Err(e) => panic!("Failed to serialize Core message: {}", e),
@@ -95,11 +95,12 @@ impl NetSender {
         let mut transport_write = FramedWrite::new(write, LengthDelimitedCodec::new());
         let mut transport_read = FramedRead::new(read, LengthDelimitedCodec::new());
         transport_write.send(message).await?;
-        // TODO: Better error detect; let's make sure we receive Ack for SyncRequests.
-        // Also, let's ensure we don't return Some(Err(e)).
-        let _ = transport_read.next().await.ok_or_else(|| {
-            io::Error::new(io::ErrorKind::Other, "Failed to receive Ack from peer")
-        })?;
+        if let None | Some(Err(_)) = transport_read.next().await {
+            bail!(DiemError::NetworkError(io::Error::new(
+                io::ErrorKind::Other,
+                "Failed to receive Ack from peer"
+            )))
+        }
         Ok(())
     }
 }
