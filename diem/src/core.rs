@@ -20,6 +20,20 @@ use tokio::time::sleep;
 
 pub type RoundNumber = u64;
 
+pub struct Parameters {
+    timeout_delay: u64,
+    sync_retry_delay: u64,
+}
+
+impl Default for Parameters {
+    fn default() -> Self {
+        Self {
+            timeout_delay: 1_000,
+            sync_retry_delay: 10_000,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub enum CoreMessage {
     Propose(Block),
@@ -50,6 +64,7 @@ impl Core {
     pub async fn make(
         name: PublicKey,
         committee: Committee,
+        parameters: Parameters,
         store: Store,
         leader_elector: LeaderElector,
         mempool: Mempool,
@@ -66,7 +81,7 @@ impl Core {
             store.clone(),
             network_channel.clone(),
             tx.clone(),
-            10_000u64,
+            parameters.sync_retry_delay,
         )
         .await;
 
@@ -92,7 +107,7 @@ impl Core {
                 synchronizer,
                 aggregator,
             };
-            core.run(rx).await;
+            core.run(rx, parameters).await;
         });
 
         // Return sender channel. The network receiver will use it to
@@ -296,7 +311,7 @@ impl Core {
         Ok(())
     }
 
-    async fn run(&mut self, mut rx: Receiver<CoreMessage>) {
+    async fn run(&mut self, mut rx: Receiver<CoreMessage>, parameters: Parameters) {
         // Upon booting, send the very first block (if we are the leader).
         if self.name == self.leader_elector.get_leader(1) {
             self.make_block(self.highest_qc.clone(), None)
@@ -328,7 +343,7 @@ impl Core {
                 // potentially wait for 2 sec (instead of 1) before triggering it,
                 // and it probably recreate a timer at each loop iteration...
                 // TODO: Timeout delay should be a parameter.
-                () = sleep(Duration::from_millis(1_000)).fuse() => {
+                () = sleep(Duration::from_millis(parameters.timeout_delay)).fuse() => {
                     if self.round == round {
                         warn!("Timing out for round {}!", self.round);
                         self.make_timeout().await
