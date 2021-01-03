@@ -15,7 +15,7 @@ pub struct Block {
     pub tc: Option<TC>,
     pub author: PublicKey,
     pub round: RoundNumber,
-    pub payload: Digest,
+    pub payload: Vec<u8>,
     pub signature: Signature,
 }
 
@@ -25,7 +25,7 @@ impl Block {
         tc: Option<TC>,
         author: PublicKey,
         round: RoundNumber,
-        payload: Digest,
+        payload: Vec<u8>,
         mut signature_service: SignatureService,
     ) -> Self {
         let block = Block {
@@ -56,7 +56,7 @@ impl Hash for Block {
         let mut hasher = Sha512::new();
         hasher.update(self.author.0);
         hasher.update(self.round.to_le_bytes());
-        hasher.update(self.payload);
+        hasher.update(&self.payload);
         hasher.finalize().as_slice()[..32].try_into().unwrap()
     }
 }
