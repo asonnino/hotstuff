@@ -28,7 +28,7 @@ impl Synchronizer {
         core_channel: Sender<CoreMessage>,
         sync_retry_delay: u64,
     ) -> Self {
-        let (tx, mut rx) = channel(100);
+        let (tx, mut rx) = channel(1000);
         let synchronizer = Self {
             store: store.clone(),
             inner_channel: tx,

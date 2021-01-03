@@ -15,7 +15,7 @@ use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
 use std::time::Duration;
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::time::sleep;
 
 pub type RoundNumber = u64;
@@ -28,54 +28,76 @@ pub enum CoreMessage {
     SyncRequest(Digest, PublicKey),
 }
 
-pub struct Core<L: LeaderElector> {
+pub struct Core {
     name: PublicKey,
+    committee: Committee,
+    store: Store,
+    leader_elector: LeaderElector,
+    mempool: Mempool,
+    signature_service: SignatureService,
+    network_channel: Sender<NetMessage>,
+    commit_channel: Sender<Block>,
     round: RoundNumber,
     last_voted_round: RoundNumber,
     preferred_round: RoundNumber,
     highest_qc: QC,
-    committee: Committee,
-    store: Store,
-    leader_elector: L,
-    aggregator: Aggregator,
-    network_channel: Sender<NetMessage>,
-    receiver: Receiver<CoreMessage>,
-    commit_channel: Sender<Block>,
-    signature_service: SignatureService,
-    mempool: Mempool,
     synchronizer: Synchronizer,
+    aggregator: Aggregator,
 }
 
-impl<L: LeaderElector> Core<L> {
-    pub fn new(
+impl Core {
+    #[allow(clippy::too_many_arguments)]
+    pub async fn make(
         name: PublicKey,
-        store: Store,
         committee: Committee,
-        leader_elector: L,
-        network_channel: Sender<NetMessage>,
-        receiver: Receiver<CoreMessage>,
-        commit_channel: Sender<Block>,
-        signature_service: SignatureService,
+        store: Store,
+        leader_elector: LeaderElector,
         mempool: Mempool,
-        synchronizer: Synchronizer,
-    ) -> Self {
-        Self {
+        signature_service: SignatureService,
+        network_channel: Sender<NetMessage>,
+        commit_channel: Sender<Block>,
+    ) -> Sender<CoreMessage> {
+        let (tx, rx) = channel(1000);
+
+        // Make the synchronizer. This instance runs in a background thread
+        // and asks other nodes for any block that we may be missing.
+        let synchronizer = Synchronizer::new(
             name,
-            round: 0,
-            last_voted_round: 0,
-            preferred_round: 0,
-            highest_qc: QC::genesis(),
-            aggregator: Aggregator::new(committee.clone()),
-            committee,
-            store,
-            leader_elector,
-            network_channel,
-            receiver,
-            commit_channel,
-            signature_service,
-            mempool,
-            synchronizer,
-        }
+            store.clone(),
+            network_channel.clone(),
+            tx.clone(),
+            10_000u64,
+        )
+        .await;
+
+        // Make a vote aggregator. This is the instance that keeps track
+        // of incoming votes and aggregates them into QCs.
+        let aggregator = Aggregator::new(committee.clone());
+
+        // Run the core in a separate thread.
+        tokio::spawn(async move {
+            let mut core = Self {
+                name,
+                committee,
+                store,
+                leader_elector,
+                mempool,
+                signature_service,
+                network_channel,
+                commit_channel,
+                round: 0,
+                last_voted_round: 0,
+                preferred_round: 0,
+                highest_qc: QC::genesis(),
+                synchronizer,
+                aggregator,
+            };
+            core.run(rx).await;
+        });
+
+        // Return sender channel. The network receiver will use it to
+        // send us new messages to process.
+        tx
     }
 
     async fn make_block(&mut self, qc: QC, tc: Option<TC>) -> DiemResult<()> {
@@ -274,7 +296,7 @@ impl<L: LeaderElector> Core<L> {
         Ok(())
     }
 
-    pub async fn run(&mut self) {
+    async fn run(&mut self, mut rx: Receiver<CoreMessage>) {
         // Upon booting, send the very first block (if we are the leader).
         if self.name == self.leader_elector.get_leader(1) {
             self.make_block(self.highest_qc.clone(), None)
@@ -286,7 +308,7 @@ impl<L: LeaderElector> Core<L> {
         let mut round = self.round;
         loop {
             select! {
-                message = self.receiver.recv().fuse() => {
+                message = rx.recv().fuse() => {
                     if let Some(message) = message {
                         debug!("Received message: {:?}", message);
                         let result = match message {

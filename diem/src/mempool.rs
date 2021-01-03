@@ -1,7 +1,7 @@
 use rand::Rng as _;
-use std::convert::TryInto;
 
 type Payload = Vec<u8>;
+type PayloadArg = [u8];
 
 pub struct Mempool;
 
@@ -13,11 +13,9 @@ impl Mempool {
             rng.gen::<u128>().to_le_bytes(),
         ]
         .concat()
-        .try_into()
-        .unwrap()
     }
 
-    pub async fn ready(&self, _payload: &Payload) -> bool {
+    pub async fn ready(&self, _payload: &PayloadArg) -> bool {
         // This function is called by the core upon processing a new block
         // to ask the mempool if it has all the block data. This is useful
         // in case the payload is a hash, certificate, or does any represent

@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::io;
 use tokio::net::tcp::OwnedWriteHalf;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc::{channel, Sender};
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -28,7 +28,8 @@ pub enum NetMessage {
 pub struct NetSender;
 
 impl NetSender {
-    pub async fn new(name: PublicKey, committee: Committee, mut rx: Receiver<NetMessage>) {
+    pub async fn make(name: PublicKey, committee: Committee) -> Sender<NetMessage> {
+        let (tx, mut rx) = channel(1000);
         let mut waiting = FuturesUnordered::new();
         tokio::spawn(async move {
             loop {
@@ -50,6 +51,7 @@ impl NetSender {
                 }
             }
         });
+        tx
     }
 
     fn make_messages(
@@ -108,7 +110,7 @@ impl NetSender {
 pub struct NetReceiver;
 
 impl NetReceiver {
-    pub async fn new(address: String, core_channel: Sender<CoreMessage>) {
+    pub async fn make(address: String, core_channel: Sender<CoreMessage>) {
         let listener = TcpListener::bind(&address)
             .await
             .expect("Failed to bind to TCP port");
