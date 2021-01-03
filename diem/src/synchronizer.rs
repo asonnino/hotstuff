@@ -26,6 +26,7 @@ impl Synchronizer {
         store: Store,
         network_channel: Sender<NetMessage>,
         core_channel: Sender<CoreMessage>,
+        sync_retry_delay: u64,
     ) -> Self {
         let (tx, mut rx) = channel(100);
         let synchronizer = Self {
@@ -62,7 +63,7 @@ impl Synchronizer {
                             Err(e) => error!("{}", e)
                         }
                     },
-                    () = sleep(Duration::from_millis(10_000)).fuse() => {
+                    () = sleep(Duration::from_millis(sync_retry_delay)).fuse() => {
                         // This ensure liveness in case Sync Requests are lost.
                         // It should not happen in theory, but the internet is wild.
                         for digest in &pending {

@@ -21,7 +21,7 @@ impl Mempool {
         // This function is called by the core upon processing a new block
         // to ask the mempool if it has all the block data. This is useful
         // in case the payload is a hash, certificate, or does any represent
-        // the txs data. This function returns True if the core can process 
+        // the txs data. This function returns True if the core can process
         // the block. Otherwise, it does whatever it needs to do to get the
         // block data, schedule a re-processing of the block, and returns False.
         true

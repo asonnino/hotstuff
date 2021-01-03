@@ -65,16 +65,16 @@ impl<'de> Deserialize<'de> for PublicKey {
 pub struct SecretKey([u8; 64]);
 
 impl SecretKey {
+    pub fn to_base64(&self) -> String {
+        base64::encode(&self.0[..])
+    }
+
     pub fn from_base64(s: &str) -> Result<Self, base64::DecodeError> {
         let bytes = base64::decode(s)?;
         let array = bytes[..64]
             .try_into()
             .map_err(|_| base64::DecodeError::InvalidLength)?;
         Ok(Self(array))
-    }
-
-    pub fn encode_base64(&self) -> String {
-        base64::encode(&self.0[..])
     }
 }
 
