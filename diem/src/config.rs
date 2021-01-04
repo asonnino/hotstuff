@@ -114,27 +114,6 @@ impl Committee {
             .map(|x| format!("{}:{}", x.host, x.port))
             .collect()
     }
-
-    #[cfg(test)]
-    pub fn new(names: Vec<PublicKey>, base_port: u16) -> Self {
-        let authorities = names
-            .iter()
-            .enumerate()
-            .map(|(i, name)| {
-                let authority = Authority {
-                    name: *name,
-                    stake: 1,
-                    host: "127.0.0.1".to_string(),
-                    port: base_port + i as u16,
-                };
-                (*name, authority)
-            })
-            .collect();
-        Self {
-            authorities,
-            epoch: 1,
-        }
-    }
 }
 
 impl Config for Committee {}

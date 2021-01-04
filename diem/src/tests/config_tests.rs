@@ -2,6 +2,14 @@ use super::*;
 use crate::crypto::crypto_tests::keys;
 use std::fmt;
 
+impl Committee {
+    pub fn set_base_port(&mut self, port: u16) {
+        for authority in self.authorities.values_mut() {
+            authority.port += port;
+        }
+    }
+}
+
 impl PartialEq for Committee {
     fn eq(&self, other: &Self) -> bool {
         self.authorities == other.authorities
@@ -28,8 +36,24 @@ impl fmt::Debug for Authority {
 
 // Fixture.
 pub fn committee() -> Committee {
-    let names = keys().iter().map(|(public_key, _)| *public_key).collect();
-    Committee::new(names, 0)
+    let names: Vec<_> = keys().iter().map(|(public_key, _)| *public_key).collect();
+    let authorities = names
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            let authority = Authority {
+                name: *name,
+                stake: 1,
+                host: "127.0.0.1".to_string(),
+                port: i as u16,
+            };
+            (*name, authority)
+        })
+        .collect();
+    Committee {
+        authorities,
+        epoch: 1,
+    }
 }
 
 #[test]
