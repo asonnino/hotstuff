@@ -2,12 +2,6 @@ use super::*;
 use crate::crypto::crypto_tests::keys;
 use std::fmt;
 
-// Fixture.
-pub fn committee() -> Committee {
-    let names = keys().iter().map(|(public_key, _)| *public_key).collect();
-    Committee::new(names, 0)
-}
-
 impl PartialEq for Committee {
     fn eq(&self, other: &Self) -> bool {
         self.authorities == other.authorities
@@ -30,6 +24,12 @@ impl fmt::Debug for Authority {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(f, "{:?}", self.name)
     }
+}
+
+// Fixture.
+pub fn committee() -> Committee {
+    let names = keys().iter().map(|(public_key, _)| *public_key).collect();
+    Committee::new(names, 0)
 }
 
 #[test]

@@ -4,12 +4,6 @@ use ed25519_dalek::Sha512;
 use rand::rngs::StdRng;
 use rand::SeedableRng as _;
 
-// Fixture.
-pub fn keys() -> Vec<(PublicKey, SecretKey)> {
-    let mut rng = StdRng::from_seed([0; 32]);
-    (0..4).map(|_| generate_keypair(&mut rng)).collect()
-}
-
 impl Hash for &[u8] {
     fn digest(&self) -> Digest {
         Sha512::digest(self).as_slice()[..32].try_into().unwrap()
@@ -26,6 +20,12 @@ impl fmt::Debug for SecretKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(f, "{}", self.to_base64())
     }
+}
+
+// Fixture.
+pub fn keys() -> Vec<(PublicKey, SecretKey)> {
+    let mut rng = StdRng::from_seed([0; 32]);
+    (0..4).map(|_| generate_keypair(&mut rng)).collect()
 }
 
 #[test]

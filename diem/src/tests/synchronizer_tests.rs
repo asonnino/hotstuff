@@ -1,38 +1,112 @@
-/*
 use super::*;
-use crate::crypto::generate_keypair;
-use rand::rngs::StdRng;
-use rand::SeedableRng as _;
+use crate::crypto::crypto_tests::keys;
+use crate::messages::messages_tests::{block, chain};
+use std::fs;
 
 #[tokio::test]
-async fn get_previous_block() {
+async fn get_existing_previous_block() {
+    let mut chain = chain();
+    let block = chain.pop().unwrap();
+    let b2 = chain.pop().unwrap();
+
+    // Add the block b2 to the store.
+    let path = ".store_test_get_existing_previous_block";
+    let _ = fs::remove_dir_all(path).unwrap();
+    let mut store = Store::new(path).await.unwrap();
+    let key = b2.digest().to_vec();
+    let value = bincode::serialize(&b2).unwrap();
+    let _ = store.write(key, value).await;
+
     // Make a new synchronizer.
-    let mut rng = StdRng::from_seed([0; 32]);
-    let (public_key, secret_key) = generate_keypair(&mut rng);
-    let path = ".store_test_get_previous_block";
-    let store = Store::new(path).await;
+    let (public_key, _) = keys().pop().unwrap();
+    let (tx_network, _) = channel(10);
+    let (tx_core, _) = channel(10);
+    let mut synchronizer = Synchronizer::new(
+        public_key, store, tx_network, tx_core, /* sync_retry_delay */ 10,
+    )
+    .await;
+
+    // Ask the predecessor of 'block' to the synchronizer.
+    match synchronizer.get_previous_block(&block).await {
+        Ok(Some(b)) => assert_eq!(b, b2),
+        _ => assert!(false),
+    }
+}
+
+#[tokio::test]
+async fn get_genesis_previous_block() {
+    // Make a new synchronizer.
+    let path = ".store_test_get_genesis_previous_block";
+    let _ = fs::remove_dir_all(path).unwrap();
+    let store = Store::new(path).await.unwrap();
+    let (public_key, _) = keys().pop().unwrap();
+    let (tx_network, _) = channel(10);
+    let (tx_core, _) = channel(10);
+    let mut synchronizer = Synchronizer::new(
+        public_key, store, tx_network, tx_core, /* sync_retry_delay */ 10,
+    )
+    .await;
+
+    // Ask the predecessor of 'block' to the synchronizer.
+    match synchronizer.get_previous_block(&block()).await {
+        Ok(Some(b)) => assert_eq!(b, Block::genesis()),
+        _ => assert!(false),
+    }
+}
+
+#[tokio::test]
+async fn get_missing_previous_block() {
+    let mut chain = chain();
+    let block = chain.pop().unwrap();
+    let b2 = chain.pop().unwrap();
+
+    // Make a new synchronizer.
+    let path = ".store_test_get_missing_previous_block";
+    let _ = fs::remove_dir_all(path).unwrap();
+    let mut store = Store::new(path).await.unwrap();
+    let (public_key, _) = keys().pop().unwrap();
     let (tx_network, mut rx_network) = channel(10);
     let (tx_core, mut rx_core) = channel(10);
-    let mut synchronizer = Synchronizer::new(public_key, store, tx_network, tx_core).await;
+    let mut synchronizer = Synchronizer::new(
+        public_key,
+        store.clone(),
+        tx_network,
+        tx_core,
+        /* sync_retry_delay */ 10,
+    )
+    .await;
 
-    let qc = QC {
-        hash: [1u8; 32],
-        round: 1,
-        votes: Vec::new(),
-    };
-    let block = Block {
-        qc,
-        tc: None,
-        author: public_key,
-        round: qc.round + 1,
-        payload: Vec::new(),
-        signature: Signature::default(),
-    };
-    let digest = block.digest();
-    let signature = Signature::new(&digest, &secret_key);
-    let block = Block {signature: signature, ..block};
+    // Ask the predecessor of 'block' to the synchronizer.
+    let handle = tokio::spawn(async move {
+        match synchronizer.get_previous_block(&block).await {
+            Ok(None) => assert!(true),
+            _ => assert!(false),
+        }
+    });
 
-    let result = synchronizer.get_previous_block(&block).await;
+    // Ensure the following operation happen in the right order.
+    let mut operations_order = Vec::<u8>::new();
+    loop {
+        select! {
+            value = rx_network.recv().fuse() => {
+                assert!(value.is_some());
+                operations_order.push(1);
+            },
+            value = rx_core.recv().fuse() => {
+                assert!(value.is_some());
+                operations_order.push(3);
+                break;
+            },
+            () = sleep(Duration::from_millis(100)).fuse() => {
+                let key = b2.digest().to_vec();
+                let value = bincode::serialize(&b2).unwrap();
+                let _ = store.write(key, value).await;
+                operations_order.push(2);
+            }
+        }
+    }
+    assert_eq!(operations_order, vec![1, 2, 3]);
 
+    // Finally, ensure the synchronizer returns None.
+    assert!(handle.await.is_ok());
 }
-*/

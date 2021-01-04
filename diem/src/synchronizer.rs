@@ -15,6 +15,10 @@ use std::time::Duration;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::time::sleep;
 
+#[cfg(test)]
+#[path = "tests/synchronizer_tests.rs"]
+pub mod synchronizer_tests;
+
 pub struct Synchronizer {
     store: Store,
     inner_channel: Sender<Block>,
@@ -90,9 +94,9 @@ impl Synchronizer {
         }
         let previous = block.previous();
         match self.store.read(previous.to_vec()).await? {
-            Some(bytes) => {
-                bincode::deserialize(&bytes).map_err(|e| DiemError::StoreError(e.to_string()))
-            }
+            Some(bytes) => Ok(Some(
+                bincode::deserialize(&bytes).map_err(|e| DiemError::StoreError(e.to_string()))?,
+            )),
             None => {
                 debug!("Requesting sync for block {:?}", previous);
                 if let Err(e) = self.inner_channel.send(block.clone()).await {

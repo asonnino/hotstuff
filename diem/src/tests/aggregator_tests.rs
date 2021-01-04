@@ -1,5 +1,6 @@
 use super::*;
 use crate::config::config_tests::committee;
+use crate::crypto::crypto_tests::keys;
 use crate::crypto::generate_keypair;
 use crate::messages::messages_tests::{qc, vote};
 use crate::messages::GenericQC as _;
@@ -18,44 +19,30 @@ fn add_vote() {
 #[test]
 fn make_quorum() {
     let mut aggregator = Aggregator::new(committee());
+    let mut keys = keys();
+    let qc = qc();
+    let hash = qc.digest();
+    let round = qc.round;
 
     // Add 2f+1 votes to the aggregator and ensure it returns the cryptographic
     // material to make a valid QC.
-    let mut votes = qc().votes().clone();
-
-    let (author, signature) = votes.pop().unwrap();
-    let vote_x = Vote {
-        author,
-        signature,
-        ..vote()
-    };
-    let result = aggregator.add_vote(vote_x);
+    let (public_key, secret_key) = keys.pop().unwrap();
+    let vote = Vote::new_from_key(hash, round, public_key, secret_key);
+    let result = aggregator.add_vote(vote);
     assert!(result.is_ok());
     assert!(result.unwrap().is_none());
 
-    let (author, signature) = votes.pop().unwrap();
-    let vote_x = Vote {
-        author,
-        signature,
-        ..vote()
-    };
-    let result = aggregator.add_vote(vote_x);
+    let (public_key, secret_key) = keys.pop().unwrap();
+    let vote = Vote::new_from_key(hash, round, public_key, secret_key);
+    let result = aggregator.add_vote(vote);
     assert!(result.is_ok());
     assert!(result.unwrap().is_none());
 
-    let (author, signature) = votes.pop().unwrap();
-    let vote_x = Vote {
-        author,
-        signature,
-        ..vote()
-    };
-    match aggregator.add_vote(vote_x.clone()) {
+    let (public_key, secret_key) = keys.pop().unwrap();
+    let vote = Vote::new_from_key(hash, round, public_key, secret_key);
+    match aggregator.add_vote(vote) {
         Ok(Some(votes)) => {
-            let qc = QC {
-                hash: vote_x.hash,
-                round: vote_x.round,
-                votes,
-            };
+            let qc = QC { hash, round, votes };
             assert!(qc.verify(&committee()).is_ok());
         }
         _ => assert!(false),

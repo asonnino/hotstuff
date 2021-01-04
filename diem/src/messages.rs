@@ -32,7 +32,7 @@ impl Block {
         payload: Vec<u8>,
         mut signature_service: SignatureService,
     ) -> Self {
-        let block = Block {
+        let block = Self {
             qc,
             tc,
             author,
@@ -40,10 +40,8 @@ impl Block {
             payload,
             signature: Signature::default(),
         };
-        Self {
-            signature: signature_service.request_signature(block.digest()).await,
-            ..block
-        }
+        let signature = signature_service.request_signature(block.digest()).await;
+        Self { signature, ..block }
     }
 
     pub fn genesis() -> Self {
@@ -81,9 +79,9 @@ impl fmt::Debug for Block {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Vote {
     pub hash: Digest,
-    pub signature: Signature,
-    pub author: PublicKey,
     pub round: RoundNumber,
+    pub author: PublicKey,
+    pub signature: Signature,
 }
 
 impl Vote {
@@ -92,16 +90,14 @@ impl Vote {
         author: PublicKey,
         mut signature_service: SignatureService,
     ) -> Self {
-        let vote = Vote {
+        let vote = Self {
             hash: block.digest(),
-            signature: Signature::default(),
-            author,
             round: block.round,
+            author,
+            signature: Signature::default(),
         };
-        Self {
-            signature: signature_service.request_signature(vote.digest()).await,
-            ..vote
-        }
+        let signature = signature_service.request_signature(vote.digest()).await;
+        Self { signature, ..vote }
     }
 
     pub async fn new_timeout(

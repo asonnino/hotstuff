@@ -9,6 +9,7 @@ use tokio::time::sleep;
 async fn create_store() {
     // Create new store.
     let path = ".store_test_create_store";
+    let _ = fs::remove_dir_all(path).unwrap();
     let store = Store::new(path).await;
     assert!(store.is_ok());
 }
@@ -38,6 +39,7 @@ async fn read_write_value() {
 async fn read_unknown_key() {
     // Create new store.
     let path = ".store_test_read_unknown_key";
+    let _ = fs::remove_dir_all(path).unwrap();
     let mut store = Store::new(path).await.unwrap();
 
     // Try to read unknown key.
