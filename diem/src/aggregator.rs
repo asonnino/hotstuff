@@ -10,6 +10,7 @@ type Votes = Vec<(PublicKey, Signature)>;
 pub struct Aggregator {
     committee: Committee,
     aggregators: HashMap<RoundNumber, HashMap<Digest, Box<QuorumMaker>>>,
+    voters: HashMap<RoundNumber, HashSet<PublicKey>>,
 }
 
 impl Aggregator {
@@ -17,25 +18,34 @@ impl Aggregator {
         Self {
             committee,
             aggregators: HashMap::new(),
+            voters: HashMap::new(),
         }
     }
 
     pub fn add_vote(&mut self, vote: Vote) -> DiemResult<Option<Votes>> {
-        // TODO: self.aggregators is a potential target for DDoS.
-        let round_aggregators = self
-            .aggregators
+        // Record that an authority voted for this round; we accept at most
+        // one vote per authority per round.
+        if !self
+            .voters
             .entry(vote.round)
-            .or_insert_with(HashMap::new);
-        let digest_aggregator = round_aggregators
-            .entry(vote.digest())
-            .or_insert_with(|| Box::new(QuorumMaker::new()));
+            .or_insert_with(HashSet::new)
+            .insert(vote.author)
+        {
+            bail!(DiemError::AuthorityReuse(vote.author));
+        }
 
         // Add the new vote to our aggregator and see if we have a QC.
-        digest_aggregator.append(vote, &self.committee)
+        self.aggregators
+            .entry(vote.round)
+            .or_insert_with(HashMap::new)
+            .entry(vote.digest())
+            .or_insert_with(|| Box::new(QuorumMaker::new()))
+            .append(vote, &self.committee)
     }
 
     pub fn cleanup(&mut self, round: &RoundNumber) {
         self.aggregators.retain(|k, _| k >= round);
+        self.voters.retain(|k, _| k >= round);
     }
 }
 
