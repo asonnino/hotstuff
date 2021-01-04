@@ -5,6 +5,10 @@ use crate::error::{DiemError, DiemResult};
 use crate::messages::Vote;
 use std::collections::{HashMap, HashSet};
 
+#[cfg(test)]
+#[path = "tests/aggregator_tests.rs"]
+pub mod aggregator_tests;
+
 type Votes = Vec<(PublicKey, Signature)>;
 
 pub struct Aggregator {
