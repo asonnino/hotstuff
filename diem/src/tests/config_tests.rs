@@ -29,14 +29,6 @@ impl fmt::Debug for Authority {
 }
 
 #[test]
-fn validity_threshold() {
-    let mut rng = StdRng::from_seed([0; 32]);
-    let names = (0..4).map(|_| generate_keypair(&mut rng).0).collect();
-    let committee = Committee::new(names, 6100);
-    assert_eq!(committee.validity_threshold(), 2);
-}
-
-#[test]
 fn quorum_threshold() {
     let mut rng = StdRng::from_seed([0; 32]);
     let names = (0..4).map(|_| generate_keypair(&mut rng).0).collect();

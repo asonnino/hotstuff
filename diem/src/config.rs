@@ -101,12 +101,6 @@ impl Committee {
         2 * self.total_votes() / 3 + 1
     }
 
-    pub fn validity_threshold(&self) -> Stake {
-        // If N = 3f + 1 + k (0 <= k < 3)
-        // then (N + 2) / 3 = f + 1 + k/3 = f + 1
-        (self.total_votes() + 2) / 3
-    }
-
     pub fn address(&self, name: &PublicKey) -> Option<String> {
         self.authorities
             .get(name)

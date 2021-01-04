@@ -71,7 +71,7 @@ impl Core {
         )
         .await;
 
-        // Make a vote aggregator. This is the instance that keeps track
+        // Make a votes aggregator. This is the instance that keeps track
         // of incoming votes and aggregates them into QCs.
         let aggregator = Aggregator::new(committee.clone());
 
