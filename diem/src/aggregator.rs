@@ -1,4 +1,4 @@
-use crate::committee::{Committee, Stake};
+use crate::config::{Committee, Stake};
 use crate::crypto::{Digest, Hash, PublicKey, Signature};
 use crate::error::{DiemError, DiemResult};
 use crate::messages::Vote;

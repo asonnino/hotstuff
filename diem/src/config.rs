@@ -8,8 +8,8 @@ use std::io::BufWriter;
 use std::io::Write as _;
 
 #[cfg(test)]
-#[path = "tests/committee_tests.rs"]
-pub mod committee_tests;
+#[path = "tests/config_tests.rs"]
+pub mod config_tests;
 
 pub type Stake = u32;
 pub type EpochNumber = u128;
@@ -33,6 +33,23 @@ pub trait Config: Serialize + DeserializeOwned {
             Ok(())
         };
         writer().map_err(|e| DiemError::ConfigError(path.to_string(), e.to_string()))
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Parameters {
+    pub timeout_delay: u64,
+    pub sync_retry_delay: u64,
+}
+
+impl Config for Parameters {}
+
+impl Default for Parameters {
+    fn default() -> Self {
+        Self {
+            timeout_delay: 1_000,
+            sync_retry_delay: 10_000,
+        }
     }
 }
 

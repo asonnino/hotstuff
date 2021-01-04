@@ -1,5 +1,5 @@
-use crate::committee::Config as _;
-use crate::committee::{Committee, Secret};
+use crate::config::Config as _;
+use crate::config::{Committee, Parameters, Secret};
 use crate::core::Core;
 use crate::crypto::SignatureService;
 use crate::error::{DiemError, DiemResult};
@@ -8,20 +8,6 @@ use crate::mempool::Mempool;
 use crate::network::{NetReceiver, NetSender};
 use crate::store::Store;
 use tokio::sync::mpsc::channel;
-
-pub struct Parameters {
-    pub timeout_delay: u64,
-    pub sync_retry_delay: u64,
-}
-
-impl Default for Parameters {
-    fn default() -> Self {
-        Self {
-            timeout_delay: 1_000,
-            sync_retry_delay: 10_000,
-        }
-    }
-}
 
 pub struct Node;
 

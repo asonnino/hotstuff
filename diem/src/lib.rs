@@ -2,7 +2,7 @@
 mod error;
 
 mod aggregator;
-mod committee;
+mod config;
 mod core;
 mod crypto;
 mod leader;

@@ -1,4 +1,4 @@
-use crate::committee::Committee;
+use crate::config::Committee;
 use crate::core::RoundNumber;
 use crate::crypto::PublicKey;
 

@@ -1,4 +1,4 @@
-use crate::committee::Committee;
+use crate::config::Committee;
 use crate::core::CoreMessage;
 use crate::crypto::{Digest, PublicKey};
 use crate::error::{DiemError, DiemResult};

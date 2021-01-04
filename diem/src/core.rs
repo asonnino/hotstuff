@@ -1,5 +1,5 @@
 use crate::aggregator::Aggregator;
-use crate::committee::Committee;
+use crate::config::{Committee, Parameters};
 use crate::crypto::Hash as _;
 use crate::crypto::{Digest, PublicKey, SignatureService};
 use crate::error::{DiemError, DiemResult};
@@ -7,7 +7,6 @@ use crate::leader::LeaderElector;
 use crate::mempool::Mempool;
 use crate::messages::{Block, GenericQC, Vote, QC, TC};
 use crate::network::NetMessage;
-use crate::node::Parameters;
 use crate::store::Store;
 use crate::synchronizer::Synchronizer;
 use futures::future::FutureExt as _;
