@@ -42,11 +42,12 @@ fn verify_qc_authority_reuse() {
 
     // Modify QC to reuse one authority.
     let _ = qc.votes.pop();
-    qc.votes.push(qc.votes[0].clone());
+    let vote = qc.votes[0].clone();
+    qc.votes.push(vote.clone());
 
     // Verify the QC.
     match qc.verify(&committee) {
-        Err(DiemError::AuthorityReuse(_)) => assert!(true),
+        Err(DiemError::AuthorityReuse(name)) => assert_eq!(name, vote.0),
         _ => assert!(false),
     }
 }
@@ -63,7 +64,7 @@ fn verify_qc_unknown_authority() {
 
     // Verify the QC.
     match qc.verify(&committee) {
-        Err(DiemError::UnknownAuthority(_)) => assert!(true),
+        Err(DiemError::UnknownAuthority(name)) => assert_eq!(name, unknown),
         _ => assert!(false),
     }
 }
