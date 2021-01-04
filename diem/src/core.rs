@@ -193,6 +193,7 @@ impl Core {
         if self.round < possible_new_round {
             info!("Moved to round {}", self.round);
             self.round = possible_new_round;
+            self.aggregator.cleanup(&self.round);
         }
 
         // Update the highest QC we know.
