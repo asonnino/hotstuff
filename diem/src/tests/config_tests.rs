@@ -1,8 +1,12 @@
 use super::*;
-use crate::crypto::generate_keypair;
-use rand::rngs::StdRng;
-use rand::SeedableRng as _;
+use crate::crypto::crypto_tests::keys;
 use std::fmt;
+
+// Fixture.
+pub fn committee() -> Committee {
+    let names = keys().iter().map(|(public_key, _)| *public_key).collect();
+    Committee::new(names, 0)
+}
 
 impl PartialEq for Committee {
     fn eq(&self, other: &Self) -> bool {
@@ -30,17 +34,12 @@ impl fmt::Debug for Authority {
 
 #[test]
 fn quorum_threshold() {
-    let mut rng = StdRng::from_seed([0; 32]);
-    let names = (0..4).map(|_| generate_keypair(&mut rng).0).collect();
-    let committee = Committee::new(names, 6100);
-    assert_eq!(committee.quorum_threshold(), 3);
+    assert_eq!(committee().quorum_threshold(), 3);
 }
 
 #[test]
 fn committee_read_write() {
-    let mut rng = StdRng::from_seed([0; 32]);
-    let names = (0..4).map(|_| generate_keypair(&mut rng).0).collect();
-    let committee = Committee::new(names, 6100);
+    let committee = committee();
     let filename = ".committee_test_read_write";
     let result = committee.write(filename);
     assert!(result.is_ok());

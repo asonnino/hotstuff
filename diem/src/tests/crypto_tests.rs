@@ -4,6 +4,12 @@ use ed25519_dalek::Sha512;
 use rand::rngs::StdRng;
 use rand::SeedableRng as _;
 
+// Fixture.
+pub fn keys() -> Vec<(PublicKey, SecretKey)> {
+    let mut rng = StdRng::from_seed([0; 32]);
+    (0..4).map(|_| generate_keypair(&mut rng)).collect()
+}
+
 impl Hash for &[u8] {
     fn digest(&self) -> Digest {
         Sha512::digest(self).as_slice()[..32].try_into().unwrap()
@@ -24,11 +30,7 @@ impl fmt::Debug for SecretKey {
 
 #[test]
 fn import_export_public_key() {
-    // Make keypair.
-    let mut rng = StdRng::from_seed([0; 32]);
-    let (public_key, _) = generate_keypair(&mut rng);
-
-    // Export and re-import key.
+    let (public_key, _) = keys().pop().unwrap();
     let export = public_key.to_base64();
     let import = PublicKey::from_base64(&export);
     assert!(import.is_ok());
@@ -37,11 +39,7 @@ fn import_export_public_key() {
 
 #[test]
 fn import_export_secret_key() {
-    // Make keypair.
-    let mut rng = StdRng::from_seed([0; 32]);
-    let (_, secret_key) = generate_keypair(&mut rng);
-
-    // Export and re-import key.
+    let (_, secret_key) = keys().pop().unwrap();
     let export = secret_key.to_base64();
     let import = SecretKey::from_base64(&export);
     assert!(import.is_ok());
@@ -50,9 +48,8 @@ fn import_export_secret_key() {
 
 #[test]
 fn verify_valid_signature() {
-    // Make keypair.
-    let mut rng = StdRng::from_seed([0; 32]);
-    let (public_key, secret_key) = generate_keypair(&mut rng);
+    // Get a keypair.
+    let (public_key, secret_key) = keys().pop().unwrap();
 
     // Make signature.
     let message: &[u8] = b"Hello, world!";
@@ -65,9 +62,8 @@ fn verify_valid_signature() {
 
 #[test]
 fn verify_invalid_signature() {
-    // Make keypair.
-    let mut rng = StdRng::from_seed([0; 32]);
-    let (public_key, secret_key) = generate_keypair(&mut rng);
+    // Get a keypair.
+    let (public_key, secret_key) = keys().pop().unwrap();
 
     // Make signature.
     let message: &[u8] = b"Hello, world!";
@@ -82,49 +78,46 @@ fn verify_invalid_signature() {
 
 #[test]
 fn verify_valid_batch() {
-    // Make keypairs.
-    let mut rng = StdRng::from_seed([0; 32]);
-    let (pub1, sec1) = generate_keypair(&mut rng);
-    let (pub2, sec2) = generate_keypair(&mut rng);
-    let (pub3, sec3) = generate_keypair(&mut rng);
-
     // Make signatures.
     let message: &[u8] = b"Hello, world!";
     let digest = message.digest();
-    let sig1 = Signature::new(&digest, &sec1);
-    let sig2 = Signature::new(&digest, &sec2);
-    let sig3 = Signature::new(&digest, &sec3);
+    let mut keys = keys();
+    let signatures: Vec<_> = (0..3)
+        .map(|_| {
+            let (public_key, secret_key) = keys.pop().unwrap();
+            (public_key, Signature::new(&digest, &secret_key))
+        })
+        .collect();
 
-    // Verify the signature.
-    let signatures = vec![(pub1, sig1), (pub2, sig2), (pub3, sig3)];
+    // Verify the batch.
     assert!(Signature::verify_batch(&digest, &signatures).is_ok());
 }
 
 #[test]
 fn verify_invalid_batch() {
-    // Make keypairs.
-    let mut rng = StdRng::from_seed([0; 32]);
-    let (pub1, sec1) = generate_keypair(&mut rng);
-    let (pub2, sec2) = generate_keypair(&mut rng);
-    let (pub3, _) = generate_keypair(&mut rng);
-
-    // Make signatures.
+    // Make 2 valid signatures.
     let message: &[u8] = b"Hello, world!";
     let digest = message.digest();
-    let sig1 = Signature::new(&digest, &sec1);
-    let sig2 = Signature::new(&digest, &sec2);
-    let sig3 = Signature::default();
+    let mut keys = keys();
+    let mut signatures: Vec<_> = (0..2)
+        .map(|_| {
+            let (public_key, secret_key) = keys.pop().unwrap();
+            (public_key, Signature::new(&digest, &secret_key))
+        })
+        .collect();
 
-    // Verify the signature.
-    let signatures = vec![(pub1, sig1), (pub2, sig2), (pub3, sig3)];
+    // Add an invalid signature.
+    let (public_key, _) = keys.pop().unwrap();
+    signatures.push((public_key, Signature::default()));
+
+    // Verify the batch.
     assert!(Signature::verify_batch(&digest, &signatures).is_err());
 }
 
 #[tokio::test]
 async fn signature_service() {
-    // Make keypair.
-    let mut rng = StdRng::from_seed([0; 32]);
-    let (public_key, secret_key) = generate_keypair(&mut rng);
+    // Get a keypair.
+    let (public_key, secret_key) = keys().pop().unwrap();
 
     // Spawn the signature service.
     let mut service = SignatureService::new(secret_key).await;
