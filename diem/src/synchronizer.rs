@@ -73,7 +73,6 @@ impl Synchronizer {
                         if message.is_some() {
                             // This ensure liveness in case Sync Requests are lost.
                             // It should not happen in theory, but the internet is wild.
-                            println!("HERE");
                             for digest in &pending {
                                 let sync_request = NetMessage::SyncRequest(*digest, name);
                                 if let Err(e) = network_channel.send(sync_request).await {
