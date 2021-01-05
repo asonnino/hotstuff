@@ -64,4 +64,3 @@ impl From<ed25519::Error> for DiemError {
         DiemError::InvalidSignature
     }
 }
-

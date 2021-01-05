@@ -2,6 +2,8 @@ use super::*;
 use crate::crypto::crypto_tests::keys;
 use crate::messages::messages_tests::{block, chain};
 use std::fs;
+use std::time::Duration;
+use tokio::time::sleep;
 
 #[tokio::test]
 async fn get_existing_previous_block() {
@@ -21,8 +23,14 @@ async fn get_existing_previous_block() {
     let (public_key, _) = keys().pop().unwrap();
     let (tx_network, _) = channel(10);
     let (tx_core, _) = channel(10);
+    let timer_manager = TimerManager::new().await;
     let mut synchronizer = Synchronizer::new(
-        public_key, store, tx_network, tx_core, /* sync_retry_delay */ 10,
+        public_key,
+        store,
+        tx_network,
+        tx_core,
+        timer_manager,
+        /* sync_retry_delay */ 10_000,
     )
     .await;
 
@@ -42,8 +50,14 @@ async fn get_genesis_previous_block() {
     let (public_key, _) = keys().pop().unwrap();
     let (tx_network, _) = channel(10);
     let (tx_core, _) = channel(10);
+    let timer_manager = TimerManager::new().await;
     let mut synchronizer = Synchronizer::new(
-        public_key, store, tx_network, tx_core, /* sync_retry_delay */ 10,
+        public_key,
+        store,
+        tx_network,
+        tx_core,
+        timer_manager,
+        /* sync_retry_delay */ 10_000,
     )
     .await;
 
@@ -67,12 +81,14 @@ async fn get_missing_previous_block() {
     let (myself, _) = keys().pop().unwrap();
     let (tx_network, mut rx_network) = channel(10);
     let (tx_core, mut rx_core) = channel(10);
+    let timer_manager = TimerManager::new().await;
     let mut synchronizer = Synchronizer::new(
         myself.clone(),
         store.clone(),
         tx_network,
         tx_core,
-        /* sync_retry_delay */ 10,
+        timer_manager,
+        /* sync_retry_delay */ 10_000,
     )
     .await;
 

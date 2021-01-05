@@ -9,14 +9,13 @@ use crate::messages::{Block, GenericQC, Vote, QC, TC};
 use crate::network::NetMessage;
 use crate::store::Store;
 use crate::synchronizer::Synchronizer;
+use crate::timer::{TimerId, TimerManager};
 use futures::future::FutureExt as _;
 use futures::select;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
-use std::time::Duration;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio::time::sleep;
 
 #[cfg(test)]
 #[path = "tests/core_tests.rs"]
@@ -35,11 +34,13 @@ pub enum CoreMessage {
 pub struct Core {
     name: PublicKey,
     committee: Committee,
+    parameters: Parameters,
     store: Store,
     signature_service: SignatureService,
     leader_elector: LeaderElector,
     mempool: Mempool,
-    loopback: Sender<CoreMessage>,
+    loopback_channel: Sender<CoreMessage>,
+    timer_channel: Sender<TimerId>,
     network_channel: Sender<NetMessage>,
     commit_channel: Sender<Block>,
     round: RoundNumber,
@@ -48,6 +49,7 @@ pub struct Core {
     highest_qc: QC,
     synchronizer: Synchronizer,
     aggregator: Aggregator,
+    timer_manager: TimerManager,
 }
 
 impl Core {
@@ -63,7 +65,12 @@ impl Core {
         network_channel: Sender<NetMessage>,
         commit_channel: Sender<Block>,
     ) -> Sender<CoreMessage> {
-        let (tx, rx) = channel(1000);
+        let (tx_core, rx_core) = channel(1000);
+
+        // Make a timer manager instance allowing to schedule and cancel timers.
+        // We communicate with the timer manager with a dedicated channel.
+        let timer_manager = TimerManager::new().await;
+        let (tx_timer, rx_timer) = channel(100);
 
         // Make the synchronizer. This instance runs in a background thread
         // and asks other nodes for any block that we may be missing.
@@ -71,7 +78,8 @@ impl Core {
             name,
             store.clone(),
             network_channel.clone(),
-            tx.clone(),
+            tx_core.clone(),
+            timer_manager.clone(),
             parameters.sync_retry_delay,
         )
         .await;
@@ -81,16 +89,18 @@ impl Core {
         let aggregator = Aggregator::new(committee.clone());
 
         // Run the core in a separate thread.
-        let loopback = tx.clone();
+        let loopback_channel = tx_core.clone();
         tokio::spawn(async move {
             let mut core = Self {
                 name,
                 committee,
+                parameters,
                 store,
                 signature_service,
                 leader_elector,
                 mempool,
-                loopback,
+                loopback_channel,
+                timer_channel: tx_timer,
                 network_channel,
                 commit_channel,
                 round: 0,
@@ -99,13 +109,14 @@ impl Core {
                 highest_qc: QC::genesis(),
                 synchronizer,
                 aggregator,
+                timer_manager,
             };
-            core.run(rx, parameters).await;
+            core.run(rx_core, rx_timer).await;
         });
 
         // Return sender channel. The network receiver will use it to
         // send us new messages to process.
-        tx
+        tx_core
     }
 
     async fn make_block(&mut self, qc: QC, tc: Option<TC>) -> DiemResult<()> {
@@ -119,7 +130,7 @@ impl Core {
         )
         .await;
         let message = CoreMessage::LoopBack(block.clone());
-        if let Err(e) = self.loopback.send(message).await {
+        if let Err(e) = self.loopback_channel.send(message).await {
             panic!("Core failed to loopback message to itself: {}", e);
         }
         let message = NetMessage::Block(block);
@@ -202,8 +213,24 @@ impl Core {
         };
         if self.round < possible_new_round {
             info!("Moved to round {}", self.round);
+
+            // Cancel the timeout timer for this round and update the round number.
+            let timer_id = format!("core:{}", self.round);
+            self.timer_manager.cancel(timer_id).await;
             self.round = possible_new_round;
+
+            // Cleanup the vote aggregator.
             self.aggregator.cleanup(&self.round);
+
+            // Schedule a new timer for this round.
+            let timer_id = format!("core:{}", self.round);
+            self.timer_manager
+                .schedule(
+                    self.parameters.timeout_delay,
+                    timer_id,
+                    self.timer_channel.clone(),
+                )
+                .await;
         }
 
         // Update the highest QC we know.
@@ -234,7 +261,7 @@ impl Core {
             let next_leader = self.leader_elector.get_leader(self.round + 1);
             if next_leader == self.name {
                 let message = CoreMessage::Vote(vote.clone());
-                if let Err(e) = self.loopback.send(message).await {
+                if let Err(e) = self.loopback_channel.send(message).await {
                     panic!("Core failed to loopback message to itself: {}", e);
                 }
             } else {
@@ -290,7 +317,7 @@ impl Core {
         let next_leader = self.leader_elector.get_leader(self.round + 1);
         if next_leader == self.name {
             let message = CoreMessage::Vote(timeout.clone());
-            if let Err(e) = self.loopback.send(message).await {
+            if let Err(e) = self.loopback_channel.send(message).await {
                 panic!("Core failed to loopback message to itself: {}", e);
             }
         } else {
@@ -312,7 +339,7 @@ impl Core {
         Ok(())
     }
 
-    async fn run(&mut self, mut rx: Receiver<CoreMessage>, parameters: Parameters) {
+    async fn run(&mut self, mut rx_core: Receiver<CoreMessage>, mut rx_timer: Receiver<TimerId>) {
         // Upon booting, send the very first block (if we are the leader).
         if self.name == self.leader_elector.get_leader(1) {
             self.make_block(self.highest_qc.clone(), None)
@@ -321,10 +348,9 @@ impl Core {
         }
 
         // This is the main loop: it processes incoming blocks and votes.
-        let mut round = self.round;
         loop {
             select! {
-                message = rx.recv().fuse() => {
+                message = rx_core.recv().fuse() => {
                     if let Some(message) = message {
                         debug!("Received message: {:?}", message);
                         let result = match message {
@@ -341,16 +367,11 @@ impl Core {
                         }
                     }
                 },
-                // TODO: This is a bad way to implement timeouts. Some nodes may
-                // potentially wait for 2 sec (instead of 1) before triggering it,
-                // and it probably recreate a timer at each loop iteration...
-                // TODO: Timeout delay should be a parameter.
-                () = sleep(Duration::from_millis(parameters.timeout_delay)).fuse() => {
-                    if self.round == round {
+                message = rx_timer.recv().fuse() => {
+                    if message.is_some() {
                         warn!("Timing out for round {}!", self.round);
                         self.make_timeout().await
                     }
-                    round = self.round;
                 }
             }
         }

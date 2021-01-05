@@ -5,15 +5,14 @@ use crate::error::DiemResult;
 use crate::messages::{Block, QC};
 use crate::network::NetMessage;
 use crate::store::Store;
+use crate::timer::TimerManager;
 use futures::future::FutureExt as _;
 use futures::select;
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
 use log::{debug, error};
 use std::collections::HashSet;
-use std::time::Duration;
-use tokio::sync::mpsc::{channel, Sender};
-use tokio::time::sleep;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 #[cfg(test)]
 #[path = "tests/synchronizer_tests.rs"]
@@ -30,23 +29,26 @@ impl Synchronizer {
         store: Store,
         network_channel: Sender<NetMessage>,
         core_channel: Sender<CoreMessage>,
+        mut timer_manager: TimerManager,
         sync_retry_delay: u64,
     ) -> Self {
-        let (tx, mut rx) = channel(1000);
-        let synchronizer = Self {
-            store: store.clone(),
-            inner_channel: tx,
-        };
+        let (tx_inner, mut rx_inner): (_, Receiver<Block>) = channel(1000);
+        let (tx_timer, mut rx_timer) = channel(100);
+        timer_manager
+            .schedule(sync_retry_delay, "sync".to_string(), tx_timer.clone())
+            .await;
+
+        let store_copy = store.clone();
         tokio::spawn(async move {
             let mut waiting = FuturesUnordered::new();
             let mut pending = HashSet::new();
             loop {
                 select! {
-                    message = rx.next().fuse() => {
+                    message = rx_inner.next().fuse() => {
                         if let Some(block) = message {
                             if pending.insert(block.digest()) {
                                 let previous = block.previous();
-                                let fut = Self::waiter(store.clone(), previous, block);
+                                let fut = Self::waiter(store_copy.clone(), previous, block);
                                 waiting.push(fut);
                                 let sync_request = NetMessage::SyncRequest(previous, name);
                                 if let Err(e) = network_channel.send(sync_request).await {
@@ -67,20 +69,29 @@ impl Synchronizer {
                             Err(e) => error!("{}", e)
                         }
                     },
-                    () = sleep(Duration::from_millis(sync_retry_delay)).fuse() => {
-                        // This ensure liveness in case Sync Requests are lost.
-                        // It should not happen in theory, but the internet is wild.
-                        for digest in &pending {
-                            let sync_request = NetMessage::SyncRequest(*digest, name);
-                            if let Err(e) = network_channel.send(sync_request).await {
-                                panic!("Failed to send Sync Request to network: {}", e);
+                    message = rx_timer.recv().fuse() => {
+                        if message.is_some() {
+                            // This ensure liveness in case Sync Requests are lost.
+                            // It should not happen in theory, but the internet is wild.
+                            println!("HERE");
+                            for digest in &pending {
+                                let sync_request = NetMessage::SyncRequest(*digest, name);
+                                if let Err(e) = network_channel.send(sync_request).await {
+                                    panic!("Failed to send Sync Request to network: {}", e);
+                                }
                             }
+                            timer_manager
+                                .schedule(sync_retry_delay, "sync".to_string(), tx_timer.clone())
+                                .await;
                         }
                     }
                 }
             }
         });
-        synchronizer
+        Self {
+            store,
+            inner_channel: tx_inner,
+        }
     }
 
     async fn waiter(mut store: Store, wait_on: Digest, deliver: Block) -> DiemResult<Block> {
