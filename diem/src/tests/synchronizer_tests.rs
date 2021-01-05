@@ -7,13 +7,13 @@ use tokio::time::sleep;
 
 #[tokio::test]
 async fn get_existing_previous_block() {
-    let mut chain = chain();
+    let mut chain = chain(keys());
     let block = chain.pop().unwrap();
     let b2 = chain.pop().unwrap();
 
     // Add the block b2 to the store.
     let path = ".store_test_get_existing_previous_block";
-    let _ = fs::remove_dir_all(path).unwrap();
+    let _ = fs::remove_dir_all(path);
     let mut store = Store::new(path).await.unwrap();
     let key = b2.digest().to_vec();
     let value = bincode::serialize(&b2).unwrap();
@@ -45,7 +45,7 @@ async fn get_existing_previous_block() {
 async fn get_genesis_previous_block() {
     // Make a new synchronizer.
     let path = ".store_test_get_genesis_previous_block";
-    let _ = fs::remove_dir_all(path).unwrap();
+    let _ = fs::remove_dir_all(path);
     let store = Store::new(path).await.unwrap();
     let (public_key, _) = keys().pop().unwrap();
     let (tx_network, _) = channel(10);
@@ -70,13 +70,13 @@ async fn get_genesis_previous_block() {
 
 #[tokio::test]
 async fn get_missing_previous_block() {
-    let mut chain = chain();
+    let mut chain = chain(keys());
     let block = chain.pop().unwrap();
     let b2 = chain.pop().unwrap();
 
     // Make a new synchronizer.
     let path = ".store_test_get_missing_previous_block";
-    let _ = fs::remove_dir_all(path).unwrap();
+    let _ = fs::remove_dir_all(path);
     let mut store = Store::new(path).await.unwrap();
     let (myself, _) = keys().pop().unwrap();
     let (tx_network, mut rx_network) = channel(10);

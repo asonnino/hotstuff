@@ -9,7 +9,7 @@ use tokio::time::sleep;
 async fn create_store() {
     // Create new store.
     let path = ".store_test_create_store";
-    let _ = fs::remove_dir_all(path).unwrap();
+    let _ = fs::remove_dir_all(path);
     let store = Store::new(path).await;
     assert!(store.is_ok());
 }
@@ -18,7 +18,7 @@ async fn create_store() {
 async fn read_write_value() {
     // Create new store.
     let path = ".store_test_read_write_value";
-    let _ = fs::remove_dir_all(path).unwrap();
+    let _ = fs::remove_dir_all(path);
     let mut store = Store::new(path).await.unwrap();
 
     // Write value to the store.
@@ -39,7 +39,7 @@ async fn read_write_value() {
 async fn read_unknown_key() {
     // Create new store.
     let path = ".store_test_read_unknown_key";
-    let _ = fs::remove_dir_all(path).unwrap();
+    let _ = fs::remove_dir_all(path);
     let mut store = Store::new(path).await.unwrap();
 
     // Try to read unknown key.
@@ -53,7 +53,7 @@ async fn read_unknown_key() {
 async fn read_notify() {
     // Create new store.
     let path = ".store_test_read_notify";
-    let _ = fs::remove_dir_all(path).unwrap();
+    let _ = fs::remove_dir_all(path);
     let mut store = Store::new(path).await.unwrap();
 
     // Try to read unknown key.

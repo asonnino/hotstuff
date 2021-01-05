@@ -119,12 +119,29 @@ impl Core {
         tx_core
     }
 
-    async fn make_block(&mut self, qc: QC, tc: Option<TC>) -> DiemResult<()> {
+    async fn store_block(&mut self, block: &Block) -> DiemResult<()> {
+        let key = block.digest().to_vec();
+        let value = bincode::serialize(block).expect("Failed to serialize block");
+        self.store.write(key, value).await.map_err(DiemError::from)
+    }
+
+    async fn schedule_timer(&mut self) {
+        let timer_id = format!("core:{}", self.round);
+        self.timer_manager
+            .schedule(
+                self.parameters.timeout_delay,
+                timer_id,
+                self.timer_channel.clone(),
+            )
+            .await;
+    }
+
+    async fn make_block(&mut self, qc: QC, tc: Option<TC>, round: RoundNumber) -> DiemResult<()> {
         let block = Block::new(
             qc,
             tc,
             self.name,
-            self.round + 1,
+            round,
             self.mempool.get_payload().await,
             self.signature_service.clone(),
         )
@@ -138,12 +155,6 @@ impl Core {
             panic!("Core failed to send block to the network: {}", e);
         }
         Ok(())
-    }
-
-    async fn store_block(&mut self, block: &Block) -> DiemResult<()> {
-        let key = block.digest().to_vec();
-        let value = bincode::serialize(block).expect("Failed to serialize block");
-        self.store.write(key, value).await.map_err(DiemError::from)
     }
 
     async fn handle_propose(&mut self, block: &Block) -> DiemResult<()> {
@@ -174,7 +185,9 @@ impl Core {
         block.signature.verify(&block.digest(), &block.author)?;
 
         // Check that the QC embedded in the block is valid.
-        block.qc.verify(&self.committee)?;
+        if block.qc != QC::genesis() {
+            block.qc.verify(&self.committee)?;
+        }
 
         // Check the TC embedded in the block if any.
         if let Some(tc) = &block.tc {
@@ -223,14 +236,7 @@ impl Core {
             self.aggregator.cleanup(&self.round);
 
             // Schedule a new timer for this round.
-            let timer_id = format!("core:{}", self.round);
-            self.timer_manager
-                .schedule(
-                    self.parameters.timeout_delay,
-                    timer_id,
-                    self.timer_channel.clone(),
-                )
-                .await;
+            self.schedule_timer().await;
         }
 
         // Update the highest QC we know.
@@ -283,12 +289,12 @@ impl Core {
         if vote.round < self.round {
             return Ok(());
         }
-
         // Add the new vote to our aggregator and see if we have a quorum.
         if let Some(quorum) = self.aggregator.add_vote(vote.clone())? {
             // We propose a new block if we have a QC or TC, and if we are
             // the leader of the next round.
-            if self.name == self.leader_elector.get_leader(vote.round + 1) {
+            let next_round = vote.round + 1;
+            if self.name == self.leader_elector.get_leader(next_round) {
                 let (qc, tc) = if vote.timeout() {
                     let tc = TC {
                         round: vote.round,
@@ -303,7 +309,7 @@ impl Core {
                     };
                     (qc, None)
                 };
-                self.make_block(qc, tc).await?;
+                self.make_block(qc, tc, next_round).await?;
             }
         }
         Ok(())
@@ -341,8 +347,10 @@ impl Core {
 
     async fn run(&mut self, mut rx_core: Receiver<CoreMessage>, mut rx_timer: Receiver<TimerId>) {
         // Upon booting, send the very first block (if we are the leader).
+        // and schedule a timer in case we don't hear from the leader.
+        self.schedule_timer().await;
         if self.name == self.leader_elector.get_leader(1) {
-            self.make_block(self.highest_qc.clone(), None)
+            self.make_block(self.highest_qc.clone(), None, 1)
                 .await
                 .expect("Failed to send the first block");
         }

@@ -5,6 +5,7 @@ use crate::error::{DiemError, DiemResult};
 use ed25519_dalek::Digest as _;
 use ed25519_dalek::Sha512;
 use serde::{Deserialize, Serialize};
+use std::cmp::min;
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fmt;
@@ -71,7 +72,7 @@ impl fmt::Debug for Block {
             self.author,
             self.round,
             self.qc,
-            &self.payload[..8]
+            &self.payload[..min(8, self.payload.len())]
         )
     }
 }

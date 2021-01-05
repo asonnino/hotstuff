@@ -12,7 +12,7 @@ impl Block {
         author: PublicKey,
         round: RoundNumber,
         payload: Vec<u8>,
-        secret: SecretKey,
+        secret: &SecretKey,
     ) -> Self {
         let block = Block {
             qc,
@@ -22,7 +22,7 @@ impl Block {
             payload,
             signature: Signature::default(),
         };
-        let signature = Signature::new(&block.digest(), &secret);
+        let signature = Signature::new(&block.digest(), secret);
         Self { signature, ..block }
     }
 }
@@ -38,7 +38,7 @@ impl Vote {
         hash: Digest,
         round: RoundNumber,
         author: PublicKey,
-        secret: SecretKey,
+        secret: &SecretKey,
     ) -> Self {
         let vote = Self {
             hash,
@@ -51,16 +51,22 @@ impl Vote {
     }
 }
 
+impl PartialEq for Vote {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash && self.round == other.round
+    }
+}
+
 // Fixture.
 pub fn block() -> Block {
     let (public_key, secret_key) = keys().pop().unwrap();
-    Block::new_from_key(QC::genesis(), None, public_key, 1, Vec::new(), secret_key)
+    Block::new_from_key(QC::genesis(), None, public_key, 1, Vec::new(), &secret_key)
 }
 
 // Fixture.
 pub fn vote() -> Vote {
     let (public_key, secret_key) = keys().pop().unwrap();
-    Vote::new_from_key(Digest::default(), 1, public_key, secret_key)
+    Vote::new_from_key(block().digest(), 1, public_key, &secret_key)
 }
 
 // Fixture.
@@ -82,10 +88,9 @@ pub fn qc() -> QC {
 }
 
 // Fixture.
-pub fn chain() -> Vec<Block> {
+pub fn chain(keys: Vec<(PublicKey, SecretKey)>) -> Vec<Block> {
     let mut latest_qc = QC::genesis();
-    keys()
-        .into_iter()
+    keys.iter()
         .enumerate()
         .map(|(i, key)| {
             // Make a block.
@@ -93,8 +98,8 @@ pub fn chain() -> Vec<Block> {
             let block = Block::new_from_key(
                 latest_qc.clone(),
                 None,
-                public_key,
-                i as RoundNumber,
+                *public_key,
+                1 + i as RoundNumber,
                 Vec::new(),
                 secret_key,
             );
@@ -102,13 +107,13 @@ pub fn chain() -> Vec<Block> {
             // Make a qc for that block (it will be used for the next block).
             let qc = QC {
                 hash: block.digest(),
-                round: i as RoundNumber,
+                round: block.round,
                 votes: Vec::new(),
             };
             let digest = qc.digest();
-            let votes: Vec<_> = keys()
-                .into_iter()
-                .map(|(public_key, secret_key)| (public_key, Signature::new(&digest, &secret_key)))
+            let votes: Vec<_> = keys
+                .iter()
+                .map(|(public_key, secret_key)| (*public_key, Signature::new(&digest, secret_key)))
                 .collect();
             latest_qc = QC { votes, ..qc };
 
