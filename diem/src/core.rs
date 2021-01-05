@@ -303,8 +303,7 @@ impl Core {
 
     async fn handle_sync_request(&mut self, digest: Digest, sender: PublicKey) -> DiemResult<()> {
         if let Some(bytes) = self.store.read(digest.to_vec()).await? {
-            let block =
-                bincode::deserialize(&bytes).map_err(|e| DiemError::StoreError(e.to_string()))?;
+            let block = bincode::deserialize(&bytes)?;
             let message = NetMessage::SyncReply(block, sender);
             if let Err(e) = self.network_channel.send(message).await {
                 panic!("Core failed to send sync reply to the network: {}", e);
@@ -337,6 +336,7 @@ impl Core {
                         match result {
                             Ok(()) => debug!("Message successfully processed."),
                             Err(DiemError::StoreError(e)) => error!("{}", e),
+                            Err(DiemError::SerializationError(e)) => error!("Store corrupted. {}", e),
                             Err(e) => warn!("{}", e),
                         }
                     }

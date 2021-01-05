@@ -31,7 +31,7 @@ pub enum DiemError {
     SerializationError(#[from] Box<bincode::ErrorKind>),
 
     #[error("Store error: {0}")]
-    StoreError(String),
+    StoreError(#[from] StoreError),
 
     #[error("Failed to read config file {0}: {0}")]
     ConfigError(String, String),
@@ -65,8 +65,3 @@ impl From<ed25519::Error> for DiemError {
     }
 }
 
-impl From<StoreError> for DiemError {
-    fn from(e: StoreError) -> Self {
-        DiemError::StoreError(e.to_string())
-    }
-}

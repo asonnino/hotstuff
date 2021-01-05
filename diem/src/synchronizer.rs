@@ -1,7 +1,7 @@
 use crate::core::CoreMessage;
 use crate::crypto::Hash as _;
 use crate::crypto::{Digest, PublicKey};
-use crate::error::{DiemError, DiemResult};
+use crate::error::DiemResult;
 use crate::messages::{Block, QC};
 use crate::network::NetMessage;
 use crate::store::Store;
@@ -94,9 +94,7 @@ impl Synchronizer {
         }
         let previous = block.previous();
         match self.store.read(previous.to_vec()).await? {
-            Some(bytes) => Ok(Some(
-                bincode::deserialize(&bytes).map_err(|e| DiemError::StoreError(e.to_string()))?,
-            )),
+            Some(bytes) => Ok(Some(bincode::deserialize(&bytes)?)),
             None => {
                 debug!("Requesting sync for block {:?}", previous);
                 if let Err(e) = self.inner_channel.send(block.clone()).await {
