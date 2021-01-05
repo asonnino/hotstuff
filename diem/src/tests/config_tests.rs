@@ -64,7 +64,7 @@ fn quorum_threshold() {
 #[test]
 fn committee_read_write() {
     let committee = committee();
-    let filename = ".committee_test_read_write";
+    let filename = ".committee_test_read_write.json";
     let result = committee.write(filename);
     assert!(result.is_ok());
     let read_committee = Committee::read(filename);

@@ -5,9 +5,14 @@ use crate::crypto::SignatureService;
 use crate::error::{DiemError, DiemResult};
 use crate::leader::LeaderElector;
 use crate::mempool::Mempool;
+use crate::messages::Block;
 use crate::network::{NetReceiver, NetSender};
 use crate::store::Store;
-use tokio::sync::mpsc::channel;
+use tokio::sync::mpsc::{channel, Receiver};
+
+#[cfg(test)]
+#[path = "tests/node_tests.rs"]
+pub mod node_tests;
 
 pub struct Node;
 
@@ -17,7 +22,7 @@ impl Node {
         key_file: &str,
         store_path: &str,
         parameters: Option<Parameters>,
-    ) -> DiemResult<()> {
+    ) -> DiemResult<Receiver<Block>> {
         // Read the committee and secret key from file.
         let committee = Committee::read(committee_file)?;
         let secret = Secret::read(key_file)?;
@@ -51,7 +56,7 @@ impl Node {
 
         // Create the commit channel from which we can read the sequence of
         // committed blocks.
-        let (tx_commit, mut rx_commit) = channel(1000);
+        let (tx_commit, rx_commit) = channel(1000);
 
         // Now wire together the network sender, core, and network receiver.
         let network_channel = NetSender::make(name, committee.clone()).await;
@@ -69,9 +74,8 @@ impl Node {
         .await;
         let () = NetReceiver::make(&address, core_channel).await;
 
-        // Sink the commits (we don't execute transactions).
-        while rx_commit.recv().await.is_some() {}
-        Ok(())
+        // Return the commit receiver.
+        Ok(rx_commit)
     }
 
     pub fn print_key_file(filename: &str) -> DiemResult<()> {
