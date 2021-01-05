@@ -39,6 +39,7 @@ pub struct Core {
     signature_service: SignatureService,
     leader_elector: LeaderElector,
     mempool: Mempool,
+    loopback: Sender<CoreMessage>,
     network_channel: Sender<NetMessage>,
     commit_channel: Sender<Block>,
     round: RoundNumber,
@@ -80,6 +81,7 @@ impl Core {
         let aggregator = Aggregator::new(committee.clone());
 
         // Run the core in a separate thread.
+        let loopback = tx.clone();
         tokio::spawn(async move {
             let mut core = Self {
                 name,
@@ -88,6 +90,7 @@ impl Core {
                 signature_service,
                 leader_elector,
                 mempool,
+                loopback,
                 network_channel,
                 commit_channel,
                 round: 0,
@@ -115,7 +118,10 @@ impl Core {
             self.signature_service.clone(),
         )
         .await;
-        self.process_block(&block).await?;
+        let message = CoreMessage::LoopBack(block.clone());
+        if let Err(e) = self.loopback.send(message).await {
+            panic!("Core failed to loopback message to itself: {}", e);
+        }
         let message = NetMessage::Block(block);
         if let Err(e) = self.network_channel.send(message).await {
             panic!("Core failed to send block to the network: {}", e);
@@ -226,12 +232,16 @@ impl Core {
 
             let vote = Vote::new(&block, self.name, self.signature_service.clone()).await;
             let next_leader = self.leader_elector.get_leader(self.round + 1);
-            if let Err(e) = self
-                .network_channel
-                .send(NetMessage::Vote(vote, next_leader))
-                .await
-            {
-                panic!("Core failed to send vote to the network: {}", e);
+            if next_leader == self.name {
+                let message = CoreMessage::Vote(vote.clone());
+                if let Err(e) = self.loopback.send(message).await {
+                    panic!("Core failed to loopback message to itself: {}", e);
+                }
+            } else {
+                let message = NetMessage::Vote(vote, next_leader);
+                if let Err(e) = self.network_channel.send(message).await {
+                    panic!("Core failed to send vote to the network: {}", e);
+                }
             }
 
             // Finally, update our state to ensure we won't vote for conflicting blocks.
@@ -278,12 +288,16 @@ impl Core {
         let timeout =
             Vote::new_timeout(self.round, self.name, self.signature_service.clone()).await;
         let next_leader = self.leader_elector.get_leader(self.round + 1);
-        if let Err(e) = self
-            .network_channel
-            .send(NetMessage::Vote(timeout, next_leader))
-            .await
-        {
-            panic!("Core failed to send vote to the network: {}", e);
+        if next_leader == self.name {
+            let message = CoreMessage::Vote(timeout.clone());
+            if let Err(e) = self.loopback.send(message).await {
+                panic!("Core failed to loopback message to itself: {}", e);
+            }
+        } else {
+            let message = NetMessage::Vote(timeout, next_leader);
+            if let Err(e) = self.network_channel.send(message).await {
+                panic!("Core failed to send vote to the network: {}", e);
+            }
         }
     }
 
@@ -291,11 +305,8 @@ impl Core {
         if let Some(bytes) = self.store.read(digest.to_vec()).await? {
             let block =
                 bincode::deserialize(&bytes).map_err(|e| DiemError::StoreError(e.to_string()))?;
-            if let Err(e) = self
-                .network_channel
-                .send(NetMessage::SyncReply(block, sender))
-                .await
-            {
+            let message = NetMessage::SyncReply(block, sender);
+            if let Err(e) = self.network_channel.send(message).await {
                 panic!("Core failed to send sync reply to the network: {}", e);
             }
         }
