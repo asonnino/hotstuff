@@ -18,6 +18,10 @@ use std::time::Duration;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::time::sleep;
 
+#[cfg(test)]
+#[path = "tests/core_tests.rs"]
+pub mod core_tests;
+
 pub type RoundNumber = u64;
 
 #[derive(Serialize, Deserialize, Debug)]

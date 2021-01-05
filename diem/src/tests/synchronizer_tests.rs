@@ -64,11 +64,11 @@ async fn get_missing_previous_block() {
     let path = ".store_test_get_missing_previous_block";
     let _ = fs::remove_dir_all(path).unwrap();
     let mut store = Store::new(path).await.unwrap();
-    let (public_key, _) = keys().pop().unwrap();
+    let (myself, _) = keys().pop().unwrap();
     let (tx_network, mut rx_network) = channel(10);
     let (tx_core, mut rx_core) = channel(10);
     let mut synchronizer = Synchronizer::new(
-        public_key,
+        myself.clone(),
         store.clone(),
         tx_network,
         tx_core,
@@ -77,8 +77,9 @@ async fn get_missing_previous_block() {
     .await;
 
     // Ask the predecessor of 'block' to the synchronizer.
+    let copy = block.clone();
     let handle = tokio::spawn(async move {
-        match synchronizer.get_previous_block(&block).await {
+        match synchronizer.get_previous_block(&copy).await {
             Ok(None) => assert!(true),
             _ => assert!(false),
         }
@@ -89,11 +90,20 @@ async fn get_missing_previous_block() {
     loop {
         select! {
             value = rx_network.recv().fuse() => {
-                assert!(value.is_some());
+                match value {
+                    Some(NetMessage::SyncRequest(digest, sender)) => {
+                        assert_eq!(digest, b2.digest());
+                        assert_eq!(sender, myself);
+                    },
+                    _ => assert!(false)
+                }
                 operations_order.push(1);
             },
             value = rx_core.recv().fuse() => {
-                assert!(value.is_some());
+                match value {
+                    Some(CoreMessage::LoopBack(b)) => assert_eq!(b, block.clone()),
+                    _ => assert!(false)
+                }
                 operations_order.push(3);
                 break;
             },

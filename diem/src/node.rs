@@ -67,7 +67,7 @@ impl Node {
             tx_commit,
         )
         .await;
-        let () = NetReceiver::make(address, core_channel).await;
+        let () = NetReceiver::make(&address, core_channel).await;
 
         // Sink the commits (we don't execute transactions).
         while rx_commit.recv().await.is_some() {}

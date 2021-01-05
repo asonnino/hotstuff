@@ -17,6 +17,10 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::{channel, Sender};
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
+#[cfg(test)]
+#[path = "tests/network_tests.rs"]
+pub mod network_tests;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub enum NetMessage {
     Block(Block),
@@ -110,37 +114,39 @@ impl NetSender {
 pub struct NetReceiver;
 
 impl NetReceiver {
-    pub async fn make(address: String, core_channel: Sender<CoreMessage>) {
-        let listener = TcpListener::bind(&address)
+    pub async fn make(address: &str, core_channel: Sender<CoreMessage>) {
+        let listener = TcpListener::bind(address)
             .await
             .expect("Failed to bind to TCP port");
 
         info!("Core listening on address {}", address);
-        loop {
-            let (socket, peer) = match listener.accept().await {
-                Ok(value) => value,
-                Err(e) => {
-                    warn!("{}", DiemError::from(e));
-                    continue;
-                }
-            };
-            info!("Connection established with peer {}", peer);
-
-            let core_channel = core_channel.clone();
-            tokio::spawn(async move {
-                let (read, write) = socket.into_split();
-                let mut transport_write = FramedWrite::new(write, LengthDelimitedCodec::new());
-                let mut transport_read = FramedRead::new(read, LengthDelimitedCodec::new());
-                while let Some(frame) = transport_read.next().await {
-                    if let Err(e) =
-                        Self::handle_message(frame, &core_channel, &mut transport_write).await
-                    {
-                        warn!("{}", e);
+        tokio::spawn(async move {
+            loop {
+                let (socket, peer) = match listener.accept().await {
+                    Ok(value) => value,
+                    Err(e) => {
+                        warn!("{}", DiemError::from(e));
+                        continue;
                     }
-                }
-                info!("Connection closed by peer {}", peer);
-            });
-        }
+                };
+                info!("Connection established with peer {}", peer);
+
+                let core_channel = core_channel.clone();
+                tokio::spawn(async move {
+                    let (read, write) = socket.into_split();
+                    let mut transport_write = FramedWrite::new(write, LengthDelimitedCodec::new());
+                    let mut transport_read = FramedRead::new(read, LengthDelimitedCodec::new());
+                    while let Some(frame) = transport_read.next().await {
+                        if let Err(e) =
+                            Self::handle_message(frame, &core_channel, &mut transport_write).await
+                        {
+                            warn!("{}", e);
+                        }
+                    }
+                    info!("Connection closed by peer {}", peer);
+                });
+            }
+        });
     }
 
     async fn handle_message(
