@@ -1,6 +1,7 @@
 use super::*;
 use crate::crypto::crypto_tests::keys;
 use std::fmt;
+use std::fs;
 
 impl Committee {
     pub fn set_base_port(&mut self, port: u16) {
@@ -65,6 +66,7 @@ fn quorum_threshold() {
 fn committee_read_write() {
     let committee = committee();
     let filename = ".committee_test_read_write.json";
+    let _ = fs::remove_dir_all(filename);
     let result = committee.write(filename);
     assert!(result.is_ok());
     let read_committee = Committee::read(filename);

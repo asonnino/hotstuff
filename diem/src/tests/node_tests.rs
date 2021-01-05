@@ -46,7 +46,7 @@ async fn end_to_end() {
             })
         })
         .collect();
-    
+
     // Ensure all threads terminated correctly.
     assert!(try_join_all(handles).await.is_ok());
 }
