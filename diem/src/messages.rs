@@ -1,7 +1,7 @@
 use crate::config::Committee;
 use crate::core::RoundNumber;
 use crate::crypto::{Digest, Hash, PublicKey, Signature, SignatureService};
-use crate::error::{DiemError, DiemResult};
+use crate::error::{ConsensusError, ConsensusResult};
 use ed25519_dalek::Digest as _;
 use ed25519_dalek::Sha512;
 use serde::{Deserialize, Serialize};
@@ -142,24 +142,24 @@ impl fmt::Debug for Vote {
 }
 
 pub trait GenericQC: Hash {
-    fn verify(&self, committee: &Committee) -> DiemResult<()> {
+    fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
         // Ensure the QC has a quorum.
         let mut weight = 0;
         let mut used = HashSet::new();
         for (name, _) in self.votes().iter() {
-            ensure!(!used.contains(name), DiemError::AuthorityReuse(*name));
+            ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
             let voting_rights = committee.stake(name);
-            ensure!(voting_rights > 0, DiemError::UnknownAuthority(*name));
+            ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
             used.insert(*name);
             weight += voting_rights;
         }
         ensure!(
             weight >= committee.quorum_threshold(),
-            DiemError::QCRequiresQuorum
+            ConsensusError::QCRequiresQuorum
         );
 
         // Check the signatures.
-        Signature::verify_batch(&self.digest(), self.votes()).map_err(DiemError::from)
+        Signature::verify_batch(&self.digest(), self.votes()).map_err(ConsensusError::from)
     }
 
     fn votes(&self) -> &Vec<(PublicKey, Signature)>;

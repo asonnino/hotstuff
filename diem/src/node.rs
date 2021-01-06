@@ -2,7 +2,7 @@ use crate::config::Config as _;
 use crate::config::{Committee, Parameters, Secret};
 use crate::core::Core;
 use crate::crypto::SignatureService;
-use crate::error::{DiemError, DiemResult};
+use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
 use crate::mempool::Mempool;
 use crate::messages::Block;
@@ -22,7 +22,7 @@ impl Node {
         key_file: &str,
         store_path: &str,
         parameters: Option<Parameters>,
-    ) -> DiemResult<Receiver<Block>> {
+    ) -> ConsensusResult<Receiver<Block>> {
         // Read the committee and secret key from file.
         let committee = Committee::read(committee_file)?;
         let secret = Secret::read(key_file)?;
@@ -32,7 +32,7 @@ impl Node {
         let secret_key = secret.secret;
         let address = match committee.address(&name) {
             Some(address) => address,
-            None => bail!(DiemError::ConfigError(
+            None => bail!(ConsensusError::ConfigError(
                 committee_file.to_string(),
                 "Node name in not in the committee".to_string()
             )),
@@ -78,7 +78,7 @@ impl Node {
         Ok(rx_commit)
     }
 
-    pub fn print_key_file(filename: &str) -> DiemResult<()> {
+    pub fn print_key_file(filename: &str) -> ConsensusResult<()> {
         Secret::new().write(filename)
     }
 }

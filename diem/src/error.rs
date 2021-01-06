@@ -20,10 +20,10 @@ macro_rules! ensure {
     };
 }
 
-pub type DiemResult<T> = Result<T, DiemError>;
+pub type ConsensusResult<T> = Result<T, ConsensusError>;
 
 #[derive(Error, Debug)]
-pub enum DiemError {
+pub enum ConsensusError {
     #[error("Network error: {0}")]
     NetworkError(#[from] std::io::Error),
 
@@ -59,8 +59,8 @@ pub enum DiemError {
     },
 }
 
-impl From<ed25519::Error> for DiemError {
+impl From<ed25519::Error> for ConsensusError {
     fn from(_e: ed25519::Error) -> Self {
-        DiemError::InvalidSignature
+        ConsensusError::InvalidSignature
     }
 }

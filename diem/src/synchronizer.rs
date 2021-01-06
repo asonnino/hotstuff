@@ -1,7 +1,7 @@
 use crate::core::CoreMessage;
 use crate::crypto::Hash as _;
 use crate::crypto::{Digest, PublicKey};
-use crate::error::DiemResult;
+use crate::error::ConsensusResult;
 use crate::messages::{Block, QC};
 use crate::network::NetMessage;
 use crate::store::Store;
@@ -93,12 +93,12 @@ impl Synchronizer {
         }
     }
 
-    async fn waiter(mut store: Store, wait_on: Digest, deliver: Block) -> DiemResult<Block> {
+    async fn waiter(mut store: Store, wait_on: Digest, deliver: Block) -> ConsensusResult<Block> {
         let _ = store.notify_read(wait_on.to_vec()).await?;
         Ok(deliver)
     }
 
-    async fn get_previous_block(&mut self, block: &Block) -> DiemResult<Option<Block>> {
+    async fn get_previous_block(&mut self, block: &Block) -> ConsensusResult<Option<Block>> {
         if block.qc == QC::genesis() {
             return Ok(Some(Block::genesis()));
         }
@@ -118,7 +118,7 @@ impl Synchronizer {
     pub async fn get_ancestors(
         &mut self,
         block: &Block,
-    ) -> DiemResult<Option<(Block, Block, Block)>> {
+    ) -> ConsensusResult<Option<(Block, Block, Block)>> {
         let b2 = match self.get_previous_block(block).await? {
             Some(b) => b,
             None => return Ok(None),

@@ -1,7 +1,7 @@
 use crate::config::Committee;
 use crate::core::CoreMessage;
 use crate::crypto::{Digest, PublicKey};
-use crate::error::{DiemError, DiemResult};
+use crate::error::{ConsensusError, ConsensusResult};
 use crate::messages::{Block, Vote};
 use bytes::{Bytes, BytesMut};
 use futures::future::FutureExt as _;
@@ -95,14 +95,14 @@ impl NetSender {
     }
 
     /// Send a message to a specific network address.
-    async fn send(message: Bytes, address: String) -> DiemResult<()> {
+    async fn send(message: Bytes, address: String) -> ConsensusResult<()> {
         let stream = TcpStream::connect(address).await?;
         let (read, write) = stream.into_split();
         let mut transport_write = FramedWrite::new(write, LengthDelimitedCodec::new());
         let mut transport_read = FramedRead::new(read, LengthDelimitedCodec::new());
         transport_write.send(message).await?;
         if let None | Some(Err(_)) = transport_read.next().await {
-            bail!(DiemError::NetworkError(io::Error::new(
+            bail!(ConsensusError::NetworkError(io::Error::new(
                 io::ErrorKind::Other,
                 "Failed to receive Ack from peer"
             )))
@@ -125,7 +125,7 @@ impl NetReceiver {
                 let (socket, peer) = match listener.accept().await {
                     Ok(value) => value,
                     Err(e) => {
-                        warn!("{}", DiemError::from(e));
+                        warn!("{}", ConsensusError::from(e));
                         continue;
                     }
                 };
@@ -153,7 +153,7 @@ impl NetReceiver {
         frame: Result<BytesMut, io::Error>,
         core_channel: &Sender<CoreMessage>,
         transport_write: &mut FramedWrite<OwnedWriteHalf, LengthDelimitedCodec>,
-    ) -> DiemResult<()> {
+    ) -> ConsensusResult<()> {
         let bytes = frame?;
         let message = bincode::deserialize(&bytes)?;
         if let Err(e) = core_channel.send(message).await {

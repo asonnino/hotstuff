@@ -1,7 +1,7 @@
 use crate::config::{Committee, Stake};
 use crate::core::RoundNumber;
 use crate::crypto::{Digest, Hash, PublicKey, Signature};
-use crate::error::{DiemError, DiemResult};
+use crate::error::{ConsensusError, ConsensusResult};
 use crate::messages::Vote;
 use std::collections::{HashMap, HashSet};
 
@@ -26,7 +26,7 @@ impl Aggregator {
         }
     }
 
-    pub fn add_vote(&mut self, vote: Vote) -> DiemResult<Option<Votes>> {
+    pub fn add_vote(&mut self, vote: Vote) -> ConsensusResult<Option<Votes>> {
         // Record that an authority voted for this round; we accept at most
         // one vote per authority per round.
         if !self
@@ -35,7 +35,7 @@ impl Aggregator {
             .or_insert_with(HashSet::new)
             .insert(vote.author)
         {
-            bail!(DiemError::AuthorityReuse(vote.author));
+            bail!(ConsensusError::AuthorityReuse(vote.author));
         }
 
         // Add the new vote to our aggregator and see if we have a QC.
@@ -69,18 +69,18 @@ impl QuorumMaker {
     }
 
     /// Try to append a signature to a (partial) quorum.
-    pub fn append(&mut self, vote: Vote, committee: &Committee) -> DiemResult<Option<Votes>> {
+    pub fn append(&mut self, vote: Vote, committee: &Committee) -> ConsensusResult<Option<Votes>> {
         let author = vote.author;
 
         // Check that each authority only appears once.
         ensure!(
             !self.used.contains(&author),
-            DiemError::AuthorityReuse(author)
+            ConsensusError::AuthorityReuse(author)
         );
 
         // Ensure the authority has voting rights.
         let voting_rights = committee.stake(&author);
-        ensure!(voting_rights > 0, DiemError::UnknownAuthority(author));
+        ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(author));
 
         // Check the signature on the vote.
         vote.signature.verify(&vote.digest(), &author)?;

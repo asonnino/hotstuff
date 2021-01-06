@@ -2,7 +2,7 @@ use crate::aggregator::Aggregator;
 use crate::config::{Committee, Parameters};
 use crate::crypto::Hash as _;
 use crate::crypto::{Digest, PublicKey, SignatureService};
-use crate::error::{DiemError, DiemResult};
+use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
 use crate::mempool::Mempool;
 use crate::messages::{Block, GenericQC, Vote, QC, TC};
@@ -119,10 +119,13 @@ impl Core {
         tx_core
     }
 
-    async fn store_block(&mut self, block: &Block) -> DiemResult<()> {
+    async fn store_block(&mut self, block: &Block) -> ConsensusResult<()> {
         let key = block.digest().to_vec();
         let value = bincode::serialize(block).expect("Failed to serialize block");
-        self.store.write(key, value).await.map_err(DiemError::from)
+        self.store
+            .write(key, value)
+            .await
+            .map_err(ConsensusError::from)
     }
 
     async fn schedule_timer(&mut self) {
@@ -136,7 +139,12 @@ impl Core {
             .await;
     }
 
-    async fn make_block(&mut self, qc: QC, tc: Option<TC>, round: RoundNumber) -> DiemResult<()> {
+    async fn make_block(
+        &mut self,
+        qc: QC,
+        tc: Option<TC>,
+        round: RoundNumber,
+    ) -> ConsensusResult<()> {
         let block = Block::new(
             qc,
             tc,
@@ -157,7 +165,7 @@ impl Core {
         Ok(())
     }
 
-    async fn handle_propose(&mut self, block: &Block) -> DiemResult<()> {
+    async fn handle_propose(&mut self, block: &Block) -> ConsensusResult<()> {
         // Reject old blocks.
         if block.round <= self.round {
             return Ok(());
@@ -169,12 +177,12 @@ impl Core {
             Some(ref tc) => block.round == tc.round + 1,
             None => block.round == block.qc.round + 1,
         };
-        ensure!(ok, DiemError::MalformedBlock(block.digest()));
+        ensure!(ok, ConsensusError::MalformedBlock(block.digest()));
 
         // Ensure the block proposer is the right leader for the round.
         ensure!(
             block.author == self.leader_elector.get_leader(block.round),
-            DiemError::WrongLeader {
+            ConsensusError::WrongLeader {
                 digest: block.digest(),
                 leader: block.author,
                 round: block.round
@@ -198,7 +206,7 @@ impl Core {
         self.process_block(&block).await
     }
 
-    async fn process_block(&mut self, block: &Block) -> DiemResult<()> {
+    async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
         // Let's see if we have the block's data. If we don't, the mempool
         // will get it and them make us resume processing this block.
         if !self.mempool.ready(&block.payload).await {
@@ -285,7 +293,7 @@ impl Core {
         Ok(())
     }
 
-    async fn handle_vote(&mut self, vote: Vote) -> DiemResult<()> {
+    async fn handle_vote(&mut self, vote: Vote) -> ConsensusResult<()> {
         if vote.round < self.round {
             return Ok(());
         }
@@ -334,7 +342,11 @@ impl Core {
         }
     }
 
-    async fn handle_sync_request(&mut self, digest: Digest, sender: PublicKey) -> DiemResult<()> {
+    async fn handle_sync_request(
+        &mut self,
+        digest: Digest,
+        sender: PublicKey,
+    ) -> ConsensusResult<()> {
         if let Some(bytes) = self.store.read(digest.to_vec()).await? {
             let block = bincode::deserialize(&bytes)?;
             let message = NetMessage::SyncReply(block, sender);
@@ -369,8 +381,8 @@ impl Core {
                         };
                         match result {
                             Ok(()) => debug!("Message successfully processed."),
-                            Err(DiemError::StoreError(e)) => error!("{}", e),
-                            Err(DiemError::SerializationError(e)) => error!("Store corrupted. {}", e),
+                            Err(ConsensusError::StoreError(e)) => error!("{}", e),
+                            Err(ConsensusError::SerializationError(e)) => error!("Store corrupted. {}", e),
                             Err(e) => warn!("{}", e),
                         }
                     }

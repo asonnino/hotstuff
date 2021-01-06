@@ -1,5 +1,5 @@
 use crate::crypto::{generate_production_keypair, PublicKey, SecretKey};
-use crate::error::{DiemError, DiemResult};
+use crate::error::{ConsensusError, ConsensusResult};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -15,15 +15,15 @@ pub type Stake = u32;
 pub type EpochNumber = u128;
 
 pub trait Config: Serialize + DeserializeOwned {
-    fn read(path: &str) -> DiemResult<Self> {
+    fn read(path: &str) -> ConsensusResult<Self> {
         let reader = || -> Result<Self, std::io::Error> {
             let data = fs::read(path)?;
             Ok(serde_json::from_slice(data.as_slice())?)
         };
-        reader().map_err(|e| DiemError::ConfigError(path.to_string(), e.to_string()))
+        reader().map_err(|e| ConsensusError::ConfigError(path.to_string(), e.to_string()))
     }
 
-    fn write(&self, path: &str) -> DiemResult<()> {
+    fn write(&self, path: &str) -> ConsensusResult<()> {
         let writer = || -> Result<(), std::io::Error> {
             let file = OpenOptions::new().create(true).write(true).open(path)?;
             let mut writer = BufWriter::new(file);
@@ -32,7 +32,7 @@ pub trait Config: Serialize + DeserializeOwned {
             writer.write_all(b"\n")?;
             Ok(())
         };
-        writer().map_err(|e| DiemError::ConfigError(path.to_string(), e.to_string()))
+        writer().map_err(|e| ConsensusError::ConfigError(path.to_string(), e.to_string()))
     }
 }
 

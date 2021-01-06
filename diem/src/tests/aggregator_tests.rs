@@ -60,7 +60,7 @@ fn authority_reuse() {
 
     // Add a vote from the same authority.
     match aggregator.add_vote(vote()) {
-        Err(DiemError::AuthorityReuse(name)) => assert_eq!(name, vote().author),
+        Err(ConsensusError::AuthorityReuse(name)) => assert_eq!(name, vote().author),
         _ => assert!(false),
     }
 }
@@ -77,7 +77,7 @@ fn unknown_authority() {
         ..vote()
     };
     match aggregator.add_vote(vote) {
-        Err(DiemError::UnknownAuthority(name)) => assert_eq!(name, unknown),
+        Err(ConsensusError::UnknownAuthority(name)) => assert_eq!(name, unknown),
         _ => assert!(false),
     }
 }
