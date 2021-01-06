@@ -233,12 +233,11 @@ impl Core {
             None => block.qc.round + 1,
         };
         if self.round < possible_new_round {
-            info!("Moved to round {}", self.round);
-
             // Cancel the timeout timer for this round and update the round number.
             let timer_id = format!("core:{}", self.round);
             self.timer_manager.cancel(timer_id).await;
             self.round = possible_new_round;
+            info!("Moved to round {}", self.round);
 
             // Cleanup the vote aggregator.
             self.aggregator.cleanup(&self.round);

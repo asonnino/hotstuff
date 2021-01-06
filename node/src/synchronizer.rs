@@ -47,8 +47,8 @@ impl Synchronizer {
                     message = rx_inner.next().fuse() => {
                         if let Some(block) = message {
                             if pending.insert(block.digest()) {
-                                let previous = block.previous();
-                                let fut = Self::waiter(store_copy.clone(), previous, block);
+                                let previous = block.previous().clone();
+                                let fut = Self::waiter(store_copy.clone(), previous.clone(), block);
                                 waiting.push(fut);
                                 let sync_request = NetMessage::SyncRequest(previous, name);
                                 if let Err(e) = network_channel.send(sync_request).await {
@@ -74,7 +74,7 @@ impl Synchronizer {
                             // This ensure liveness in case Sync Requests are lost.
                             // It should not happen in theory, but the internet is wild.
                             for digest in &pending {
-                                let sync_request = NetMessage::SyncRequest(*digest, name);
+                                let sync_request = NetMessage::SyncRequest(digest.clone(), name);
                                 if let Err(e) = network_channel.send(sync_request).await {
                                     panic!("Failed to send Sync Request to network: {}", e);
                                 }

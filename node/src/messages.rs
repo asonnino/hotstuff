@@ -49,8 +49,8 @@ impl Block {
         Block::default()
     }
 
-    pub fn previous(&self) -> Digest {
-        self.qc.hash
+    pub fn previous(&self) -> &Digest {
+        &self.qc.hash
     }
 }
 
@@ -60,7 +60,7 @@ impl Hash for Block {
         hasher.update(self.author.0);
         hasher.update(self.round.to_le_bytes());
         hasher.update(&self.payload);
-        hasher.finalize().as_slice()[..32].try_into().unwrap()
+        Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }
 }
 
@@ -126,9 +126,9 @@ impl Vote {
 impl Hash for Vote {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
-        hasher.update(self.hash);
+        hasher.update(&self.hash);
         hasher.update(self.round.to_le_bytes());
-        hasher.finalize().as_slice()[..32].try_into().unwrap()
+        Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }
 }
 
@@ -187,9 +187,9 @@ impl GenericQC for QC {
 impl Hash for QC {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
-        hasher.update(self.hash);
+        hasher.update(&self.hash);
         hasher.update(self.round.to_le_bytes());
-        hasher.finalize().as_slice()[..32].try_into().unwrap()
+        Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }
 }
 
@@ -220,7 +220,7 @@ impl GenericQC for TC {
 impl Hash for TC {
     fn digest(&self) -> Digest {
         let hash = Sha512::digest(&self.round.to_le_bytes());
-        hash.as_slice()[..32].try_into().unwrap()
+        Digest(hash.as_slice()[..32].try_into().unwrap())
     }
 }
 

@@ -13,7 +13,26 @@ use tokio::sync::oneshot;
 #[path = "tests/crypto_tests.rs"]
 pub mod crypto_tests;
 
-pub type Digest = [u8; 32];
+#[derive(Hash, PartialEq, Default, Eq, Clone, Deserialize, Serialize)]
+pub struct Digest(pub [u8; 32]);
+
+impl Digest {
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.0.to_vec()
+    }
+}
+
+impl fmt::Debug for Digest {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "{}", base64::encode(&self.0))
+    }
+}
+
+impl AsRef<[u8]> for Digest {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
 
 pub trait Hash {
     fn digest(&self) -> Digest;
@@ -127,7 +146,7 @@ pub struct Signature {
 impl Signature {
     pub fn new(digest: &Digest, secret: &SecretKey) -> Self {
         let keypair = dalek::Keypair::from_bytes(&secret.0).expect("Unable to load secret key");
-        let sig = keypair.sign(digest).to_bytes();
+        let sig = keypair.sign(&digest.0).to_bytes();
         let part1 = sig[..32].try_into().expect("Unexpected signature length");
         let part2 = sig[32..64].try_into().expect("Unexpected signature length");
         Signature { part1, part2 }
@@ -143,7 +162,7 @@ impl Signature {
     pub fn verify(&self, digest: &Digest, public_key: &PublicKey) -> Result<(), ed25519::Error> {
         let signature = ed25519::signature::Signature::from_bytes(&self.flatten())?;
         let key = dalek::PublicKey::from_bytes(&public_key.0)?;
-        key.verify_strict(digest, &signature)
+        key.verify_strict(&digest.0, &signature)
     }
 
     pub fn verify_batch<'a, I>(digest: &Digest, votes: I) -> Result<(), ed25519::Error>
@@ -154,7 +173,7 @@ impl Signature {
         let mut signatures: Vec<dalek::Signature> = Vec::new();
         let mut keys: Vec<dalek::PublicKey> = Vec::new();
         for (key, sig) in votes.into_iter() {
-            messages.push(&digest[..]);
+            messages.push(&digest.0[..]);
             signatures.push(ed25519::signature::Signature::from_bytes(&sig.flatten())?);
             keys.push(dalek::PublicKey::from_bytes(&key.0)?);
         }
