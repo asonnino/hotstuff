@@ -7,7 +7,7 @@ use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
 // Fixture.
-pub async fn listener(address: String) -> JoinHandle<()> {
+pub async fn listener(address: SocketAddr) -> JoinHandle<()> {
     tokio::spawn(async move {
         let listener = TcpListener::bind(&address).await.unwrap();
         let (socket, _) = listener.accept().await.unwrap();

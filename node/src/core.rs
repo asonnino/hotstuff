@@ -340,6 +340,7 @@ impl Core {
                 panic!("Core failed to send vote to the network: {}", e);
             }
         }
+        self.schedule_timer().await;
     }
 
     async fn handle_sync_request(

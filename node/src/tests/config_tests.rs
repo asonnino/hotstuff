@@ -4,9 +4,10 @@ use std::fmt;
 use std::fs;
 
 impl Committee {
-    pub fn set_base_port(&mut self, port: u16) {
+    pub fn set_base_port(&mut self, base_port: u16) {
         for authority in self.authorities.values_mut() {
-            authority.port += port;
+            let port = authority.address.port();
+            authority.address.set_port(base_port + port);
         }
     }
 }
@@ -45,8 +46,7 @@ pub fn committee() -> Committee {
             let authority = Authority {
                 name: *name,
                 stake: 1,
-                host: "127.0.0.1".to_string(),
-                port: i as u16,
+                address: format!("127.0.0.1:{}", i).parse().unwrap(),
             };
             (*name, authority)
         })
@@ -66,7 +66,7 @@ fn quorum_threshold() {
 fn committee_read_write() {
     let committee = committee();
     let filename = ".committee_test_read_write.json";
-    let _ = fs::remove_dir_all(filename);
+    let _ = fs::remove_file(filename);
     let result = committee.write(filename);
     assert!(result.is_ok());
     let read_committee = Committee::read(filename);

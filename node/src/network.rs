@@ -12,6 +12,7 @@ use futures::stream::StreamExt as _;
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::io;
+use std::net::SocketAddr;
 use tokio::net::tcp::OwnedWriteHalf;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::{channel, Sender};
@@ -62,7 +63,7 @@ impl NetSender {
         message: NetMessage,
         committee: &Committee,
         name: PublicKey,
-    ) -> Vec<(Bytes, String)> {
+    ) -> Vec<(Bytes, SocketAddr)> {
         // Extract the message content and destination address.
         let (message, address) = match message {
             NetMessage::Block(block) => (CoreMessage::Propose(block), None),
@@ -95,7 +96,7 @@ impl NetSender {
     }
 
     /// Send a message to a specific network address.
-    async fn send(message: Bytes, address: String) -> ConsensusResult<()> {
+    async fn send(message: Bytes, address: SocketAddr) -> ConsensusResult<()> {
         let stream = TcpStream::connect(address).await?;
         let (read, write) = stream.into_split();
         let mut transport_write = FramedWrite::new(write, LengthDelimitedCodec::new());
@@ -114,12 +115,12 @@ impl NetSender {
 pub struct NetReceiver;
 
 impl NetReceiver {
-    pub async fn make(address: &str, core_channel: Sender<CoreMessage>) {
+    pub async fn make(address: &SocketAddr, core_channel: Sender<CoreMessage>) {
         let listener = TcpListener::bind(address)
             .await
             .expect("Failed to bind to TCP port");
 
-        info!("Core listening on address {}", address);
+        info!("Listening on address {}", address);
         tokio::spawn(async move {
             loop {
                 let (socket, peer) = match listener.accept().await {

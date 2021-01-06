@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::BufWriter;
 use std::io::Write as _;
+use std::net::SocketAddr;
 
 #[cfg(test)]
 #[path = "tests/config_tests.rs"]
@@ -47,7 +48,7 @@ impl Config for Parameters {}
 impl Default for Parameters {
     fn default() -> Self {
         Self {
-            timeout_delay: 1_000,
+            timeout_delay: 10_000,
             sync_retry_delay: 10_000,
         }
     }
@@ -72,8 +73,7 @@ impl Config for Secret {}
 pub struct Authority {
     pub name: PublicKey,
     pub stake: Stake,
-    pub host: String,
-    pub port: u16,
+    pub address: SocketAddr,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -101,17 +101,15 @@ impl Committee {
         2 * self.total_votes() / 3 + 1
     }
 
-    pub fn address(&self, name: &PublicKey) -> Option<String> {
-        self.authorities
-            .get(name)
-            .map(|x| format!("{}:{}", x.host, x.port))
+    pub fn address(&self, name: &PublicKey) -> Option<SocketAddr> {
+        self.authorities.get(name).map(|x| x.address)
     }
 
-    pub fn broadcast_addresses(&self, myself: &PublicKey) -> Vec<String> {
+    pub fn broadcast_addresses(&self, myself: &PublicKey) -> Vec<SocketAddr> {
         self.authorities
             .values()
             .filter(|x| x.name != *myself)
-            .map(|x| format!("{}:{}", x.host, x.port))
+            .map(|x| x.address)
             .collect()
     }
 }

@@ -21,7 +21,7 @@ impl Node {
         committee_file: &str,
         key_file: &str,
         store_path: &str,
-        parameters: Option<Parameters>,
+        parameters: Option<&str>,
     ) -> ConsensusResult<Receiver<Block>> {
         // Read the committee and secret key from file.
         let committee = Committee::read(committee_file)?;
@@ -31,7 +31,10 @@ impl Node {
         let name = secret.name;
         let secret_key = secret.secret;
         let address = match committee.address(&name) {
-            Some(address) => address,
+            Some(mut address) => {
+                address.set_ip("0.0.0.0".parse().unwrap());
+                address
+            }
             None => bail!(ConsensusError::ConfigError(
                 committee_file.to_string(),
                 "Node name in not in the committee".to_string()
@@ -40,7 +43,7 @@ impl Node {
 
         // Load default parameters if none are specified.
         let parameters = match parameters {
-            Some(parameters) => parameters,
+            Some(filename) => Parameters::read(filename)?,
             None => Parameters::default(),
         };
 

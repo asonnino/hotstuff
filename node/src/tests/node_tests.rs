@@ -13,8 +13,8 @@ async fn end_to_end() {
         .into_iter()
         .enumerate()
         .map(|(i, key)| {
-            let filename = format!(".node_{}.json", i);
-            let _ = fs::remove_dir_all(&filename);
+            let filename = format!(".node_test_end_to_end_{}.json", i);
+            let _ = fs::remove_file(&filename);
             let (name, secret) = key;
             Secret { name, secret }.write(&filename).unwrap();
             filename
@@ -22,7 +22,7 @@ async fn end_to_end() {
         .collect();
 
     // Make the committee to file.
-    let committee_file = ".committee.json";
+    let committee_file = ".committee_test_end_to_end.json";
     let _ = fs::remove_dir_all(committee_file);
     let mut committee = committee();
     committee.set_base_port(6000);
