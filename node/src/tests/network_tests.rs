@@ -25,7 +25,7 @@ pub async fn listener(address: SocketAddr) -> JoinHandle<()> {
 async fn send() {
     // Make the network sender.
     let mut committee = committee();
-    committee.set_base_port(5000);
+    committee.increment_base_port(5000);
     let (myself, _) = keys().pop().unwrap();
     let sender = NetSender::make(myself, committee.clone()).await;
 
@@ -48,7 +48,7 @@ async fn send() {
 async fn broadcast() {
     // Make the network sender.
     let mut committee = committee();
-    committee.set_base_port(5100);
+    committee.increment_base_port(5100);
     let mut keys = keys();
     let (myself, _) = keys.pop().unwrap();
     let sender = NetSender::make(myself, committee.clone()).await;
@@ -84,7 +84,7 @@ async fn broadcast() {
 async fn receive() {
     // Make the network receiver.
     let mut committee = committee();
-    committee.set_base_port(5200);
+    committee.increment_base_port(5200);
     let (myself, _) = keys().pop().unwrap();
     let address = committee.address(&myself).unwrap();
     let (tx_core, mut rx_core) = channel(10);

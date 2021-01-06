@@ -25,7 +25,7 @@ async fn end_to_end() {
     let committee_file = ".committee_test_end_to_end.json";
     let _ = fs::remove_dir_all(committee_file);
     let mut committee = committee();
-    committee.set_base_port(6000);
+    committee.increment_base_port(6000);
     committee.write(committee_file).unwrap();
 
     // Run all nodes.
@@ -35,11 +35,11 @@ async fn end_to_end() {
             let store_path = format!(".store_test_end_to_end_{}", x);
             let _ = fs::remove_dir_all(&store_path);
             tokio::spawn(async move {
-                let mut rx_channel = Node::make(committee_file, &key_file, &store_path, None)
+                let mut rx = Node::make(committee_file, &key_file, &store_path, None)
                     .await
                     .unwrap();
 
-                match rx_channel.recv().await {
+                match rx.recv().await {
                     Some(block) => assert_eq!(block, Block::genesis()),
                     _ => assert!(false),
                 }

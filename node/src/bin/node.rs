@@ -54,9 +54,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let store_path = subm.value_of("store").unwrap();
             Runtime::new()?.block_on(async {
                 match Node::make(committee_file, key_file, store_path, parameters_file).await {
-                    Ok(mut rx_channel) => {
+                    Ok(mut rx) => {
                         // Sink the commit channel.
-                        let _ = rx_channel.recv().await;
+                        while rx.recv().await.is_some() {}
                     }
                     Err(e) => error!("{}", e),
                 }
@@ -66,9 +66,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let nodes = subm.value_of("nodes").unwrap();
             match nodes.parse::<usize>() {
                 Ok(nodes) => {
-                    if let Err(e) = deploy_testbed(nodes) {
-                        error!("{}", e);
-                    }
+                    Runtime::new()?.block_on(async {
+                        if let Err(e) = deploy_testbed(nodes).await {
+                            error!("{}", e);
+                        }
+                    });
                 }
                 Err(_) => error!("The number of nodes must be an integer"),
             }
@@ -78,20 +80,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn deploy_testbed(nodes: usize) -> Result<(), Box<dyn std::error::Error>> {
-    let keys: Vec<_> = (0..nodes).map(|_| Secret::default()).collect();
+async fn deploy_testbed(nodes: usize) -> Result<(), Box<dyn std::error::Error>> {
+    let keys: Vec<_> = (0..nodes).map(|_| Secret::new()).collect();
 
-    let committee_file = ".committee.json";
+    let committee_file = "committee.json";
     let _ = fs::remove_file(committee_file);
     let authorities: Vec<_> = keys.iter().map(|keys| (keys.name, /* stake */ 1)).collect();
-    Committee::new(&authorities, /* epoch */ 1).write(committee_file)?;
+    let mut committee = Committee::new(&authorities, /* epoch */ 1);
+    for x in committee.authorities.values_mut() {
+        x.address.set_port(x.address.port() + 7000);
+    }
+    committee.write(committee_file)?;
 
     for (i, keypair) in keys.iter().enumerate() {
-        let key_file = format!(".node_{}.json", i);
+        let key_file = format!("node_{}.json", i);
         let _ = fs::remove_file(&key_file);
         keypair.write(&key_file)?;
 
-        let store_path = format!(".store_{}", i);
+        let store_path = format!("store_{}", i);
         let _ = fs::remove_dir_all(&store_path);
 
         tokio::spawn(async move {
