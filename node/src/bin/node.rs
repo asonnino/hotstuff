@@ -5,9 +5,9 @@ use node::config::Config as _;
 use node::config::{Committee, Secret};
 use node::node::Node;
 use std::fs;
-use tokio::runtime::Runtime;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let matches = App::new(crate_name!())
         .version(crate_version!())
         .about("A research implementation of the HostStuff protocol.")
@@ -52,15 +52,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let committee_file = subm.value_of("committee").unwrap();
             let parameters_file = subm.value_of("parameters");
             let store_path = subm.value_of("store").unwrap();
-            Runtime::new()?.block_on(async {
-                match Node::make(committee_file, key_file, store_path, parameters_file).await {
-                    Ok(mut rx) => {
-                        // Sink the commit channel.
-                        while rx.recv().await.is_some() {}
-                    }
-                    Err(e) => error!("{}", e),
+            match Node::make(committee_file, key_file, store_path, parameters_file).await {
+                Ok(mut rx) => {
+                    // Sink the commit channel.
+                    while rx.recv().await.is_some() {}
                 }
-            });
+                Err(e) => error!("{}", e),
+            }
         }
         ("deploy", Some(subm)) => {
             let nodes = subm.value_of("nodes").unwrap();
@@ -101,10 +99,13 @@ async fn deploy_testbed(nodes: usize) -> Result<(), Box<dyn std::error::Error>> 
         let _ = fs::remove_dir_all(&store_path);
 
         tokio::spawn(async move {
-            let mut rx_channel = Node::make(committee_file, &key_file, &store_path, None)
-                .await
-                .unwrap();
-            let _ = rx_channel.recv().await;
+            match Node::make(committee_file, &key_file, &store_path, None).await {
+                Ok(mut rx) => {
+                    // Sink the commit channel.
+                    while rx.recv().await.is_some() {}
+                }
+                Err(e) => error!("{}", e),
+            }
         });
     }
     Ok(())
