@@ -37,7 +37,7 @@ impl Node {
             }
             None => bail!(ConsensusError::ConfigError(
                 committee_file.to_string(),
-                "Node name in not in the committee".to_string()
+                "Node name is not in the committee".to_string()
             )),
         };
 

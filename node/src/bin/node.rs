@@ -1,6 +1,8 @@
 use clap::{crate_name, crate_version, App, AppSettings, SubCommand};
 use env_logger::Env;
 use log::error;
+use node::config::Config as _;
+use node::config::{Committee, Secret};
 use node::node::Node;
 use std::fs;
 use tokio::runtime::Runtime;
@@ -66,7 +68,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap()
                 .parse::<usize>()
                 .expect("The number of nodes must be an integer");
-            deploy_testbed(nodes)?;
+            if let Err(e) = deploy_testbed(nodes) {
+                error!("{}", e);
+            }
         }
         _ => unreachable!(),
     }
@@ -74,35 +78,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn deploy_testbed(nodes: usize) -> Result<(), Box<dyn std::error::Error>> {
-    // Make the key files.
-    let key_files: Vec<_> = (0..nodes).map(|x| format!(".node_{}.json", x)).collect();
-    for filename in &key_files {
+    let mut key_files = Vec::new();
+    let mut keys = Vec::new();
+    for i in 0..nodes {
+        let keypair = Secret::new();
+        let filename = format!(".node_{}.json", i);
         let _ = fs::remove_file(&filename);
-        Node::print_key_file(&filename)?;
+        keypair.write(&filename)?;
+        keys.push(keypair);
+        key_files.push(filename);
     }
 
-    /*
-    // Make the committee to file.
     let committee_file = ".committee.json";
-    let _ = fs::remove_dir_all(committee_file);
-    let authorities = names
-        .iter()
-        .enumerate()
-        .map(|(i, name)| {
-            let authority = Authority {
-                name: *name,
-                stake: 1,
-                host: "127.0.0.1".to_string(),
-                port: i as u16,
-            };
-            (*name, authority)
-        })
-        .collect();
-    Committee {
-        authorities,
-        epoch: 1,
-    }
-    */
+    let _ = fs::remove_file(committee_file);
+    let authorities: Vec<_> = keys.into_iter().map(|keys| (keys.name, 1)).collect();
+    Committee::new(&authorities, /* epoch */ 1).write(committee_file)?;
 
+    for i in 0..nodes {
+        let key_file = key_files.get(i).unwrap().clone();
+        let store_path = format!(".store_{}", i);
+        let _ = fs::remove_dir_all(&store_path);
+        tokio::spawn(async move {
+            let mut rx_channel = Node::make(committee_file, &key_file, &store_path, None)
+                .await
+                .unwrap();
+            let _ = rx_channel.recv().await;
+        });
+    }
     Ok(())
 }

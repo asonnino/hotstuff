@@ -83,6 +83,22 @@ pub struct Committee {
 }
 
 impl Committee {
+    pub fn new(authorities: &Vec<(PublicKey, Stake)>, epoch: EpochNumber) -> Self {
+        let authorities = authorities
+            .iter()
+            .enumerate()
+            .map(|(i, (name, stake))| {
+                let authority = Authority {
+                    name: *name,
+                    stake: *stake,
+                    address: format!("127.0.0.1:{}", i).parse().unwrap(),
+                };
+                (*name, authority)
+            })
+            .collect();
+        Self { authorities, epoch }
+    }
+
     pub fn size(&self) -> usize {
         self.authorities.len()
     }

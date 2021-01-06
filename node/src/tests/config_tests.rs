@@ -38,23 +38,8 @@ impl fmt::Debug for Authority {
 
 // Fixture.
 pub fn committee() -> Committee {
-    let names: Vec<_> = keys().iter().map(|(public_key, _)| *public_key).collect();
-    let authorities = names
-        .iter()
-        .enumerate()
-        .map(|(i, name)| {
-            let authority = Authority {
-                name: *name,
-                stake: 1,
-                address: format!("127.0.0.1:{}", i).parse().unwrap(),
-            };
-            (*name, authority)
-        })
-        .collect();
-    Committee {
-        authorities,
-        epoch: 1,
-    }
+    let authorities: Vec<_> = keys().into_iter().map(|(name, _)| (name, 1)).collect();
+    Committee::new(authorities, /* epoch */ 1)
 }
 
 #[test]
