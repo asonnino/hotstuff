@@ -56,7 +56,8 @@ async fn read_notify() {
     let _ = fs::remove_dir_all(path);
     let mut store = Store::new(path).await.unwrap();
 
-    // Try to read unknown key.
+    // Try to read a kew that does not yet exist. Then write a value
+    // for that key and check that notify read returns the result.
     let key = vec![0u8, 1u8, 2u8, 3u8];
     let value = vec![4u8, 5u8, 6u8, 7u8];
     let mut operations_order = Vec::<u8>::new();
@@ -71,7 +72,6 @@ async fn read_notify() {
             () = sleep(Duration::from_millis(100)).fuse() => {
                 operations_order.push(1);
                 let _ = store.write(key.clone(), value.clone()).await;
-
             }
         }
     }

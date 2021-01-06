@@ -3,10 +3,7 @@ use crate::config::config_tests::committee;
 use crate::crypto::crypto_tests::keys;
 use crate::crypto::SecretKey;
 use crate::messages::messages_tests::chain;
-use futures::select;
 use std::fs;
-use std::time::Duration;
-use tokio::time::sleep;
 
 // Fixture.
 async fn core(
@@ -58,30 +55,19 @@ async fn handle_block() {
     let (tx_commit, _) = channel(100);
     let core_channel = core(public_key, secret_key, store, tx_network, tx_commit).await;
 
-    // Ensure the following operation happen in the right order.
-    let mut operations_order = Vec::<u8>::new();
-    loop {
-        select! {
-            value = rx_network.recv().fuse() => {
-                match value {
-                    Some(NetMessage::Vote(v, recipient)) => {
-                        assert_eq!(v, vote);
-                        let (next_leader, _) = leader_keys(2);
-                        assert_eq!(recipient, next_leader);
-                    },
-                    _ => assert!(false)
-                }
-                operations_order.push(2);
-                break;
-            },
-            () = sleep(Duration::from_millis(100)).fuse() => {
-                let message = CoreMessage::Propose(block.clone());
-                core_channel.send(message).await.unwrap();
-                operations_order.push(1);
-            }
+    // Send a block to the core.
+    let message = CoreMessage::Propose(block.clone());
+    core_channel.send(message).await.unwrap();
+
+    // Ensure we get a vote back.
+    match rx_network.recv().await {
+        Some(NetMessage::Vote(v, recipient)) => {
+            assert_eq!(v, vote);
+            let (next_leader, _) = leader_keys(2);
+            assert_eq!(recipient, next_leader);
         }
+        _ => assert!(false),
     }
-    assert_eq!(operations_order, vec![1, 2]);
 }
 
 #[tokio::test]
@@ -117,32 +103,21 @@ async fn make_block() {
     let (tx_commit, _) = channel(100);
     let core_channel = core(next_leader, next_leader_key, store, tx_network, tx_commit).await;
 
-    // Ensure the following operation happen in the right order.
-    let mut operations_order = Vec::<u8>::new();
-    loop {
-        select! {
-            value = rx_network.recv().fuse() => {
-                match value {
-                    Some(NetMessage::Block(b)) => {
-                        assert_eq!(b.round, 2);
-                        assert_eq!(b.qc, qc);
-                        assert!(b.tc.is_none());
-                    },
-                    _ => assert!(false)
-                }
-                operations_order.push(2);
-                break;
-            },
-            () = sleep(Duration::from_millis(100)).fuse() => {
-                for vote in votes.clone() {
-                    let message = CoreMessage::Vote(vote);
-                    core_channel.send(message).await.unwrap();
-                }
-                operations_order.push(1);
-            }
-        }
+    // Send all votes to the core.
+    for vote in votes.clone() {
+        let message = CoreMessage::Vote(vote);
+        core_channel.send(message).await.unwrap();
     }
-    assert_eq!(operations_order, vec![1, 2]);
+
+    // Ensure the core makes a new block.
+    match rx_network.recv().await {
+        Some(NetMessage::Block(b)) => {
+            assert_eq!(b.round, 2);
+            assert_eq!(b.qc, qc);
+            assert!(b.tc.is_none());
+        }
+        _ => assert!(false),
+    }
 }
 
 #[tokio::test]
@@ -155,34 +130,22 @@ async fn commit_block() {
     let path = ".store_test_commit_block";
     let _ = fs::remove_dir_all(path);
     let store = Store::new(path).await.unwrap();
-    let (tx_network, mut rx_network) = channel(100);
+    let (tx_network, mut _rx_network) = channel(100);
     let (tx_commit, mut rx_commit) = channel(100);
     let (public_key, secret_key) = keys().pop().unwrap();
     let core_channel = core(public_key, secret_key, store, tx_network, tx_commit).await;
 
-    // Ensure the following operation happen in the right order.
-    let mut operations_order = Vec::<u8>::new();
-    loop {
-        select! {
-            _ = rx_network.recv().fuse() => {},
-            value = rx_commit.recv().fuse() => {
-                match value {
-                    Some(b) => assert_eq!(b, Block::genesis()),
-                    _ => assert!(false)
-                }
-                operations_order.push(2);
-                break;
-            },
-            () = sleep(Duration::from_millis(100)).fuse() => {
-                for block in chain.clone() {
-                    let message = CoreMessage::Propose(block);
-                    core_channel.send(message).await.unwrap();
-                }
-                operations_order.push(1);
-            }
-        }
+    // Send a 3-chain to the core.
+    for block in chain.clone() {
+        let message = CoreMessage::Propose(block);
+        core_channel.send(message).await.unwrap();
     }
-    assert_eq!(operations_order, vec![1, 2]);
+
+    // Ensure the core commits the head.
+    match rx_commit.recv().await {
+        Some(b) => assert_eq!(b, Block::genesis()),
+        _ => assert!(false),
+    }
 }
 
 #[tokio::test]

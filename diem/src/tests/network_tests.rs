@@ -95,29 +95,18 @@ async fn receive() {
     let bytes = Bytes::from(bincode::serialize(&message).unwrap());
 
     // Send a value and ensure we get an ACK.
-    let mut operations_order = Vec::<u8>::new();
-    loop {
-        select! {
-            value = rx_core.recv().fuse() => {
-                match value {
-                    Some(CoreMessage::Propose(b)) => assert_eq!(b, block()),
-                    _ => assert!(false)
-                }
-                operations_order.push(2);
-                break;
-            },
-            () = sleep(Duration::from_millis(100)).fuse() => {
-                let stream = TcpStream::connect(address.clone()).await.unwrap();
-                let (read, write) = stream.into_split();
-                let mut transport_write = FramedWrite::new(write, LengthDelimitedCodec::new());
-                let mut transport_read = FramedRead::new(read, LengthDelimitedCodec::new());
-                transport_write.send(bytes.clone()).await.unwrap();
-                if let None | Some(Err(_)) = transport_read.next().await {
-                    assert!(false);
-                }
-                operations_order.push(1);
-            }
-        }
+    let stream = TcpStream::connect(address.clone()).await.unwrap();
+    let (read, write) = stream.into_split();
+    let mut transport_write = FramedWrite::new(write, LengthDelimitedCodec::new());
+    let mut transport_read = FramedRead::new(read, LengthDelimitedCodec::new());
+    transport_write.send(bytes.clone()).await.unwrap();
+    if let None | Some(Err(_)) = transport_read.next().await {
+        assert!(false);
     }
-    assert_eq!(operations_order, vec![1, 2]);
+
+    // Ensure the message gets passed to the core.
+    match rx_core.recv().await {
+        Some(CoreMessage::Propose(b)) => assert_eq!(b, block()),
+        _ => assert!(false),
+    }
 }
