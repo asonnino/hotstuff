@@ -120,7 +120,7 @@ impl NetReceiver {
             .await
             .expect("Failed to bind to TCP port");
 
-        info!("Listening on address {}", address);
+        debug!("Listening on address {}", address);
         tokio::spawn(async move {
             loop {
                 let (socket, peer) = match listener.accept().await {

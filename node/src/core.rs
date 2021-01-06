@@ -257,7 +257,7 @@ impl Core {
         commit_rule &= b1.round + 1 == b2.round;
         commit_rule &= b2.round + 1 == block.round;
         if commit_rule {
-            info!("Committed {:?}", b0);
+            info!("Committed {}", b0);
             if let Err(e) = self.commit_channel.send(b0.clone()).await {
                 warn!("Failed to send block through the commit channel: {}", e);
             }

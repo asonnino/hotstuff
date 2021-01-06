@@ -9,6 +9,7 @@ use crate::messages::Block;
 use crate::network::{NetReceiver, NetSender};
 use crate::store::Store;
 use tokio::sync::mpsc::{channel, Receiver};
+use log::info;
 
 #[cfg(test)]
 #[path = "tests/node_tests.rs"]
@@ -78,6 +79,7 @@ impl Node {
         let () = NetReceiver::make(&address, core_channel).await;
 
         // Return the commit receiver.
+        info!("Node {:?} successfully booted on {}", name, address);
         Ok(rx_commit)
     }
 
