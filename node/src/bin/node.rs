@@ -78,26 +78,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn deploy_testbed(nodes: usize) -> Result<(), Box<dyn std::error::Error>> {
-    let mut key_files = Vec::new();
-    let mut keys = Vec::new();
-    for i in 0..nodes {
-        let keypair = Secret::new();
-        let filename = format!(".node_{}.json", i);
-        let _ = fs::remove_file(&filename);
-        keypair.write(&filename)?;
-        keys.push(keypair);
-        key_files.push(filename);
-    }
+    let keys: Vec<_> = (0..nodes).map(|_| Secret::default()).collect();
 
     let committee_file = ".committee.json";
     let _ = fs::remove_file(committee_file);
-    let authorities: Vec<_> = keys.into_iter().map(|keys| (keys.name, 1)).collect();
+    let authorities: Vec<_> = keys.iter().map(|keys| (keys.name, /* stake */ 1)).collect();
     Committee::new(&authorities, /* epoch */ 1).write(committee_file)?;
 
-    for i in 0..nodes {
-        let key_file = key_files.get(i).unwrap().clone();
+    for (i, keypair) in keys.iter().enumerate() {
+        let key_file = format!(".node_{}.json", i);
+        let _ = fs::remove_file(&key_file);
+        keypair.write(&key_file)?;
+
         let store_path = format!(".store_{}", i);
         let _ = fs::remove_dir_all(&store_path);
+
         tokio::spawn(async move {
             let mut rx_channel = Node::make(committee_file, &key_file, &store_path, None)
                 .await

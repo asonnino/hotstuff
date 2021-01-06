@@ -1,5 +1,7 @@
-use crate::crypto::{generate_production_keypair, PublicKey, SecretKey};
+use crate::crypto::{generate_keypair, generate_production_keypair, PublicKey, SecretKey};
 use crate::error::{ConsensusError, ConsensusResult};
+use rand::rngs::StdRng;
+use rand::SeedableRng as _;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -69,6 +71,14 @@ impl Secret {
 
 impl Config for Secret {}
 
+impl Default for Secret {
+    fn default() -> Self {
+        let mut rng = StdRng::from_seed([0; 32]);
+        let (name, secret) = generate_keypair(&mut rng);
+        Self { name, secret }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Authority {
     pub name: PublicKey,
@@ -83,7 +93,7 @@ pub struct Committee {
 }
 
 impl Committee {
-    pub fn new(authorities: &Vec<(PublicKey, Stake)>, epoch: EpochNumber) -> Self {
+    pub fn new(authorities: &[(PublicKey, Stake)], epoch: EpochNumber) -> Self {
         let authorities = authorities
             .iter()
             .enumerate()
