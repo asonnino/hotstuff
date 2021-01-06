@@ -41,7 +41,7 @@ impl NetSender {
                 select! {
                     message = rx.recv().fuse() => {
                         if let Some(message) = message {
-                            debug!("Sending message {:?}", message);
+                            debug!("Sending {:?}", message);
                             for (bytes, address) in Self::make_messages(message, &committee, name) {
                                 let fut = Self::send(bytes, address);
                                 waiting.push(fut);

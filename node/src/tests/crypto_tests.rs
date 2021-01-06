@@ -6,7 +6,7 @@ use rand::SeedableRng as _;
 
 impl Hash for &[u8] {
     fn digest(&self) -> Digest {
-        Sha512::digest(self).as_slice()[..32].try_into().unwrap()
+        Digest(Sha512::digest(self).as_slice()[..32].try_into().unwrap())
     }
 }
 
@@ -125,7 +125,7 @@ async fn signature_service() {
     // Request signature from the service.
     let message: &[u8] = b"Hello, world!";
     let digest = message.digest();
-    let signature = service.request_signature(digest).await;
+    let signature = service.request_signature(digest.clone()).await;
 
     // Verify the signature we received.
     assert!(signature.verify(&digest, &public_key).is_ok());

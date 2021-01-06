@@ -372,7 +372,7 @@ impl Core {
             select! {
                 message = rx_core.recv().fuse() => {
                     if let Some(message) = message {
-                        debug!("Received message: {:?}", message);
+                        debug!("Received {:?}", message);
                         let result = match message {
                             CoreMessage::Propose(block) => self.handle_propose(&block).await,
                             CoreMessage::Vote(vote) => self.handle_vote(vote).await,
@@ -380,7 +380,7 @@ impl Core {
                             CoreMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await
                         };
                         match result {
-                            Ok(()) => debug!("Message successfully processed."),
+                            Ok(()) => (),
                             Err(ConsensusError::StoreError(e)) => error!("{}", e),
                             Err(ConsensusError::SerializationError(e)) => error!("Store corrupted. {}", e),
                             Err(e) => warn!("{}", e),
