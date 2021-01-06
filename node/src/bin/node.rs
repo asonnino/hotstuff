@@ -1,13 +1,17 @@
 use clap::{crate_name, crate_version, App, AppSettings, SubCommand};
 use env_logger::Env;
+use futures::future::try_join_all;
 use log::error;
 use node::config::Config as _;
 use node::config::{Committee, Secret};
 use node::node::Node;
 use std::fs;
+use tokio::task::JoinHandle;
+
+type MainResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> MainResult<()> {
     let matches = App::new(crate_name!())
         .version(crate_version!())
         .about("A research implementation of the HostStuff protocol.")
@@ -63,13 +67,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("deploy", Some(subm)) => {
             let nodes = subm.value_of("nodes").unwrap();
             match nodes.parse::<usize>() {
-                Ok(nodes) => {
-                    Runtime::new()?.block_on(async {
-                        if let Err(e) = deploy_testbed(nodes).await {
-                            error!("{}", e);
-                        }
-                    });
-                }
+                Ok(nodes) => match deploy_testbed(nodes).await {
+                    Ok(handles) => {
+                        let _ = try_join_all(handles).await;
+                    }
+                    Err(e) => error!("{}", e),
+                },
                 Err(_) => error!("The number of nodes must be an integer"),
             }
         }
@@ -78,7 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn deploy_testbed(nodes: usize) -> Result<(), Box<dyn std::error::Error>> {
+async fn deploy_testbed(nodes: usize) -> MainResult<Vec<JoinHandle<()>>> {
     let keys: Vec<_> = (0..nodes).map(|_| Secret::new()).collect();
 
     let committee_file = "committee.json";
@@ -90,23 +93,25 @@ async fn deploy_testbed(nodes: usize) -> Result<(), Box<dyn std::error::Error>> 
     }
     committee.write(committee_file)?;
 
-    for (i, keypair) in keys.iter().enumerate() {
-        let key_file = format!("node_{}.json", i);
-        let _ = fs::remove_file(&key_file);
-        keypair.write(&key_file)?;
+    keys.iter()
+        .enumerate()
+        .map(|(i, keypair)| {
+            let key_file = format!("node_{}.json", i);
+            let _ = fs::remove_file(&key_file);
+            keypair.write(&key_file)?;
 
-        let store_path = format!("store_{}", i);
-        let _ = fs::remove_dir_all(&store_path);
+            let store_path = format!("store_{}", i);
+            let _ = fs::remove_dir_all(&store_path);
 
-        tokio::spawn(async move {
-            match Node::make(committee_file, &key_file, &store_path, None).await {
-                Ok(mut rx) => {
-                    // Sink the commit channel.
-                    while rx.recv().await.is_some() {}
+            Ok(tokio::spawn(async move {
+                match Node::make(committee_file, &key_file, &store_path, None).await {
+                    Ok(mut rx) => {
+                        // Sink the commit channel.
+                        while rx.recv().await.is_some() {}
+                    }
+                    Err(e) => error!("{}", e),
                 }
-                Err(e) => error!("{}", e),
-            }
-        });
-    }
-    Ok(())
+            }))
+        })
+        .collect::<Result<_, Box<dyn std::error::Error>>>()
 }
