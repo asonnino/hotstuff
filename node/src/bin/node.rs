@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .about("Deploys a network of nodes locally")
                 .args_from_usage("--nodes=<INT> 'The number of nodes to deploy'"),
         )
-        .setting(AppSettings::ArgRequiredElseHelp)
+        .setting(AppSettings::SubcommandRequiredElseHelp)
         .get_matches();
 
     let log_level = match matches.occurrences_of("v") {
@@ -63,13 +63,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
         }
         ("deploy", Some(subm)) => {
-            let nodes = subm
-                .value_of("nodes")
-                .unwrap()
-                .parse::<usize>()
-                .expect("The number of nodes must be an integer");
-            if let Err(e) = deploy_testbed(nodes) {
-                error!("{}", e);
+            let nodes = subm.value_of("nodes").unwrap();
+            match nodes.parse::<usize>() {
+                Ok(nodes) => {
+                    if let Err(e) = deploy_testbed(nodes) {
+                        error!("{}", e);
+                    }
+                }
+                Err(_) => error!("The number of nodes must be an integer"),
             }
         }
         _ => unreachable!(),
