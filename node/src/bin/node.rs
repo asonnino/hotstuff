@@ -67,13 +67,13 @@ async fn main() -> MainResult<()> {
         ("deploy", Some(subm)) => {
             let nodes = subm.value_of("nodes").unwrap();
             match nodes.parse::<usize>() {
-                Ok(nodes) => match deploy_testbed(nodes) {
+                Ok(nodes) if nodes > 0 => match deploy_testbed(nodes) {
                     Ok(handles) => {
                         let _ = try_join_all(handles).await;
                     }
                     Err(e) => error!("{}", e),
                 },
-                Err(_) => error!("The number of nodes must be an integer"),
+                _ => error!("The number of nodes must be a positive integer"),
             }
         }
         _ => unreachable!(),

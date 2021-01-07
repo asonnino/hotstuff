@@ -4,7 +4,7 @@ use super::*;
 async fn schedule() {
     // Make a timer manager and give it enough time to boot.
     let mut timer_manager = TimerManager::new().await;
-    let (tx_timer, mut rx_timer) = channel(100);
+    let (tx_timer, mut rx_timer) = channel(1);
     sleep(Duration::from_millis(50)).await;
 
     // schedule a timer.
@@ -20,7 +20,7 @@ async fn schedule() {
 async fn cancel() {
     // Make a timer manager and give it enough time to boot.
     let mut timer_manager = TimerManager::new().await;
-    let (tx_timer, mut rx_timer) = channel(100);
+    let (tx_timer, mut rx_timer) = channel(2);
     sleep(Duration::from_millis(50)).await;
 
     // schedule two timers.

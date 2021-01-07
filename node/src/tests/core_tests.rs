@@ -51,8 +51,8 @@ async fn handle_block() {
     let path = ".store_test_handle_block";
     let _ = fs::remove_dir_all(path);
     let store = Store::new(path).await.unwrap();
-    let (tx_network, mut rx_network) = channel(100);
-    let (tx_commit, _) = channel(100);
+    let (tx_network, mut rx_network) = channel(1);
+    let (tx_commit, _) = channel(1);
     let core_channel = core(public_key, secret_key, store, tx_network, tx_commit).await;
 
     // Send a block to the core.
@@ -99,8 +99,8 @@ async fn make_block() {
     let path = ".store_test_make_block";
     let _ = fs::remove_dir_all(path);
     let store = Store::new(path).await.unwrap();
-    let (tx_network, mut rx_network) = channel(100);
-    let (tx_commit, _) = channel(100);
+    let (tx_network, mut rx_network) = channel(1);
+    let (tx_commit, _) = channel(1);
     let core_channel = core(next_leader, next_leader_key, store, tx_network, tx_commit).await;
 
     // Send all votes to the core.
@@ -130,8 +130,8 @@ async fn commit_block() {
     let path = ".store_test_commit_block";
     let _ = fs::remove_dir_all(path);
     let store = Store::new(path).await.unwrap();
-    let (tx_network, mut _rx_network) = channel(100);
-    let (tx_commit, mut rx_commit) = channel(100);
+    let (tx_network, mut _rx_network) = channel(3);
+    let (tx_commit, mut rx_commit) = channel(1);
     let (public_key, secret_key) = keys().pop().unwrap();
     let core_channel = core(public_key, secret_key, store, tx_network, tx_commit).await;
 
@@ -158,8 +158,8 @@ async fn make_timeout() {
     let path = ".store_test_make_timeout";
     let _ = fs::remove_dir_all(path);
     let store = Store::new(path).await.unwrap();
-    let (tx_network, mut rx_network) = channel(100);
-    let (tx_commit, _) = channel(100);
+    let (tx_network, mut rx_network) = channel(1);
+    let (tx_commit, _) = channel(1);
     let signature_service = SignatureService::new(secret_key).await;
     let leader_elector = LeaderElector::new(committee());
     let mempool = Mempool::new().await;

@@ -31,7 +31,7 @@ pub struct NetSender;
 impl NetSender {
     pub async fn make(name: PublicKey, committee: Committee) -> Sender<NetMessage> {
         let mut senders = HashMap::<_, Sender<_>>::new();
-        let (tx, mut rx) = channel(10_000);
+        let (tx, mut rx) = channel(1000);
         tokio::spawn(async move {
             while let Some(message) = rx.recv().await {
                 debug!("Sending {:?}", message);

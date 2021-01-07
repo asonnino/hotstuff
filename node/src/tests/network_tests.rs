@@ -74,7 +74,7 @@ async fn receive() {
     committee.increment_base_port(5200);
     let (myself, _) = keys().pop().unwrap();
     let address = committee.address(&myself).unwrap();
-    let (tx_core, mut rx_core) = channel(10);
+    let (tx_core, mut rx_core) = channel(1);
     NetReceiver::make(&address, tx_core).await;
 
     // Make the address and message to send.
