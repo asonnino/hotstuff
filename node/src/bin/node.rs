@@ -67,7 +67,7 @@ async fn main() -> MainResult<()> {
         ("deploy", Some(subm)) => {
             let nodes = subm.value_of("nodes").unwrap();
             match nodes.parse::<usize>() {
-                Ok(nodes) => match deploy_testbed(nodes).await {
+                Ok(nodes) => match deploy_testbed(nodes) {
                     Ok(handles) => {
                         let _ = try_join_all(handles).await;
                     }
@@ -81,7 +81,7 @@ async fn main() -> MainResult<()> {
     Ok(())
 }
 
-async fn deploy_testbed(nodes: usize) -> MainResult<Vec<JoinHandle<()>>> {
+fn deploy_testbed(nodes: usize) -> MainResult<Vec<JoinHandle<()>>> {
     let keys: Vec<_> = (0..nodes).map(|_| Secret::new()).collect();
 
     let committee_file = "committee.json";
