@@ -154,6 +154,7 @@ impl Core {
             self.signature_service.clone(),
         )
         .await;
+        info!("Created {}", block);
         debug!("Created {:?}", block);
         let message = CoreMessage::LoopBack(block.clone());
         if let Err(e) = self.loopback_channel.send(message).await {
