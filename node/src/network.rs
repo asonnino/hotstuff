@@ -26,31 +26,6 @@ pub enum NetMessage {
     SyncReply(Block, PublicKey),
 }
 
-struct SenderWorker;
-
-impl SenderWorker {
-    async fn make(address: SocketAddr) -> Sender<Bytes> {
-        let (tx, mut rx) = channel(1000);
-        tokio::spawn(async move {
-            let stream = match TcpStream::connect(address).await {
-                Ok(stream) => stream,
-                Err(e) => {
-                    warn!("Failed to connect to {}: {}", address, e);
-                    return;
-                }
-            };
-            let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
-            while let Some(message) = rx.recv().await {
-                if let Err(e) = transport.send(message).await {
-                    warn!("Failed to send message to {}: {}", address, e);
-                    return;
-                }
-            }
-        });
-        tx
-    }
-}
-
 pub struct NetSender;
 
 impl NetSender {
@@ -64,14 +39,17 @@ impl NetSender {
                     match senders.get(&address) {
                         Some(tx) if !tx.is_closed() => {
                             if let Err(e) = tx.send(bytes).await {
-                                panic!("Net Sender failed to send message to Worker: {} ", e);
+                                panic!("Net Sender failed to send message to inner worker: {} ", e);
                             }
                         }
                         _ => {
-                            let tx = SenderWorker::make(address).await;
+                            let tx = Self::make_worker(address).await;
                             if !tx.is_closed() {
                                 if let Err(e) = tx.send(bytes).await {
-                                    panic!("Net Sender failed to send message to Worker: {} ", e);
+                                    panic!(
+                                        "Net Sender failed to send message to inner worker: {} ",
+                                        e
+                                    );
                                 }
                                 senders.insert(address, tx);
                             }
@@ -117,6 +95,27 @@ impl NetSender {
                 .map(|x| (bytes.clone(), x))
                 .collect(),
         }
+    }
+
+    async fn make_worker(address: SocketAddr) -> Sender<Bytes> {
+        let (tx, mut rx) = channel(1000);
+        tokio::spawn(async move {
+            let stream = match TcpStream::connect(address).await {
+                Ok(stream) => stream,
+                Err(e) => {
+                    warn!("Failed to connect to {}: {}", address, e);
+                    return;
+                }
+            };
+            let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
+            while let Some(message) = rx.recv().await {
+                if let Err(e) = transport.send(message).await {
+                    warn!("Failed to send message to {}: {}", address, e);
+                    return;
+                }
+            }
+        });
+        tx
     }
 }
 
