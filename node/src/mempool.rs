@@ -46,7 +46,7 @@ impl FakeMempool {
         // the txs data. This function returns True if the core can process
         // the block. Otherwise, it does whatever it needs to do to get the
         // block data and schedule re-processing of the block by sending a
-        // `CoreMessage::LoopBack` message to the provided core channel.
+        // `CoreMessage::Propose` message to the provided core channel.
         true
     }
 }
