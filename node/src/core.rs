@@ -156,11 +156,11 @@ impl Core {
         .await;
         let message = CoreMessage::LoopBack(block.clone());
         if let Err(e) = self.loopback_channel.send(message).await {
-            panic!("Core failed to loopback message to itself: {}", e);
+            panic!("Failed to loopback message to itself: {}", e);
         }
         let message = NetMessage::Block(block);
         if let Err(e) = self.network_channel.send(message).await {
-            panic!("Core failed to send block to the network: {}", e);
+            panic!("Failed to send block to the network: {}", e);
         }
         Ok(())
     }
@@ -275,12 +275,12 @@ impl Core {
             if next_leader == self.name {
                 let message = CoreMessage::Vote(vote.clone());
                 if let Err(e) = self.loopback_channel.send(message).await {
-                    panic!("Core failed to loopback message to itself: {}", e);
+                    panic!("Failed to loopback message to itself: {}", e);
                 }
             } else {
                 let message = NetMessage::Vote(vote, next_leader);
                 if let Err(e) = self.network_channel.send(message).await {
-                    panic!("Core failed to send vote to the network: {}", e);
+                    panic!("Failed to send vote to the network: {}", e);
                 }
             }
 
@@ -331,12 +331,12 @@ impl Core {
         if next_leader == self.name {
             let message = CoreMessage::Vote(timeout.clone());
             if let Err(e) = self.loopback_channel.send(message).await {
-                panic!("Core failed to loopback message to itself: {}", e);
+                panic!("Failed to loopback message to itself: {}", e);
             }
         } else {
             let message = NetMessage::Vote(timeout, next_leader);
             if let Err(e) = self.network_channel.send(message).await {
-                panic!("Core failed to send vote to the network: {}", e);
+                panic!("Failed to send vote to the network: {}", e);
             }
         }
         self.schedule_timer().await;
@@ -351,7 +351,7 @@ impl Core {
             let block = bincode::deserialize(&bytes)?;
             let message = NetMessage::SyncReply(block, sender);
             if let Err(e) = self.network_channel.send(message).await {
-                panic!("Core failed to send sync reply to the network: {}", e);
+                panic!("Failed to send sync reply to the network: {}", e);
             }
         }
         Ok(())

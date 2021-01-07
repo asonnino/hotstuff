@@ -63,7 +63,7 @@ impl Synchronizer {
                                 let _ = pending.remove(&block.digest());
                                 let message = CoreMessage::LoopBack(block);
                                 if let Err(e) = core_channel.send(message).await {
-                                    panic!("Synchronizer failed to send message through core channel: {}", e);
+                                    panic!("Failed to send message through core channel: {}", e);
                                 }
                             },
                             Err(e) => error!("{}", e)

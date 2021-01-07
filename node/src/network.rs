@@ -31,7 +31,7 @@ pub struct NetSender;
 impl NetSender {
     pub async fn make(name: PublicKey, committee: Committee) -> Sender<NetMessage> {
         let mut senders = HashMap::<_, Sender<_>>::new();
-        let (tx, mut rx) = channel(1000);
+        let (tx, mut rx) = channel(10_000);
         tokio::spawn(async move {
             while let Some(message) = rx.recv().await {
                 debug!("Sending {:?}", message);
@@ -39,17 +39,14 @@ impl NetSender {
                     match senders.get(&address) {
                         Some(tx) if !tx.is_closed() => {
                             if let Err(e) = tx.send(bytes).await {
-                                panic!("Net Sender failed to send message to inner worker: {} ", e);
+                                panic!("Failed to send message to inner worker: {} ", e);
                             }
                         }
                         _ => {
                             let tx = Self::make_worker(address).await;
                             if !tx.is_closed() {
                                 if let Err(e) = tx.send(bytes).await {
-                                    panic!(
-                                        "Net Sender failed to send message to inner worker: {} ",
-                                        e
-                                    );
+                                    panic!("Failed to send message to inner worker: {} ", e);
                                 }
                                 senders.insert(address, tx);
                             }
