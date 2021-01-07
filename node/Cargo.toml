@@ -1,5 +1,5 @@
 [package]
-name = "node"
+name = "hotstuff"
 version = "0.0.1"
 authors = ["Alberto Sonnino <albereto@sonnino.com>"]
 edition = "2018"
