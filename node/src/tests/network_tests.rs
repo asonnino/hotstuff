@@ -10,10 +10,8 @@ pub fn listener(address: SocketAddr) -> JoinHandle<()> {
     tokio::spawn(async move {
         let listener = TcpListener::bind(&address).await.unwrap();
         let (socket, _) = listener.accept().await.unwrap();
-        let (read, write) = socket.into_split();
-        let _transport_write = FramedWrite::new(write, LengthDelimitedCodec::new());
-        let mut transport_read = FramedRead::new(read, LengthDelimitedCodec::new());
-        match transport_read.next().await {
+        let mut transport = Framed::new(socket, LengthDelimitedCodec::new());
+        match transport.next().await {
             Some(Ok(_)) => assert!(true),
             _ => assert!(false),
         }
@@ -83,15 +81,10 @@ async fn receive() {
     let message = CoreMessage::Propose(block());
     let bytes = Bytes::from(bincode::serialize(&message).unwrap());
 
-    // Send a value and ensure we get an ACK.
+    // Send a message.
     let stream = TcpStream::connect(address.clone()).await.unwrap();
-    let (read, write) = stream.into_split();
-    let mut transport_write = FramedWrite::new(write, LengthDelimitedCodec::new());
-    let mut transport_read = FramedRead::new(read, LengthDelimitedCodec::new());
-    transport_write.send(bytes.clone()).await.unwrap();
-    if let None | Some(Err(_)) = transport_read.next().await {
-        assert!(false);
-    }
+    let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
+    transport.send(bytes.clone()).await.unwrap();
 
     // Ensure the message gets passed to the core.
     match rx_core.recv().await {

@@ -9,12 +9,10 @@ use futures::stream::StreamExt as _;
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io;
 use std::net::SocketAddr;
-use tokio::net::tcp::OwnedWriteHalf;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::{channel, Sender};
-use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 #[cfg(test)]
 #[path = "tests/network_tests.rs"]
@@ -34,25 +32,18 @@ impl SenderWorker {
     async fn make(address: SocketAddr) -> Sender<Bytes> {
         let (tx, mut rx) = channel(1000);
         tokio::spawn(async move {
-            let mut stream = match TcpStream::connect(address).await {
+            let stream = match TcpStream::connect(address).await {
                 Ok(stream) => stream,
                 Err(e) => {
                     warn!("Failed to connect to {}: {}", address, e);
                     return;
                 }
             };
-            let (read, write) = stream.split();
-            let mut transport_write = FramedWrite::new(write, LengthDelimitedCodec::new());
-            let mut transport_read = FramedRead::new(read, LengthDelimitedCodec::new());
+            let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
             while let Some(message) = rx.recv().await {
-                match transport_write.send(message).await {
-                    Ok(()) => {
-                        let _ = transport_read.next().await;
-                    }
-                    Err(e) => {
-                        warn!("Failed to send message to {}: {}", address, e);
-                        return;
-                    }
+                if let Err(e) = transport.send(message).await {
+                    warn!("Failed to send message to {}: {}", address, e);
+                    return;
                 }
             }
         });
@@ -151,13 +142,9 @@ impl NetReceiver {
 
                 let core_channel = core_channel.clone();
                 tokio::spawn(async move {
-                    let (read, write) = socket.into_split();
-                    let mut transport_write = FramedWrite::new(write, LengthDelimitedCodec::new());
-                    let mut transport_read = FramedRead::new(read, LengthDelimitedCodec::new());
-                    while let Some(frame) = transport_read.next().await {
-                        if let Err(e) =
-                            Self::handle_message(frame, &core_channel, &mut transport_write).await
-                        {
+                    let mut transport = Framed::new(socket, LengthDelimitedCodec::new());
+                    while let Some(frame) = transport.next().await {
+                        if let Err(e) = Self::handle_message(frame, &core_channel).await {
                             warn!("{}", e);
                         }
                     }
@@ -168,17 +155,14 @@ impl NetReceiver {
     }
 
     async fn handle_message(
-        frame: Result<BytesMut, io::Error>,
+        frame: Result<BytesMut, std::io::Error>,
         core_channel: &Sender<CoreMessage>,
-        transport_write: &mut FramedWrite<OwnedWriteHalf, LengthDelimitedCodec>,
     ) -> ConsensusResult<()> {
         let bytes = frame?;
         let message = bincode::deserialize(&bytes)?;
         if let Err(e) = core_channel.send(message).await {
             panic!("Failed to send message to Core: {}", e);
         }
-        let response = Bytes::from("Ack");
-        transport_write.send(response).await?;
         Ok(())
     }
 }
