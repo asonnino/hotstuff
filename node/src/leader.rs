@@ -2,11 +2,13 @@ use crate::config::Committee;
 use crate::core::RoundNumber;
 use crate::crypto::PublicKey;
 
-pub struct LeaderElector {
+pub type LeaderElector = RRLeaderElector;
+
+pub struct RRLeaderElector {
     committee: Committee,
 }
 
-impl LeaderElector {
+impl RRLeaderElector {
     pub fn new(committee: Committee) -> Self {
         Self { committee }
     }

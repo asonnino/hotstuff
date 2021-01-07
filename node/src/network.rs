@@ -38,12 +38,12 @@ impl NetSender {
 
                 // We receive messages from the core. Some of them need to be sent only
                 // only a specific node and others need to be broadcast. In the latter
-                // case, the function `make_messages` returns multiple messages: one for 
+                // case, the function `make_messages` returns multiple messages: one for
                 // each node (except ourself).
                 for (bytes, address) in Self::make_messages(message, &committee, name) {
                     // We keep alive one TCP connection per peer, each of which is handled
                     // by a separate thread (called worker). We communicate with our workers
-                    // with a dedicated channel kept by the HashMap called `senders`. If the 
+                    // with a dedicated channel kept by the HashMap called `senders`. If the
                     // a connection die, we make a new one.
                     match senders.get(&address) {
                         // Check that we have an alive connection with this node...
