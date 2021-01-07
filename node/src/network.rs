@@ -35,13 +35,24 @@ impl NetSender {
         tokio::spawn(async move {
             while let Some(message) = rx.recv().await {
                 debug!("Sending {:?}", message);
+
+                // We receive messages from the core. Some of them need to be sent only
+                // only a specific node and others need to be broadcast. In the latter
+                // case, the function `make_messages` returns multiple messages: one for 
+                // each node (except ourself).
                 for (bytes, address) in Self::make_messages(message, &committee, name) {
+                    // We keep alive one TCP connection per peer, each of which is handled
+                    // by a separate thread (called worker). We communicate with our workers
+                    // with a dedicated channel kept by the HashMap called `senders`. If the 
+                    // a connection die, we make a new one.
                     match senders.get(&address) {
+                        // Check that we have an alive connection with this node...
                         Some(tx) if !tx.is_closed() => {
                             if let Err(e) = tx.send(bytes).await {
                                 panic!("Failed to send message to inner worker: {} ", e);
                             }
                         }
+                        // ... If we don't, we make a new one.
                         _ => {
                             let tx = Self::make_worker(address).await;
                             if !tx.is_closed() {
@@ -95,6 +106,7 @@ impl NetSender {
     }
 
     async fn make_worker(address: SocketAddr) -> Sender<Bytes> {
+        // Each worker handle a TCP connection with on address.
         let (tx, mut rx) = channel(1000);
         tokio::spawn(async move {
             let stream = match TcpStream::connect(address).await {

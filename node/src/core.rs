@@ -67,7 +67,7 @@ impl Core {
     ) -> Sender<CoreMessage> {
         let (tx_core, rx_core) = channel(1000);
 
-        // Make a timer manager instance allowing to schedule and cancel timers.
+        // Make a Timer Manager instance allowing to schedule and cancel timers.
         // We communicate with the timer manager with a dedicated channel.
         let timer_manager = TimerManager::new().await;
         let (tx_timer, rx_timer) = channel(100);
@@ -85,7 +85,7 @@ impl Core {
         .await;
 
         // Make a votes aggregator. This is the instance that keeps track
-        // of incoming votes and aggregates them into QCs.
+        // of incoming votes and aggregates them into quorums.
         let aggregator = Aggregator::new(committee.clone());
 
         // Run the core in a separate thread.
@@ -209,7 +209,7 @@ impl Core {
 
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
         // Let's see if we have the block's data. If we don't, the mempool
-        // will get it and them make us resume processing this block.
+        // will get it and then make us resume processing this block.
         if !self.mempool.ready(&block.payload).await {
             return Ok(());
         }
@@ -253,7 +253,7 @@ impl Core {
         }
 
         // Check if the last three ancestors of the block form a 3-chain.
-        // If so, we commit b0.
+        // If so, we commit its head.
         let mut commit_rule = b0.round + 1 == b1.round;
         commit_rule &= b1.round + 1 == b2.round;
         commit_rule &= b2.round + 1 == block.round;
@@ -264,8 +264,8 @@ impl Core {
             }
         }
 
-        // Check the safety rules to see if we can vote for this new block. If we can,
-        // we send our vote to the next leader.
+        // Check the safety rules to see if we can vote for this new block.
+        // If we can, we send our vote to the next leader.
         let safety_rule_1 = b2.round >= self.preferred_round;
         let safety_rule_2 = block.round > self.last_voted_round;
         if safety_rule_1 && safety_rule_2 {
@@ -326,22 +326,26 @@ impl Core {
     }
 
     async fn make_timeout(&mut self) {
+        // First move to the next round (the current round timed out).
         self.round += 1;
         info!("Moved to round {}", self.round);
-        let timeout =
-            Vote::new_timeout(self.round, self.name, self.signature_service.clone()).await;
+
+        // Make a timeout vote and send it to the next leader.
+        let vote = Vote::new_timeout(self.round, self.name, self.signature_service.clone()).await;
         let next_leader = self.leader_elector.get_leader(self.round + 1);
         if next_leader == self.name {
-            let message = CoreMessage::Vote(timeout.clone());
+            let message = CoreMessage::Vote(vote.clone());
             if let Err(e) = self.loopback_channel.send(message).await {
                 panic!("Failed to loopback message to itself: {}", e);
             }
         } else {
-            let message = NetMessage::Vote(timeout, next_leader);
+            let message = NetMessage::Vote(vote, next_leader);
             if let Err(e) = self.network_channel.send(message).await {
                 panic!("Failed to send vote to the network: {}", e);
             }
         }
+
+        // Finally, schedule an other timer in case we timeout again.
         self.schedule_timer().await;
     }
 
@@ -362,7 +366,7 @@ impl Core {
 
     async fn run(&mut self, mut rx_core: Receiver<CoreMessage>, mut rx_timer: Receiver<TimerId>) {
         // Upon booting, send the very first block (if we are the leader).
-        // and schedule a timer in case we don't hear from the leader.
+        // Also, schedule a timer in case we don't hear back from it.
         self.schedule_timer().await;
         if self.name == self.leader_elector.get_leader(1) {
             self.make_block(self.highest_qc.clone(), None, 1)
@@ -370,7 +374,8 @@ impl Core {
                 .expect("Failed to send the first block");
         }
 
-        // This is the main loop: it processes incoming blocks and votes.
+        // This is the main loop: it processes incoming blocks and votes,
+        // and receive timeout notifications from our Timeout Manager.
         loop {
             select! {
                 message = rx_core.recv().fuse() => {
