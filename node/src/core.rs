@@ -154,6 +154,7 @@ impl Core {
             self.signature_service.clone(),
         )
         .await;
+        debug!("Created {:?}", block);
         let message = CoreMessage::LoopBack(block.clone());
         if let Err(e) = self.loopback_channel.send(message).await {
             panic!("Failed to loopback message to itself: {}", e);
@@ -268,7 +269,7 @@ impl Core {
         let safety_rule_1 = b2.round >= self.preferred_round;
         let safety_rule_2 = block.round > self.last_voted_round;
         if safety_rule_1 && safety_rule_2 {
-            debug!("Voting for block {:?}", block);
+            debug!("Voted for {:?}", block);
 
             let vote = Vote::new(&block, self.name, self.signature_service.clone()).await;
             let next_leader = self.leader_elector.get_leader(self.round + 1);
@@ -307,6 +308,7 @@ impl Core {
                         round: vote.round,
                         votes: quorum,
                     };
+                    debug!("Assembled {:?}", tc);
                     (self.highest_qc.clone(), Some(tc))
                 } else {
                     let qc = QC {
@@ -314,6 +316,7 @@ impl Core {
                         round: vote.round,
                         votes: quorum,
                     };
+                    debug!("Assembled {:?}", qc);
                     (qc, None)
                 };
                 self.make_block(qc, tc, next_round).await?;
@@ -389,7 +392,7 @@ impl Core {
                 },
                 message = rx_timer.recv().fuse() => {
                     if message.is_some() {
-                        warn!("Timing out for round {}!", self.round);
+                        warn!("Timeout reached for round {}", self.round);
                         self.make_timeout().await
                     }
                 }

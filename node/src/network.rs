@@ -124,7 +124,7 @@ impl NetReceiver {
             .await
             .expect("Failed to bind to TCP port");
 
-        debug!("Listening on address {}", address);
+        debug!("Listening on {}", address);
         tokio::spawn(async move {
             loop {
                 let (socket, peer) = match listener.accept().await {
@@ -156,6 +156,7 @@ impl NetReceiver {
     ) -> ConsensusResult<()> {
         let bytes = frame?;
         let message = bincode::deserialize(&bytes)?;
+        debug!("Received {:?}", message);
         if let Err(e) = core_channel.send(message).await {
             panic!("Failed to send message to Core: {}", e);
         }
