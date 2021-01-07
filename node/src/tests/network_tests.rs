@@ -24,7 +24,7 @@ async fn send() {
     let mut committee = committee();
     committee.increment_base_port(5000);
     let (myself, _) = keys().pop().unwrap();
-    let sender = NetSender::make(myself, committee.clone()).await;
+    let sender = NetSender::make(myself, committee.clone());
 
     // Run a TCP server.
     let (recipient, _) = keys().pop().unwrap();
@@ -47,7 +47,7 @@ async fn broadcast() {
     committee.increment_base_port(5100);
     let mut keys = keys();
     let (myself, _) = keys.pop().unwrap();
-    let sender = NetSender::make(myself, committee.clone()).await;
+    let sender = NetSender::make(myself, committee.clone());
 
     // Run 3 TCP servers.
     let handles: Vec<_> = (0..3)

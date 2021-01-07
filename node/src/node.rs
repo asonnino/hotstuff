@@ -49,13 +49,13 @@ impl Node {
         };
 
         // Make the data store.
-        let store = Store::new(store_path).await?;
+        let store = Store::new(store_path)?;
 
         // Run the signature service.
-        let signature_service = SignatureService::new(secret_key).await;
+        let signature_service = SignatureService::new(secret_key);
 
         // Choose the mempool and leader election algorithm.
-        let mempool = Mempool::new().await;
+        let mempool = Mempool::new();
         let leader_elector = LeaderElector::new(committee.clone());
 
         // Create the commit channel from which we can read the sequence of
@@ -63,7 +63,7 @@ impl Node {
         let (tx_commit, rx_commit) = channel(1000);
 
         // Now wire together the network sender, core, and network receiver.
-        let network_channel = NetSender::make(name, committee.clone()).await;
+        let network_channel = NetSender::make(name, committee.clone());
         let core_channel = Core::make(
             name,
             committee,

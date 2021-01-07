@@ -10,7 +10,7 @@ async fn create_store() {
     // Create new store.
     let path = ".store_test_create_store";
     let _ = fs::remove_dir_all(path);
-    let store = Store::new(path).await;
+    let store = Store::new(path);
     assert!(store.is_ok());
 }
 
@@ -19,7 +19,7 @@ async fn read_write_value() {
     // Create new store.
     let path = ".store_test_read_write_value";
     let _ = fs::remove_dir_all(path);
-    let mut store = Store::new(path).await.unwrap();
+    let mut store = Store::new(path).unwrap();
 
     // Write value to the store.
     let key = vec![0u8, 1u8, 2u8, 3u8];
@@ -40,7 +40,7 @@ async fn read_unknown_key() {
     // Create new store.
     let path = ".store_test_read_unknown_key";
     let _ = fs::remove_dir_all(path);
-    let mut store = Store::new(path).await.unwrap();
+    let mut store = Store::new(path).unwrap();
 
     // Try to read unknown key.
     let key = vec![0u8, 1u8, 2u8, 3u8];
@@ -54,7 +54,7 @@ async fn read_notify() {
     // Create new store.
     let path = ".store_test_read_notify";
     let _ = fs::remove_dir_all(path);
-    let mut store = Store::new(path).await.unwrap();
+    let mut store = Store::new(path).unwrap();
 
     // Try to read a kew that does not yet exist. Then write a value
     // for that key and check that notify read returns the result.

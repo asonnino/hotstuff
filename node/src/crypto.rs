@@ -187,7 +187,7 @@ pub struct SignatureService {
 }
 
 impl SignatureService {
-    pub async fn new(secret: SecretKey) -> Self {
+    pub fn new(secret: SecretKey) -> Self {
         let (tx, mut rx): (Sender<(_, oneshot::Sender<_>)>, _) = channel(100);
         tokio::spawn(async move {
             while let Some((digest, sender)) = rx.recv().await {

@@ -210,7 +210,11 @@ impl Core {
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
         // Let's see if we have the block's data. If we don't, the mempool
         // will get it and then make us resume processing this block.
-        if !self.mempool.ready(&block.payload).await {
+        if !self
+            .mempool
+            .ready(&block, self.loopback_channel.clone())
+            .await
+        {
             return Ok(());
         }
 
