@@ -26,7 +26,7 @@ impl Committee {
             authority.address.set_port(base_port + port);
         }
     }
-    
+
     pub fn print_committee(filename: &str, base_port: u16) {
         let _ = fs::remove_dir_all(filename);
         let mut committee = committee();

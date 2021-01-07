@@ -41,7 +41,7 @@ async fn dead_node() {
     Committee::print_committee(committee_file, 6100);
 
     // Run all nodes.
-    let handles: Vec<_> = (0..nodes-1)
+    let handles: Vec<_> = (0..nodes - 1)
         .map(|x| {
             let key_file = key_files.pop().unwrap();
             let store_path = format!(".store_test_dead_node_{}", x);

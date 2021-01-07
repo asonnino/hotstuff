@@ -64,7 +64,7 @@ pub struct NetSender;
 
 impl NetSender {
     pub async fn make(name: PublicKey, committee: Committee) -> Sender<NetMessage> {
-        let mut senders: HashMap<_, Sender<_>> = HashMap::new();
+        let mut senders = HashMap::<_, Sender<_>>::new();
         let (tx, mut rx) = channel(1000);
         tokio::spawn(async move {
             while let Some(message) = rx.recv().await {
@@ -78,9 +78,7 @@ impl NetSender {
                         }
                         _ => {
                             let tx = SenderWorker::make(address).await;
-                            if tx.is_closed() {
-                                warn!("Failed to connect to {}", address);
-                            } else {
+                            if !tx.is_closed() {
                                 if let Err(e) = tx.send(bytes).await {
                                     panic!("Net Sender failed to send message to Worker: {} ", e);
                                 }
