@@ -3,12 +3,35 @@ use crate::crypto::crypto_tests::keys;
 use std::fmt;
 use std::fs;
 
+impl Secret {
+    pub fn print_key_files(prefix: &str) -> Vec<String> {
+        keys()
+            .into_iter()
+            .enumerate()
+            .map(|(i, key)| {
+                let filename = format!("{}_{}.json", prefix, i);
+                let _ = fs::remove_file(&filename);
+                let (name, secret) = key;
+                Self { name, secret }.write(&filename).unwrap();
+                filename
+            })
+            .collect()
+    }
+}
+
 impl Committee {
     pub fn increment_base_port(&mut self, base_port: u16) {
         for authority in self.authorities.values_mut() {
             let port = authority.address.port();
             authority.address.set_port(base_port + port);
         }
+    }
+    
+    pub fn print_committee(filename: &str, base_port: u16) {
+        let _ = fs::remove_dir_all(filename);
+        let mut committee = committee();
+        committee.increment_base_port(base_port);
+        committee.write(filename).unwrap();
     }
 }
 
