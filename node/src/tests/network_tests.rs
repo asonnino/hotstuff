@@ -2,12 +2,11 @@ use super::*;
 use crate::config::config_tests::committee;
 use crate::crypto::crypto_tests::keys;
 use crate::messages::messages_tests::{block, vote};
-use std::time::Duration;
+use futures::future::try_join_all;
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
 
 // Fixture.
-pub async fn listener(address: SocketAddr) -> JoinHandle<()> {
+pub fn listener(address: SocketAddr) -> JoinHandle<()> {
     tokio::spawn(async move {
         let listener = TcpListener::bind(&address).await.unwrap();
         let (socket, _) = listener.accept().await.unwrap();
@@ -29,11 +28,10 @@ async fn send() {
     let (myself, _) = keys().pop().unwrap();
     let sender = NetSender::make(myself, committee.clone()).await;
 
-    // Run a TCP server and wait a little to allow it to boot.
+    // Run a TCP server.
     let (recipient, _) = keys().pop().unwrap();
     let recipient_address = committee.address(&recipient).unwrap();
-    let handle = listener(recipient_address).await;
-    sleep(Duration::from_millis(100)).await;
+    let handle = listener(recipient_address);
 
     // Send a vote.
     let message = NetMessage::Vote(vote(), recipient);
@@ -54,20 +52,13 @@ async fn broadcast() {
     let sender = NetSender::make(myself, committee.clone()).await;
 
     // Run 3 TCP servers.
-    let (recipient, _) = keys.pop().unwrap();
-    let recipient_address = committee.address(&recipient).unwrap();
-    let handle_1 = listener(recipient_address).await;
-
-    let (recipient, _) = keys.pop().unwrap();
-    let recipient_address = committee.address(&recipient).unwrap();
-    let handle_2 = listener(recipient_address).await;
-
-    let (recipient, _) = keys.pop().unwrap();
-    let recipient_address = committee.address(&recipient).unwrap();
-    let handle_3 = listener(recipient_address).await;
-
-    // wWit a little to allow the servers to boot
-    sleep(Duration::from_millis(100)).await;
+    let handles: Vec<_> = (0..3)
+        .map(|_| {
+            let (recipient, _) = keys.pop().unwrap();
+            let recipient_address = committee.address(&recipient).unwrap();
+            listener(recipient_address)
+        })
+        .collect();
 
     // Send a vote.
     let message = NetMessage::Block(block());
@@ -75,9 +66,7 @@ async fn broadcast() {
     assert!(result.is_ok());
 
     // Ensure all servers received the broadcast.
-    assert!(handle_1.await.is_ok());
-    assert!(handle_2.await.is_ok());
-    assert!(handle_3.await.is_ok());
+    assert!(try_join_all(handles).await.is_ok());
 }
 
 #[tokio::test]

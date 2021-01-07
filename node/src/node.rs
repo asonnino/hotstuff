@@ -8,8 +8,8 @@ use crate::mempool::Mempool;
 use crate::messages::Block;
 use crate::network::{NetReceiver, NetSender};
 use crate::store::Store;
-use tokio::sync::mpsc::{channel, Receiver};
 use log::info;
+use tokio::sync::mpsc::{channel, Receiver};
 
 #[cfg(test)]
 #[path = "tests/node_tests.rs"]
