@@ -212,6 +212,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
         // Let's see if we have the block's data. If we don't, the mempool
         // will get it and then make us resume processing this block.
+        /*
         if !self
             .mempool
             .verify(&block.payload)
@@ -220,6 +221,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         {
             return Ok(());
         }
+        */
 
         // Let's see if we have the last three ancestors of the block, that is:
         //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|

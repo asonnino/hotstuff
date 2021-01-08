@@ -13,6 +13,7 @@ use futures::stream::StreamExt as _;
 use log::{debug, error};
 use std::collections::HashSet;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::oneshot;
 
 #[cfg(test)]
 #[path = "tests/synchronizer_tests.rs"]
@@ -96,6 +97,23 @@ impl Synchronizer {
     async fn waiter(mut store: Store, wait_on: Digest, deliver: Block) -> ConsensusResult<Block> {
         let _ = store.notify_read(wait_on.to_vec()).await?;
         Ok(deliver)
+    }
+
+    async fn cancellable_waiter(
+        mut store: Store,
+        wait_on: Digest,
+        deliver: Block,
+        cancellation: oneshot::Receiver<bool>,
+    ) -> ConsensusResult<Option<Block>> {
+        select! {
+            result = store.notify_read(wait_on.to_vec()).fuse() => {
+                let _ = result?;
+                Ok(Some(deliver))
+            },
+            _ = cancellation.fuse() => {
+                Ok(None)
+            }
+        }
     }
 
     async fn get_previous_block(&mut self, block: &Block) -> ConsensusResult<Option<Block>> {
