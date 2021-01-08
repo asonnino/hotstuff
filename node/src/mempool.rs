@@ -1,52 +1,38 @@
-use crate::core::CoreMessage;
-use crate::messages::Block;
+use async_trait::async_trait;
 use rand::Rng as _;
-use tokio::sync::mpsc::{channel, Sender};
-use tokio::sync::oneshot;
+use std::marker::Send;
 
-pub type Mempool = FakeMempool;
+#[async_trait]
+pub trait NodeMempool: Send + Sync {
+    async fn get(&self) -> Vec<u8>;
 
-pub struct FakeMempool {
-    channel: Sender<oneshot::Sender<Vec<u8>>>,
+    async fn verify(&self, payload: &[u8]) -> Result<bool, Box<dyn std::error::Error>>;
+
+    async fn cleanup(&self, payload: &[u8]);
 }
 
-impl FakeMempool {
+pub struct MockMempool;
+
+impl MockMempool {
     pub fn new() -> Self {
-        let (tx, mut rx): (Sender<oneshot::Sender<Vec<u8>>>, _) = channel(100);
-        tokio::spawn(async move {
-            while let Some(sender) = rx.recv().await {
-                // This is a fake mempool, so we just generate a
-                // random 32 bytes payload.
-                let mut rng = rand::thread_rng();
-                let payload = [
-                    rng.gen::<u128>().to_le_bytes(),
-                    rng.gen::<u128>().to_le_bytes(),
-                ]
-                .concat();
-                let _ = sender.send(payload);
-            }
-        });
-        Self { channel: tx }
+        Self
+    }
+}
+
+#[async_trait]
+impl NodeMempool for MockMempool {
+    async fn get(&self) -> Vec<u8> {
+        let mut rng = rand::thread_rng();
+        [
+            rng.gen::<u128>().to_le_bytes(),
+            rng.gen::<u128>().to_le_bytes(),
+        ]
+        .concat()
     }
 
-    pub async fn get_payload(&self) -> Vec<u8> {
-        let (sender, receiver) = oneshot::channel();
-        if let Err(e) = self.channel.send(sender).await {
-            panic!("Failed to request payload from mempool: {}", e);
-        }
-        receiver
-            .await
-            .expect("Failed to receive payload from mempool")
+    async fn verify(&self, _payload: &[u8]) -> Result<bool, Box<dyn std::error::Error>> {
+        Ok(true)
     }
 
-    pub async fn ready(&self, _block: &Block, _channel: Sender<CoreMessage>) -> bool {
-        // This function is called by the core upon processing a new block
-        // to ask the mempool if it has all the block data. This is useful
-        // in case the payload is a hash, certificate, or does any represent
-        // the txs data. This function returns True if the core can process
-        // the block. Otherwise, it does whatever it needs to do to get the
-        // block data and schedule re-processing of the block by sending a
-        // `CoreMessage::Propose` message to the provided core channel.
-        true
-    }
+    async fn cleanup(&self, _payload: &[u8]) {}
 }

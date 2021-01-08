@@ -57,6 +57,9 @@ pub enum ConsensusError {
         leader: PublicKey,
         round: RoundNumber,
     },
+
+    #[error("Invalid payload")]
+    InvalidPayload,
 }
 
 impl From<ed25519::Error> for ConsensusError {

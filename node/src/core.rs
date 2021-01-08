@@ -4,7 +4,7 @@ use crate::crypto::Hash as _;
 use crate::crypto::{Digest, PublicKey, SignatureService};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
-use crate::mempool::Mempool;
+use crate::mempool::NodeMempool;
 use crate::messages::{Block, GenericQC, Vote, QC, TC};
 use crate::network::NetMessage;
 use crate::store::Store;
@@ -31,7 +31,7 @@ pub enum CoreMessage {
     SyncRequest(Digest, PublicKey),
 }
 
-pub struct Core {
+pub struct Core<Mempool> {
     name: PublicKey,
     committee: Committee,
     parameters: Parameters,
@@ -52,7 +52,7 @@ pub struct Core {
     timer_manager: TimerManager,
 }
 
-impl Core {
+impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     #[allow(clippy::too_many_arguments)]
     pub async fn make(
         name: PublicKey,
@@ -145,12 +145,13 @@ impl Core {
         tc: Option<TC>,
         round: RoundNumber,
     ) -> ConsensusResult<()> {
+        let payload = self.mempool.get().await;
         let block = Block::new(
             qc,
             tc,
             self.name,
             round,
-            self.mempool.get_payload().await,
+            payload,
             self.signature_service.clone(),
         )
         .await;
@@ -213,8 +214,9 @@ impl Core {
         // will get it and then make us resume processing this block.
         if !self
             .mempool
-            .ready(&block, self.loopback_channel.clone())
+            .verify(&block.payload)
             .await
+            .map_err(|_| ConsensusError::InvalidPayload)?
         {
             return Ok(());
         }

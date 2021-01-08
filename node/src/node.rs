@@ -4,7 +4,7 @@ use crate::core::Core;
 use crate::crypto::SignatureService;
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
-use crate::mempool::Mempool;
+use crate::mempool::MockMempool;
 use crate::messages::Block;
 use crate::network::{NetReceiver, NetSender};
 use crate::store::Store;
@@ -55,7 +55,7 @@ impl Node {
         let signature_service = SignatureService::new(secret_key);
 
         // Choose the mempool and leader election algorithm.
-        let mempool = Mempool::new();
+        let mempool = MockMempool::new();
         let leader_elector = LeaderElector::new(committee.clone());
 
         // Create the commit channel from which we can read the sequence of
