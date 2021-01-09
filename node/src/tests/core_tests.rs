@@ -2,6 +2,7 @@ use super::*;
 use crate::config::config_tests::committee;
 use crate::crypto::crypto_tests::keys;
 use crate::crypto::SecretKey;
+use crate::mempool::MockMempool;
 use crate::messages::messages_tests::chain;
 use std::fs;
 
@@ -15,7 +16,7 @@ async fn core(
 ) -> Sender<CoreMessage> {
     let signature_service = SignatureService::new(secret_key);
     let leader_elector = LeaderElector::new(committee());
-    let mempool = Mempool::new();
+    let mempool = MockMempool::new();
     Core::make(
         public_key,
         committee(),
@@ -162,7 +163,7 @@ async fn make_timeout() {
     let (tx_commit, _) = channel(1);
     let signature_service = SignatureService::new(secret_key);
     let leader_elector = LeaderElector::new(committee());
-    let mempool = Mempool::new();
+    let mempool = MockMempool::new();
     let parameters = Parameters {
         timeout_delay: 100,
         ..Parameters::default()
