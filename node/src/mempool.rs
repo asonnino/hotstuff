@@ -1,5 +1,5 @@
 use crate::core::{CoreMessage, RoundNumber};
-use crate::error::ConsensusResult;
+use crate::error::{ConsensusError, ConsensusResult};
 use crate::messages::Block;
 use crate::store::Store;
 use async_trait::async_trait;
@@ -13,6 +13,13 @@ use std::collections::HashMap;
 use std::marker::Send;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
+#[allow(dead_code)]
+pub enum PayloadStatus {
+    Accept,
+    Reject,
+    Wait(Vec<u8>),
+}
+
 #[async_trait]
 pub trait NodeMempool: Send + Sync {
     /// Consensus calls this method whenever it needs to create a new block.
@@ -20,14 +27,14 @@ pub trait NodeMempool: Send + Sync {
     async fn get(&self) -> Vec<u8>;
 
     /// Consensus calls this method when receiving a new block. The mempool should
-    /// return Ok(None) if the block can be processed right away, Ok(precondition)
-    /// if the block should be processed when precondition is the storage, or Err
-    /// if the block is invalid and should be dropped.
-    async fn verify(&self, payload: &[u8]) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>>;
+    /// return Accept if the block can be processed right away, Wait(missing_value)
+    /// if the block should be processed when missing_value is the storage, or
+    /// Reject if the payload is invalid and the block should be dropped.
+    async fn verify(&self, payload: &[u8]) -> PayloadStatus;
 
     /// Consensus calls this method upon commit a block. The mempool can use the
     /// knowledge that a block is committed to clean up its internal state.
-    async fn cleanup(&self, payload: &[u8]);
+    async fn garbage_collect(&self, payload: &[u8]);
 }
 
 type DriverMessage = (Vec<u8>, Block, Receiver<()>);
@@ -90,29 +97,41 @@ impl<Mempool: 'static + NodeMempool> MempoolDriver<Mempool> {
         }
     }
 
-    pub async fn verify(&mut self, wait_on: Vec<u8>, block: &Block) {
-        // call Verify
+    pub async fn cleanup(&mut self, round: &RoundNumber) {
+        for (k, v) in &self.pending {
+            if !v.is_closed() && k < round {
+                let _ = v.send(()).await;
+            }
+        }
+        self.pending.retain(|k, _| k < round);
+    }
 
-        if !self.pending.contains_key(&block.round) {
-            let (tx_cancel, rx_cancel) = channel(1);
-            let round = block.round;
-            self.pending.insert(round, tx_cancel);
-            debug!("Registering missing payload for {:?}", block);
-            let message = (block.payload.clone(), block.clone(), rx_cancel);
-            if let Err(e) = self.inner_channel.send(message).await {
-                panic!("Failed to send request to synchronizer: {}", e);
+    pub async fn verify(&mut self, block: &Block) -> ConsensusResult<bool> {
+        match self.mempool.verify(&block.payload).await {
+            PayloadStatus::Accept => Ok(true),
+            PayloadStatus::Reject => bail!(ConsensusError::InvalidPayload),
+            PayloadStatus::Wait(wait_on) => {
+                if !self.pending.contains_key(&block.round) {
+                    let (tx_cancel, rx_cancel) = channel(1);
+                    let round = block.round;
+                    self.pending.insert(round, tx_cancel);
+                    debug!("Registering missing payload for {:?}", block);
+                    let message = (wait_on, block.clone(), rx_cancel);
+                    if let Err(e) = self.inner_channel.send(message).await {
+                        panic!("Failed to send request to synchronizer: {}", e);
+                    }
+                }
+                Ok(false)
             }
         }
     }
 
-    pub async fn timeout(&mut self, round: RoundNumber) {
-        // TODO: write it better
-        for (k, v) in &self.pending {
-            if !v.is_closed() && k < &round {
-                let _ = v.send(()).await;
-            }
-        }
-        self.pending.retain(|k, _| k < &round);
+    pub async fn garbage_collect(&self, payload: &[u8]) {
+        self.mempool.garbage_collect(payload).await;
+    }
+
+    pub async fn get(&self) -> Vec<u8> {
+        self.mempool.get().await
     }
 }
 
@@ -137,9 +156,9 @@ impl NodeMempool for MockMempool {
         .concat()
     }
 
-    async fn verify(&self, _payload: &[u8]) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
-        Ok(None)
+    async fn verify(&self, _payload: &[u8]) -> PayloadStatus {
+        PayloadStatus::Accept
     }
 
-    async fn cleanup(&self, _payload: &[u8]) {}
+    async fn garbage_collect(&self, _payload: &[u8]) {}
 }

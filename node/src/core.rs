@@ -4,7 +4,7 @@ use crate::crypto::Hash as _;
 use crate::crypto::{Digest, PublicKey, SignatureService};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
-use crate::mempool::NodeMempool;
+use crate::mempool::{MempoolDriver, NodeMempool};
 use crate::messages::{Block, GenericQC, Vote, QC, TC};
 use crate::network::NetMessage;
 use crate::store::Store;
@@ -38,7 +38,7 @@ pub struct Core<Mempool> {
     store: Store,
     signature_service: SignatureService,
     leader_elector: LeaderElector,
-    mempool: Mempool,
+    mempool_driver: MempoolDriver<Mempool>,
     loopback_channel: Sender<CoreMessage>,
     timer_channel: Sender<TimerId>,
     network_channel: Sender<NetMessage>,
@@ -88,6 +88,10 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         // of incoming votes and aggregates them into quorums.
         let aggregator = Aggregator::new(committee.clone());
 
+        // Make the mempool driver which will mediate our requests the
+        // the mempool.
+        let mempool_driver = MempoolDriver::new(mempool, tx_core.clone(), store.clone());
+
         // Run the core in a separate thread.
         let loopback_channel = tx_core.clone();
         tokio::spawn(async move {
@@ -98,7 +102,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
                 store,
                 signature_service,
                 leader_elector,
-                mempool,
+                mempool_driver,
                 loopback_channel,
                 timer_channel: tx_timer,
                 network_channel,
@@ -145,7 +149,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         tc: Option<TC>,
         round: RoundNumber,
     ) -> ConsensusResult<()> {
-        let payload = self.mempool.get().await;
+        let payload = self.mempool_driver.get().await;
         let block = Block::new(
             qc,
             tc,
@@ -212,16 +216,9 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
         // Let's see if we have the block's data. If we don't, the mempool
         // will get it and then make us resume processing this block.
-        /*
-        if !self
-            .mempool
-            .verify(&block.payload)
-            .await
-            .map_err(|_| ConsensusError::InvalidPayload)?
-        {
+        if !self.mempool_driver.verify(&block).await? {
             return Ok(());
         }
-        */
 
         // Let's see if we have the last three ancestors of the block, that is:
         //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
@@ -249,8 +246,9 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             self.round = possible_new_round;
             info!("Moved to round {}", self.round);
 
-            // Cleanup the vote aggregator.
+            // Cleanup the vote aggregator and the mempool driver.
             self.aggregator.cleanup(&self.round);
+            self.mempool_driver.cleanup(&self.round).await;
 
             // Schedule a new timer for this round.
             self.schedule_timer().await;
@@ -268,6 +266,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         commit_rule &= b2.round + 1 == block.round;
         if commit_rule {
             info!("Committed {}", b0);
+            self.mempool_driver.garbage_collect(&b0.payload).await;
             if let Err(e) = self.commit_channel.send(b0.clone()).await {
                 warn!("Failed to send block through the commit channel: {}", e);
             }
