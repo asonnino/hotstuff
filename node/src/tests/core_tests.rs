@@ -1,7 +1,7 @@
 use super::*;
 use crate::config::config_tests::committee;
 use crypto::crypto::SecretKey;
-use crate::mempool::MockMempool;
+use mempool::mock::MockMempool;
 use crate::messages::messages_tests::{keys, chain};
 use std::fs;
 

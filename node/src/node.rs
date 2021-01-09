@@ -4,7 +4,7 @@ use crate::core::Core;
 use crypto::crypto::SignatureService;
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
-use crate::mempool::MockMempool;
+use mempool::mock::MockMempool;
 use crate::messages::Block;
 use crate::network::{NetReceiver, NetSender};
 use store::store::Store;

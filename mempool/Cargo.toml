@@ -1,0 +1,9 @@
+[package]
+name = "mempool"
+version = "0.1.0"
+authors = ["Alberto Sonnino <asonnino@fb.com>"]
+edition = "2018"
+
+[dependencies]
+rand = "0.7.3"
+async-trait = "0.1.42"
