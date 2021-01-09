@@ -7,7 +7,7 @@ use crate::leader::LeaderElector;
 use crate::mempool::MockMempool;
 use crate::messages::Block;
 use crate::network::{NetReceiver, NetSender};
-use crate::store::Store;
+use store::store::Store;
 use log::info;
 use tokio::sync::mpsc::{channel, Receiver};
 

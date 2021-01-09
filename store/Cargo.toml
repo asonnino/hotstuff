@@ -1,0 +1,10 @@
+[package]
+name = "store"
+version = "0.1.0"
+authors = ["Alberto Sonnino <asonnino@fb.com>"]
+edition = "2018"
+
+[dependencies]
+rocksdb = "0.15.0"
+tokio = { version = "0.3.1", features = ["full"] }
+futures = "0.3.8"

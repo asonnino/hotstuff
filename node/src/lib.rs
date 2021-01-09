@@ -10,6 +10,5 @@ mod mempool;
 mod messages;
 mod network;
 pub mod node;
-mod store;
 mod synchronizer;
 mod timer;

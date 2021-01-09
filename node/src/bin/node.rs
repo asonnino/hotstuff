@@ -1,9 +1,9 @@
 use clap::{crate_name, crate_version, App, AppSettings, SubCommand};
 use env_logger::Env;
 use futures::future::try_join_all;
-use hotstuff::config::Config as _;
-use hotstuff::config::{Committee, Secret};
-use hotstuff::node::Node;
+use node::config::Config as _;
+use node::config::{Committee, Secret};
+use node::node::Node;
 use log::error;
 use std::fs;
 use tokio::task::JoinHandle;

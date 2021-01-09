@@ -7,7 +7,7 @@ use crate::leader::LeaderElector;
 use crate::mempool::{MempoolDriver, NodeMempool};
 use crate::messages::{Block, GenericQC, Vote, QC, TC};
 use crate::network::NetMessage;
-use crate::store::Store;
+use store::store::Store;
 use crate::synchronizer::Synchronizer;
 use crate::timer::{TimerId, TimerManager};
 use futures::future::FutureExt as _;

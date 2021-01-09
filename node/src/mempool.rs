@@ -1,7 +1,7 @@
 use crate::core::{CoreMessage, RoundNumber};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::messages::Block;
-use crate::store::Store;
+use store::store::Store;
 use async_trait::async_trait;
 use futures::future::FutureExt as _;
 use futures::select;

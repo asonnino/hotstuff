@@ -4,7 +4,7 @@ use crate::crypto::{Digest, PublicKey};
 use crate::error::ConsensusResult;
 use crate::messages::{Block, QC};
 use crate::network::NetMessage;
-use crate::store::Store;
+use store::store::Store;
 use crate::timer::TimerManager;
 use futures::future::FutureExt as _;
 use futures::select;

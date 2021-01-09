@@ -1,6 +1,6 @@
 use crate::core::RoundNumber;
 use crate::crypto::{Digest, PublicKey};
-use crate::store::StoreError;
+use store::store::StoreError;
 use ed25519_dalek::ed25519;
 use thiserror::Error;
 
