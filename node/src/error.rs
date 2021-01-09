@@ -1,7 +1,6 @@
 use crate::core::RoundNumber;
-use crate::crypto::{Digest, PublicKey};
+use crypto::crypto::{Digest, PublicKey, CryptoError};
 use store::store::StoreError;
-use ed25519_dalek::ed25519;
 use thiserror::Error;
 
 #[macro_export]
@@ -62,8 +61,8 @@ pub enum ConsensusError {
     InvalidPayload,
 }
 
-impl From<ed25519::Error> for ConsensusError {
-    fn from(_e: ed25519::Error) -> Self {
+impl From<CryptoError> for ConsensusError {
+    fn from(_e: CryptoError) -> Self {
         ConsensusError::InvalidSignature
     }
 }

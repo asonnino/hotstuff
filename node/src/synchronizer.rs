@@ -1,6 +1,6 @@
 use crate::core::CoreMessage;
-use crate::crypto::Hash as _;
-use crate::crypto::{Digest, PublicKey};
+use crypto::crypto::Hash as _;
+use crypto::crypto::{Digest, PublicKey};
 use crate::error::ConsensusResult;
 use crate::messages::{Block, QC};
 use crate::network::NetMessage;

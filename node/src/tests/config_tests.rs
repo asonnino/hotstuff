@@ -1,5 +1,5 @@
 use super::*;
-use crate::crypto::crypto_tests::keys;
+use crate::messages::messages_tests::keys;
 use std::fmt;
 use std::fs;
 

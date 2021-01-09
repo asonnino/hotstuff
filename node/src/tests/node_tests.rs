@@ -1,5 +1,5 @@
 use super::*;
-use crate::crypto::crypto_tests::keys;
+use crate::messages::messages_tests::keys;
 use futures::future::try_join_all;
 use std::fs;
 

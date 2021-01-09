@@ -1,6 +1,5 @@
 use super::*;
-use crate::crypto::crypto_tests::keys;
-use crate::messages::messages_tests::{block, chain};
+use crate::messages::messages_tests::{block, chain, keys};
 use std::fs;
 
 #[tokio::test]

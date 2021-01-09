@@ -6,5 +6,5 @@ edition = "2018"
 
 [dependencies]
 rocksdb = "0.15.0"
-tokio = { version = "0.3.1", features = ["full"] }
+tokio = { version = "0.3.1", features = ["sync", "rt", "macros", "time"] }
 futures = "0.3.8"

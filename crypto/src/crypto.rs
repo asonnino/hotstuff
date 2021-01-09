@@ -13,6 +13,8 @@ use tokio::sync::oneshot;
 #[path = "tests/crypto_tests.rs"]
 pub mod crypto_tests;
 
+pub type CryptoError = ed25519::Error;
+
 #[derive(Hash, PartialEq, Default, Eq, Clone, Deserialize, Serialize)]
 pub struct Digest(pub [u8; 32]);
 

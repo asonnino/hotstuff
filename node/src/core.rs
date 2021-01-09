@@ -1,7 +1,7 @@
 use crate::aggregator::Aggregator;
 use crate::config::{Committee, Parameters};
-use crate::crypto::Hash as _;
-use crate::crypto::{Digest, PublicKey, SignatureService};
+use crypto::crypto::Hash as _;
+use crypto::crypto::{Digest, PublicKey, SignatureService};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
 use crate::mempool::{MempoolDriver, NodeMempool};

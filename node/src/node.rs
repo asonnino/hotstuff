@@ -1,7 +1,7 @@
 use crate::config::Config as _;
 use crate::config::{Committee, Parameters, Secret};
 use crate::core::Core;
-use crate::crypto::SignatureService;
+use crypto::crypto::SignatureService;
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
 use crate::mempool::MockMempool;

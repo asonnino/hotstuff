@@ -1,6 +1,6 @@
 use crate::config::Committee;
 use crate::core::RoundNumber;
-use crate::crypto::PublicKey;
+use crypto::crypto::PublicKey;
 
 pub type LeaderElector = RRLeaderElector;
 

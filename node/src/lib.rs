@@ -4,7 +4,6 @@ mod error;
 mod aggregator;
 pub mod config;
 mod core;
-mod crypto;
 mod leader;
 mod mempool;
 mod messages;

@@ -1,6 +1,6 @@
 use crate::config::Committee;
 use crate::core::CoreMessage;
-use crate::crypto::{Digest, PublicKey};
+use crypto::crypto::{Digest, PublicKey};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::messages::{Block, Vote};
 use bytes::{Bytes, BytesMut};

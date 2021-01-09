@@ -1,4 +1,4 @@
-use crate::crypto::{generate_keypair, generate_production_keypair, PublicKey, SecretKey};
+use crypto::crypto::{generate_keypair, generate_production_keypair, PublicKey, SecretKey};
 use crate::error::{ConsensusError, ConsensusResult};
 use rand::rngs::StdRng;
 use rand::SeedableRng as _;

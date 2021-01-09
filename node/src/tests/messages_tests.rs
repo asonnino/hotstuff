@@ -1,7 +1,6 @@
 use super::*;
 use crate::config::config_tests::committee;
-use crate::crypto::crypto_tests::keys;
-use crate::crypto::{generate_keypair, SecretKey};
+use crypto::crypto::{generate_keypair, SecretKey};
 use rand::rngs::StdRng;
 use rand::SeedableRng as _;
 
@@ -55,6 +54,12 @@ impl PartialEq for Vote {
     fn eq(&self, other: &Self) -> bool {
         self.hash == other.hash && self.round == other.round
     }
+}
+
+// Fixture.
+pub fn keys() -> Vec<(PublicKey, SecretKey)> {
+    let mut rng = StdRng::from_seed([0; 32]);
+    (0..4).map(|_| generate_keypair(&mut rng)).collect()
 }
 
 // Fixture.
