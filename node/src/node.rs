@@ -1,8 +1,8 @@
-use crate::core::Core;
-use crate::error::{ConsensusError, ConsensusResult};
-use crate::leader::LeaderElector;
-use crate::messages::Block;
-use crate::network::{NetReceiver, NetSender};
+use consensus::core::Core;
+use consensus::error::{ConsensusError, ConsensusResult};
+use consensus::leader::LeaderElector;
+use consensus::messages::Block;
+use consensus::network::{NetReceiver, NetSender};
 use config::config::Config as _;
 use config::config::{Committee, ConfigError, Parameters, Secret};
 use crypto::crypto::SignatureService;
@@ -36,7 +36,7 @@ impl Node {
                 address.set_ip("0.0.0.0".parse().unwrap());
                 address
             }
-            None => bail!(ConsensusError::ConfigError(ConfigError::ReadError {
+            None => return Err(ConsensusError::ConfigError(ConfigError::ReadError {
                 // TODO
                 file: committee_file.to_string(),
                 message: "Node name is not in the committee".to_string()
