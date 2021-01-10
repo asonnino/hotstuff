@@ -21,6 +21,9 @@ pub enum ConfigError {
 
     #[error("Failed to write config file '{file}': {message}")]
     WriteError { file: String, message: String },
+
+    #[error("Node name is not in the committee")]
+    NodeNotInCommittee,
 }
 
 pub type Stake = u32;

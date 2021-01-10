@@ -7,7 +7,7 @@ use consensus::messages::Block;
 use consensus::network::{NetReceiver, NetSender};
 use crypto::SignatureService;
 use log::info;
-use mempool::mock::MockMempool;
+use mempool::simple::SimpleMempool;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver};
 
@@ -37,11 +37,7 @@ impl Node {
                 address
             }
             None => {
-                return Err(ConsensusError::ConfigError(ConfigError::ReadError {
-                    // TODO
-                    file: committee_file.to_string(),
-                    message: "Node name is not in the committee".to_string(),
-                }));
+                return Err(ConfigError::NodeNotInCommittee).map_err(ConsensusError::from);
             }
         };
 
@@ -58,7 +54,7 @@ impl Node {
         let signature_service = SignatureService::new(secret_key);
 
         // Choose the mempool and leader election algorithm.
-        let mempool = MockMempool::new();
+        let mempool = SimpleMempool::new();
         let leader_elector = LeaderElector::new(committee.clone());
 
         // Create the commit channel from which we can read the sequence of

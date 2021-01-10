@@ -210,17 +210,17 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             tc.verify(&self.committee)?;
         }
 
-        // If all check pass, process the block.
-        self.process_block(&block).await
-    }
-
-    async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
         // Let's see if we have the block's data. If we don't, the mempool
         // will get it and then make us resume processing this block.
         if !self.mempool_driver.verify(&block).await? {
             return Ok(());
         }
 
+        // If all check pass, process the block.
+        self.process_block(&block).await
+    }
+
+    async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
         // Let's see if we have the last three ancestors of the block, that is:
         //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
         // If we don't, the synchronizer asks for them to other nodes. It will

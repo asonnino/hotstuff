@@ -10,12 +10,6 @@ use std::fs;
 
 pub struct MockMempool;
 
-impl MockMempool {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
 #[async_trait]
 impl NodeMempool for MockMempool {
     async fn get(&self) -> Vec<u8> {
@@ -41,7 +35,7 @@ async fn core(
 ) -> Sender<CoreMessage> {
     let signature_service = SignatureService::new(secret_key);
     let leader_elector = LeaderElector::new(committee());
-    let mempool = MockMempool::new();
+    let mempool = MockMempool {};
     Core::make(
         public_key,
         committee(),
@@ -187,7 +181,7 @@ async fn make_timeout() {
     let (tx_commit, _) = channel(1);
     let signature_service = SignatureService::new(secret_key);
     let leader_elector = LeaderElector::new(committee());
-    let mempool = MockMempool::new();
+    let mempool = MockMempool {};
     let parameters = Parameters {
         timeout_delay: 100,
         ..Parameters::default()

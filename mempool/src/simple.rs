@@ -4,16 +4,22 @@ use rand::rngs::StdRng;
 use rand::RngCore as _;
 use rand::SeedableRng as _;
 
-pub struct MockMempool;
+pub struct SimpleMempool;
 
-impl MockMempool {
+impl SimpleMempool {
     pub fn new() -> Self {
         Self
     }
 }
 
+impl Default for SimpleMempool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
-impl NodeMempool for MockMempool {
+impl NodeMempool for SimpleMempool {
     async fn get(&self) -> Vec<u8> {
         let mut rng = StdRng::from_seed([0; 32]);
         let mut payload = [0u8; 32];

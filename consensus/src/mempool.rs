@@ -12,7 +12,6 @@ use std::marker::Send;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
-#[allow(dead_code)]
 pub enum PayloadStatus {
     Accept,
     Reject,

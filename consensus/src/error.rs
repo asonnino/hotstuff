@@ -33,7 +33,7 @@ pub enum ConsensusError {
     #[error("Store error: {0}")]
     StoreError(#[from] StoreError),
 
-    #[error("Configuration error. {0}")]
+    #[error("{0}")]
     ConfigError(#[from] ConfigError),
 
     #[error("Invalid signature")]
