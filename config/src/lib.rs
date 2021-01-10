@@ -22,8 +22,8 @@ pub enum ConfigError {
     #[error("Failed to write config file '{file}': {message}")]
     WriteError { file: String, message: String },
 
-    #[error("Node name is not in the committee")]
-    NodeNotInCommittee,
+    #[error("Node {0:?} is not in the committee")]
+    NotInCommittee(PublicKey),
 }
 
 pub type Stake = u32;
@@ -145,8 +145,11 @@ impl Committee {
         2 * self.total_votes() / 3 + 1
     }
 
-    pub fn address(&self, name: &PublicKey) -> Option<SocketAddr> {
-        self.authorities.get(name).map(|x| x.address)
+    pub fn address(&self, name: &PublicKey) -> Result<SocketAddr, ConfigError> {
+        self.authorities
+            .get(name)
+            .map(|x| x.address)
+            .ok_or_else(|| ConfigError::NotInCommittee(*name))
     }
 
     pub fn broadcast_addresses(&self, myself: &PublicKey) -> Vec<SocketAddr> {

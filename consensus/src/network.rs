@@ -85,9 +85,10 @@ impl NetSender {
                 (message, Some(address))
             }
             NetMessage::SyncRequest(digest, from) => (CoreMessage::SyncRequest(digest, from), None),
-            NetMessage::SyncReply(block, to) => {
-                (CoreMessage::Propose(block), committee.address(&to))
-            }
+            NetMessage::SyncReply(block, to) => match committee.address(&to) {
+                Ok(address) => (CoreMessage::Propose(block), Some(address)),
+                Err(_) => return vec![],
+            },
         };
 
         // Encode the message and find the network address of the receiver.

@@ -1,5 +1,5 @@
 use config::Config as _;
-use config::{Committee, ConfigError, Parameters, Secret};
+use config::{Committee, Parameters, Secret};
 use consensus::core::Core;
 use consensus::error::{ConsensusError, ConsensusResult};
 use consensus::leader::LeaderElector;
@@ -31,15 +31,8 @@ impl Node {
         // Retrieve node's information.
         let name = secret.name;
         let secret_key = secret.secret;
-        let address = match committee.address(&name) {
-            Some(mut address) => {
-                address.set_ip("0.0.0.0".parse().unwrap());
-                address
-            }
-            None => {
-                return Err(ConfigError::NodeNotInCommittee).map_err(ConsensusError::from);
-            }
-        };
+        let mut address = committee.address(&name)?;
+        address.set_ip("0.0.0.0".parse().unwrap());
 
         // Load default parameters if none are specified.
         let parameters = match parameters {
