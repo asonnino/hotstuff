@@ -1,22 +1,21 @@
 use super::*;
+use crypto::Hash as _;
+use crypto::{generate_keypair, PublicKey, SecretKey};
 use futures::future::try_join_all;
-use crypto::crypto::{generate_keypair, PublicKey, SecretKey};
-use crypto::crypto::Hash as _;
-use std::fs;
 use rand::rngs::StdRng;
 use rand::SeedableRng as _;
+use std::fs;
 
-// Fixture.
 pub fn keys() -> Vec<(PublicKey, SecretKey)> {
     let mut rng = StdRng::from_seed([0; 32]);
     (0..4).map(|_| generate_keypair(&mut rng)).collect()
 }
 
-pub trait MockSecret {
+pub trait TestSecret {
     fn print_key_files(prefix: &str) -> Vec<String>;
 }
 
-impl MockSecret for Secret {
+impl TestSecret for Secret {
     fn print_key_files(prefix: &str) -> Vec<String> {
         keys()
             .into_iter()
@@ -32,18 +31,17 @@ impl MockSecret for Secret {
     }
 }
 
-// Fixture.
 pub fn committee() -> Committee {
     let authorities: Vec<_> = keys().into_iter().map(|(name, _)| (name, 1)).collect();
     Committee::new(&authorities, /* epoch */ 1)
 }
 
-pub trait MockCommittee {
+pub trait TestCommittee {
     fn increment_base_port(&mut self, base_port: u16);
     fn print_committee(filename: &str, base_port: u16);
 }
 
-impl MockCommittee for Committee {
+impl TestCommittee for Committee {
     fn increment_base_port(&mut self, base_port: u16) {
         for authority in self.authorities.values_mut() {
             let port = authority.address.port();

@@ -8,7 +8,7 @@ use futures::stream::StreamExt as _;
 use log::{debug, error};
 use mempool::mempool::{NodeMempool, PayloadStatus};
 use std::collections::HashMap;
-use store::store::Store;
+use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 type DriverMessage = (Vec<u8>, Block, Receiver<()>);

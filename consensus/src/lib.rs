@@ -1,6 +1,5 @@
 #[macro_use]
 pub mod error;
-
 mod aggregator;
 pub mod core;
 pub mod leader;
@@ -11,5 +10,5 @@ mod synchronizer;
 mod timer;
 
 #[cfg(test)]
-#[path = "tests/fixtures.rs"]
-mod fixtures;
+#[path = "tests/common.rs"]
+mod common;

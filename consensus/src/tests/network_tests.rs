@@ -1,11 +1,9 @@
 use super::*;
-use crate::fixtures::committee;
-use crate::fixtures::MockCommittee as _;
-use crate::messages::messages_tests::{block, keys, vote};
+use crate::common::TestCommittee as _;
+use crate::common::{block, committee, keys, vote};
 use futures::future::try_join_all;
 use tokio::task::JoinHandle;
 
-// Fixture.
 pub fn listener(address: SocketAddr) -> JoinHandle<()> {
     tokio::spawn(async move {
         let listener = TcpListener::bind(&address).await.unwrap();

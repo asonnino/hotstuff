@@ -1,7 +1,7 @@
 use crate::core::RoundNumber;
-use config::config::ConfigError;
-use crypto::crypto::{CryptoError, Digest, PublicKey};
-use store::store::StoreError;
+use config::ConfigError;
+use crypto::{CryptoError, Digest, PublicKey};
+use store::StoreError;
 use thiserror::Error;
 
 #[macro_export]

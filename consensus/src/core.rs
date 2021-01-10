@@ -6,16 +6,16 @@ use crate::messages::{Block, GenericQC, Vote, QC, TC};
 use crate::network::NetMessage;
 use crate::synchronizer::Synchronizer;
 use crate::timer::{TimerId, TimerManager};
-use config::config::{Committee, Parameters};
-use crypto::crypto::Hash as _;
-use crypto::crypto::{Digest, PublicKey, SignatureService};
+use config::{Committee, Parameters};
+use crypto::Hash as _;
+use crypto::{Digest, PublicKey, SignatureService};
 use futures::future::FutureExt as _;
 use futures::select;
 use log::{debug, error, info, warn};
 use mempool::mempool::NodeMempool;
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
-use store::store::Store;
+use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 #[cfg(test)]

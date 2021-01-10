@@ -19,4 +19,5 @@ store = { path = "../store" }
 mempool = { path = "../mempool" }
 crypto = { path = "../crypto" }
 
+[dev-dependencies]
 rand = "0.7.3"

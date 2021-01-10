@@ -1,14 +1,14 @@
+use config::Config as _;
+use config::{Committee, ConfigError, Parameters, Secret};
 use consensus::core::Core;
 use consensus::error::{ConsensusError, ConsensusResult};
 use consensus::leader::LeaderElector;
 use consensus::messages::Block;
 use consensus::network::{NetReceiver, NetSender};
-use config::config::Config as _;
-use config::config::{Committee, ConfigError, Parameters, Secret};
-use crypto::crypto::SignatureService;
+use crypto::SignatureService;
 use log::info;
 use mempool::mock::MockMempool;
-use store::store::Store;
+use store::Store;
 use tokio::sync::mpsc::{channel, Receiver};
 
 #[cfg(test)]
@@ -36,11 +36,13 @@ impl Node {
                 address.set_ip("0.0.0.0".parse().unwrap());
                 address
             }
-            None => return Err(ConsensusError::ConfigError(ConfigError::ReadError {
-                // TODO
-                file: committee_file.to_string(),
-                message: "Node name is not in the committee".to_string()
-            })),
+            None => {
+                return Err(ConsensusError::ConfigError(ConfigError::ReadError {
+                    // TODO
+                    file: committee_file.to_string(),
+                    message: "Node name is not in the committee".to_string(),
+                }));
+            }
         };
 
         // Load default parameters if none are specified.

@@ -1,7 +1,5 @@
 use super::*;
-use crypto::crypto::generate_keypair;
 use std::fmt;
-use std::fs;
 
 impl PartialEq for Committee {
     fn eq(&self, other: &Self) -> bool {
@@ -27,7 +25,6 @@ impl fmt::Debug for Authority {
     }
 }
 
-// Fixture.
 pub fn committee() -> Committee {
     let mut rng = StdRng::from_seed([0; 32]);
     let keys: Vec<_> = (0..4).map(|_| generate_keypair(&mut rng)).collect();

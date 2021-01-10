@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 thiserror = "1.0.21"
-tokio = { version = "0.3.1", features = ["rt", "net", "time", "macros", "sync", "rt-multi-thread"] }
+tokio = { version = "0.3.1", features = ["rt", "net", "time", "macros", "sync"] }
 tokio-util = { version = "0.5", features= ["codec"] }
 ed25519-dalek = { version = "1.0.1" }
 log = "0.4.0"
@@ -14,13 +14,11 @@ serde = { version = "1.0", features = ["derive"] }
 bytes = "0.6"
 bincode = "1.3.1"
 futures = "0.3.8"
-clap = "2.33.3"
-env_logger = "0.8.2"
 
 store = { path = "../store" }
 crypto = { path = "../crypto" }
 mempool = { path = "../mempool" }
 config = { path = "../config" }
 
-
+[dev-dependencies]
 rand = "0.7.3"

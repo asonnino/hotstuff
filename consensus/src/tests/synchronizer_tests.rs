@@ -1,5 +1,5 @@
 use super::*;
-use crate::messages::messages_tests::{block, chain, keys};
+use crate::common::{block, chain, keys};
 use std::fs;
 
 #[tokio::test]

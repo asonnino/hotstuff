@@ -1,6 +1,8 @@
 use crate::mempool::{NodeMempool, PayloadStatus};
 use async_trait::async_trait;
-use rand::Rng as _;
+use rand::rngs::StdRng;
+use rand::SeedableRng as _;
+use rand::RngCore as _;
 
 pub struct MockMempool;
 
@@ -13,12 +15,10 @@ impl MockMempool {
 #[async_trait]
 impl NodeMempool for MockMempool {
     async fn get(&self) -> Vec<u8> {
-        let mut rng = rand::thread_rng();
-        [
-            rng.gen::<u128>().to_le_bytes(),
-            rng.gen::<u128>().to_le_bytes(),
-        ]
-        .concat()
+        let mut rng = StdRng::from_seed([0; 32]);
+        let mut payload = [0u8; 32];
+        rng.fill_bytes(&mut payload);
+        payload.to_vec()
     }
 
     async fn verify(&self, _payload: &[u8]) -> PayloadStatus {
