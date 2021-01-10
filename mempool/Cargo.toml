@@ -7,3 +7,5 @@ edition = "2018"
 [dependencies]
 rand = "0.7.3"
 async-trait = "0.1.42"
+
+consensus = { path = "../consensus" }

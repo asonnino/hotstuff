@@ -1,8 +1,8 @@
-use crate::mempool::{NodeMempool, PayloadStatus};
 use async_trait::async_trait;
+use consensus::mempool::{NodeMempool, PayloadStatus};
 use rand::rngs::StdRng;
-use rand::SeedableRng as _;
 use rand::RngCore as _;
+use rand::SeedableRng as _;
 
 pub struct MockMempool;
 

@@ -3,7 +3,7 @@ pub mod error;
 mod aggregator;
 pub mod core;
 pub mod leader;
-mod mempool;
+pub mod mempool;
 pub mod messages;
 pub mod network;
 mod synchronizer;
