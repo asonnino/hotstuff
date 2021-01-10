@@ -67,11 +67,3 @@ impl From<CryptoError> for ConsensusError {
         ConsensusError::InvalidSignature
     }
 }
-
-/*
-impl From<ConfigError> for ConsensusError {
-    fn from(e: ConfigError) -> Self {
-        ConsensusError::ConfigError {file: e.file, message: e.message}
-    }
-}
-*/
