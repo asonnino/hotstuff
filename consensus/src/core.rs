@@ -1,21 +1,21 @@
 use crate::aggregator::Aggregator;
-use crate::config::{Committee, Parameters};
-use crypto::crypto::Hash as _;
-use crypto::crypto::{Digest, PublicKey, SignatureService};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
-use crate::mempool::{MempoolDriver};
-use mempool::mempool::NodeMempool;
+use crate::mempool::MempoolDriver;
 use crate::messages::{Block, GenericQC, Vote, QC, TC};
 use crate::network::NetMessage;
-use store::store::Store;
 use crate::synchronizer::Synchronizer;
 use crate::timer::{TimerId, TimerManager};
+use config::config::{Committee, Parameters};
+use crypto::crypto::Hash as _;
+use crypto::crypto::{Digest, PublicKey, SignatureService};
 use futures::future::FutureExt as _;
 use futures::select;
 use log::{debug, error, info, warn};
+use mempool::mempool::NodeMempool;
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
+use store::store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 #[cfg(test)]

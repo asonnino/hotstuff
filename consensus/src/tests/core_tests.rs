@@ -1,8 +1,8 @@
 use super::*;
-use crate::config::config_tests::committee;
+use crate::fixtures::committee;
+use crate::messages::messages_tests::{chain, keys};
 use crypto::crypto::SecretKey;
 use mempool::mock::MockMempool;
-use crate::messages::messages_tests::{keys, chain};
 use std::fs;
 
 // Fixture.

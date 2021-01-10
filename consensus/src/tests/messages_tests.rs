@@ -1,5 +1,5 @@
 use super::*;
-use crate::config::config_tests::committee;
+use crate::fixtures::committee;
 use crypto::crypto::{generate_keypair, SecretKey};
 use rand::rngs::StdRng;
 use rand::SeedableRng as _;

@@ -1,9 +1,9 @@
 use super::*;
-use crate::config::config_tests::committee;
-use crypto::crypto::generate_keypair;
+use crate::fixtures::committee;
 use crate::messages::messages_tests::{keys, qc, vote};
 use crate::messages::GenericQC as _;
 use crate::messages::QC;
+use crypto::crypto::generate_keypair;
 use rand::rngs::StdRng;
 use rand::SeedableRng as _;
 

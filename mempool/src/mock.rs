@@ -1,6 +1,6 @@
-use rand::Rng as _;
-use crate::mempool::{PayloadStatus, NodeMempool};
+use crate::mempool::{NodeMempool, PayloadStatus};
 use async_trait::async_trait;
+use rand::Rng as _;
 
 pub struct MockMempool;
 

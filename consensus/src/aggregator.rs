@@ -1,8 +1,8 @@
-use crate::config::{Committee, Stake};
 use crate::core::RoundNumber;
-use crypto::crypto::{Digest, Hash, PublicKey, Signature};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::messages::Vote;
+use config::config::{Committee, Stake};
+use crypto::crypto::{Digest, Hash, PublicKey, Signature};
 use std::collections::{HashMap, HashSet};
 
 #[cfg(test)]

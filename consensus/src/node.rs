@@ -1,14 +1,14 @@
-use crate::config::Config as _;
-use crate::config::{Committee, Parameters, Secret};
 use crate::core::Core;
-use crypto::crypto::SignatureService;
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
-use mempool::mock::MockMempool;
 use crate::messages::Block;
 use crate::network::{NetReceiver, NetSender};
-use store::store::Store;
+use config::config::Config as _;
+use config::config::{Committee, ConfigError, Parameters, Secret};
+use crypto::crypto::SignatureService;
 use log::info;
+use mempool::mock::MockMempool;
+use store::store::Store;
 use tokio::sync::mpsc::{channel, Receiver};
 
 #[cfg(test)]
@@ -36,10 +36,11 @@ impl Node {
                 address.set_ip("0.0.0.0".parse().unwrap());
                 address
             }
-            None => bail!(ConsensusError::ConfigError(
-                committee_file.to_string(),
-                "Node name is not in the committee".to_string()
-            )),
+            None => bail!(ConsensusError::ConfigError(ConfigError::ReadError {
+                // TODO
+                file: committee_file.to_string(),
+                message: "Node name is not in the committee".to_string()
+            })),
         };
 
         // Load default parameters if none are specified.
@@ -84,6 +85,6 @@ impl Node {
     }
 
     pub fn print_key_file(filename: &str) -> ConsensusResult<()> {
-        Secret::new().write(filename)
+        Secret::new().write(filename).map_err(ConsensusError::from)
     }
 }

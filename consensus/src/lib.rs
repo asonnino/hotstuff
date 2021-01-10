@@ -2,7 +2,6 @@
 mod error;
 
 mod aggregator;
-pub mod config;
 mod core;
 mod leader;
 mod mempool;
@@ -11,3 +10,7 @@ mod network;
 pub mod node;
 mod synchronizer;
 mod timer;
+
+#[cfg(test)]
+#[path = "tests/fixtures.rs"]
+mod fixtures;

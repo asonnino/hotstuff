@@ -1,17 +1,17 @@
 use crate::core::CoreMessage;
-use crypto::crypto::Hash as _;
-use crypto::crypto::{Digest, PublicKey};
 use crate::error::ConsensusResult;
 use crate::messages::{Block, QC};
 use crate::network::NetMessage;
-use store::store::Store;
 use crate::timer::TimerManager;
+use crypto::crypto::Hash as _;
+use crypto::crypto::{Digest, PublicKey};
 use futures::future::FutureExt as _;
 use futures::select;
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
 use log::{debug, error};
 use std::collections::HashSet;
+use store::store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 #[cfg(test)]

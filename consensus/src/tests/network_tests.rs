@@ -1,6 +1,7 @@
 use super::*;
-use crate::config::config_tests::committee;
-use crate::messages::messages_tests::{block, vote, keys};
+use crate::fixtures::committee;
+use crate::fixtures::MockCommittee as _;
+use crate::messages::messages_tests::{block, keys, vote};
 use futures::future::try_join_all;
 use tokio::task::JoinHandle;
 

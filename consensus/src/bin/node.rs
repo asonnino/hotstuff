@@ -1,9 +1,9 @@
 use clap::{crate_name, crate_version, App, AppSettings, SubCommand};
+use config::config::Config as _;
+use config::config::{Committee, Secret};
+use consensus::node::Node;
 use env_logger::Env;
 use futures::future::try_join_all;
-use consensus::config::Config as _;
-use consensus::config::{Committee, Secret};
-use consensus::node::Node;
 use log::error;
 use std::fs;
 use tokio::task::JoinHandle;

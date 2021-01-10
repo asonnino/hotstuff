@@ -1,7 +1,7 @@
-use crate::config::Committee;
 use crate::core::RoundNumber;
-use crypto::crypto::{Digest, Hash, PublicKey, Signature, SignatureService};
 use crate::error::{ConsensusError, ConsensusResult};
+use config::config::Committee;
+use crypto::crypto::{Digest, Hash, PublicKey, Signature, SignatureService};
 use ed25519_dalek::Digest as _;
 use ed25519_dalek::Sha512;
 use serde::{Deserialize, Serialize};

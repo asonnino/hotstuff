@@ -1,9 +1,9 @@
-use crate::config::Committee;
 use crate::core::CoreMessage;
-use crypto::crypto::{Digest, PublicKey};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::messages::{Block, Vote};
 use bytes::{Bytes, BytesMut};
+use config::config::Committee;
+use crypto::crypto::{Digest, PublicKey};
 use futures::sink::SinkExt as _;
 use futures::stream::StreamExt as _;
 use log::{debug, info, warn};

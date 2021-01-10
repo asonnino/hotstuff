@@ -1,5 +1,6 @@
 use crate::core::RoundNumber;
-use crypto::crypto::{Digest, PublicKey, CryptoError};
+use config::config::ConfigError;
+use crypto::crypto::{CryptoError, Digest, PublicKey};
 use store::store::StoreError;
 use thiserror::Error;
 
@@ -32,8 +33,8 @@ pub enum ConsensusError {
     #[error("Store error: {0}")]
     StoreError(#[from] StoreError),
 
-    #[error("Failed to read config file '{0}': {1}")]
-    ConfigError(String, String),
+    #[error("Configuration error. {0}")]
+    ConfigError(#[from] ConfigError),
 
     #[error("Invalid signature")]
     InvalidSignature,
@@ -66,3 +67,11 @@ impl From<CryptoError> for ConsensusError {
         ConsensusError::InvalidSignature
     }
 }
+
+/*
+impl From<ConfigError> for ConsensusError {
+    fn from(e: ConfigError) -> Self {
+        ConsensusError::ConfigError {file: e.file, message: e.message}
+    }
+}
+*/

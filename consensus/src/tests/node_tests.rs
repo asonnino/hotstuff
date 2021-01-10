@@ -1,5 +1,7 @@
 use super::*;
-use crate::messages::messages_tests::keys;
+use crate::fixtures::keys;
+use crate::fixtures::MockCommittee as _;
+use crate::fixtures::MockSecret as _;
 use futures::future::try_join_all;
 use std::fs;
 

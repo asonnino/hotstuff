@@ -1,5 +1,4 @@
 use crypto::crypto::{generate_keypair, generate_production_keypair, PublicKey, SecretKey};
-use crate::error::{ConsensusError, ConsensusResult};
 use rand::rngs::StdRng;
 use rand::SeedableRng as _;
 use serde::de::DeserializeOwned;
@@ -9,24 +8,37 @@ use std::fs::{self, OpenOptions};
 use std::io::BufWriter;
 use std::io::Write as _;
 use std::net::SocketAddr;
+use thiserror::Error;
 
 #[cfg(test)]
 #[path = "tests/config_tests.rs"]
 pub mod config_tests;
 
+#[derive(Error, Debug)]
+pub enum ConfigError {
+    #[error("Failed to read config file '{file}': {message}")]
+    ReadError { file: String, message: String },
+
+    #[error("Failed to write config file '{file}': {message}")]
+    WriteError { file: String, message: String },
+}
+
 pub type Stake = u32;
 pub type EpochNumber = u128;
 
 pub trait Config: Serialize + DeserializeOwned {
-    fn read(path: &str) -> ConsensusResult<Self> {
+    fn read(path: &str) -> Result<Self, ConfigError> {
         let reader = || -> Result<Self, std::io::Error> {
             let data = fs::read(path)?;
             Ok(serde_json::from_slice(data.as_slice())?)
         };
-        reader().map_err(|e| ConsensusError::ConfigError(path.to_string(), e.to_string()))
+        reader().map_err(|e| ConfigError::ReadError {
+            file: path.to_string(),
+            message: e.to_string(),
+        })
     }
 
-    fn write(&self, path: &str) -> ConsensusResult<()> {
+    fn write(&self, path: &str) -> Result<(), ConfigError> {
         let writer = || -> Result<(), std::io::Error> {
             let file = OpenOptions::new().create(true).write(true).open(path)?;
             let mut writer = BufWriter::new(file);
@@ -35,7 +47,10 @@ pub trait Config: Serialize + DeserializeOwned {
             writer.write_all(b"\n")?;
             Ok(())
         };
-        writer().map_err(|e| ConsensusError::ConfigError(path.to_string(), e.to_string()))
+        writer().map_err(|e| ConfigError::WriteError {
+            file: path.to_string(),
+            message: e.to_string(),
+        })
     }
 }
 
