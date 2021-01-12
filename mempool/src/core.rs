@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::convert::TryInto;
 use store::Store;
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 pub struct Parameters {
     queue_capacity: usize,
@@ -32,6 +32,7 @@ pub struct Core {
     parameters: Parameters,
     store: Store,
     network_channel: Sender<NetMessage>,
+    receiver: Receiver<CoreMessage>,
 }
 
 impl Core {
@@ -39,28 +40,21 @@ impl Core {
         committee: Committee,
         name: PublicKey,
         signature_service: SignatureService,
-        _receiver: Receiver<Transaction>,
         parameters: Parameters,
         network_channel: Sender<NetMessage>,
         store: Store,
+        receiver: Receiver<CoreMessage>,
     ) -> Self {
-        let payload_maker = PayloadMaker::new(name, signature_service, parameters.max_payload_size);
         Self {
             queue: VecDeque::with_capacity(parameters.queue_capacity),
-            payload_maker,
+            payload_maker: PayloadMaker::new(name, signature_service, parameters.max_payload_size),
             committee,
             name,
             parameters,
             store,
             network_channel,
+            receiver,
         }
-        /*
-        tokio::spawn(async move {
-            while let Some(message) = receiver.recv().await {
-                //
-            }
-        )};
-        */
     }
 
     async fn store_payload(&mut self, digest: &Digest, payload: &Payload) -> MempoolResult<()> {
@@ -72,7 +66,7 @@ impl Core {
             .map_err(MempoolError::from)
     }
 
-    pub async fn handle_transaction(&mut self, transaction: Transaction) -> MempoolResult<()> {
+    async fn handle_transaction(&mut self, transaction: Transaction) -> MempoolResult<()> {
         // Drop the transaction if our mempool is full.
         if self.queue.len() >= self.parameters.queue_capacity {
             return Ok(());
@@ -93,7 +87,7 @@ impl Core {
         Ok(())
     }
 
-    pub async fn handle_payload(&mut self, payload: Payload) -> MempoolResult<()> {
+    async fn handle_payload(&mut self, payload: Payload) -> MempoolResult<()> {
         // Ensure the author of the payload has stake.
         let author = payload.author;
         ensure!(
@@ -117,7 +111,7 @@ impl Core {
         Ok(())
     }
 
-    pub async fn handle_request(&mut self, digest: Digest, sender: PublicKey) -> MempoolResult<()> {
+    async fn handle_request(&mut self, digest: Digest, sender: PublicKey) -> MempoolResult<()> {
         if let Some(bytes) = self.store.read(digest.to_vec()).await? {
             let payload = bincode::deserialize(&bytes)?;
             let message = NetMessage::Reply(payload, sender);
@@ -126,6 +120,75 @@ impl Core {
             }
         }
         Ok(())
+    }
+
+    fn next_payload(&mut self) -> Option<Digest> {
+        self.queue.pop_back()
+    }
+
+    async fn verify_payload(&mut self, digest: Digest) -> MempoolResult<bool> {
+        match self.store.read(digest.to_vec()).await? {
+            Some(_) => Ok(true),
+            None => {
+                debug!("Requesting sync for missing payload {:?}", digest);
+                let message = NetMessage::Request(digest, self.name);
+                if let Err(e) = self.network_channel.send(message).await {
+                    panic!("Failed to send block through network channel: {}", e);
+                }
+                Ok(false)
+            }
+        }
+    }
+
+    pub async fn run(&mut self) {
+        while let Some(message) = self.receiver.recv().await {
+            let result = match message {
+                CoreMessage::Transaction(tx) => self.handle_transaction(tx).await,
+                CoreMessage::Payload(payload) => self.handle_payload(payload).await,
+                CoreMessage::Request(digest, sender) => self.handle_request(digest, sender).await,
+            };
+            match result {
+                Ok(()) => (),
+                Err(MempoolError::StoreError(e)) => error!("{}", e),
+                Err(MempoolError::SerializationError(e)) => error!("Store corrupted. {}", e),
+                Err(e) => warn!("{}", e),
+            }
+        }
+    }
+}
+
+struct SimpleMempool {
+    channel: Sender<CoreMessage>,
+}
+
+impl SimpleMempool {
+    pub fn run(
+        committee: Committee,
+        name: PublicKey,
+        signature_service: SignatureService,
+        parameters: Parameters,
+        network_channel: Sender<NetMessage>,
+        store: Store,
+    ) {
+        //let (tx_network_sender, rx_core) = channel(100);
+        //let (tx_core, rx_core) = channel(100);
+        let (tx_core, rx_core) = channel(100);
+
+        // Run the core.
+        let mut core = Core::new(
+            committee,
+            name,
+            signature_service,
+            parameters,
+            network_channel,
+            store,
+            rx_core,
+        );
+        tokio::spawn(async move {
+            core.run().await;
+        });
+
+        // Run the network receiver.
     }
 }
 
