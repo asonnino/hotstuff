@@ -1,4 +1,5 @@
 #[macro_use]
 mod error;
+pub mod core;
 mod messages;
-pub mod simple;
+mod network;

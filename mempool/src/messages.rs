@@ -3,12 +3,13 @@ use ed25519_dalek::Digest as _;
 use ed25519_dalek::Sha512;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
+use std::fmt;
 
 pub type Transaction = Vec<u8>;
 
-#[derive(Clone, Default, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Payload {
-    transactions: Vec<Transaction>,
+    pub transactions: Vec<Transaction>,
     pub author: PublicKey,
     pub signature: Signature,
 }
@@ -30,6 +31,10 @@ impl Payload {
             ..payload
         }
     }
+
+    pub fn size(&self) -> usize {
+        self.transactions.iter().map(|x| x.len()).sum()
+    }
 }
 
 impl Hash for Payload {
@@ -40,6 +45,12 @@ impl Hash for Payload {
             hasher.update(transaction);
         }
         Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
+    }
+}
+
+impl fmt::Debug for Payload {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "Payload({:?})", self.digest())
     }
 }
 

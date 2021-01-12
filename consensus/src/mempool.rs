@@ -22,17 +22,17 @@ pub enum PayloadStatus {
 pub trait NodeMempool: Send + Sync {
     /// Consensus calls this method whenever it needs to create a new block.
     /// The mempool needs to promptly provide a payload.
-    async fn get(&self) -> Vec<u8>;
+    async fn get(&mut self) -> Vec<u8>;
 
     /// Consensus calls this method when receiving a new block. The mempool should
     /// return Accept if the block can be processed right away, Wait(missing_value)
     /// if the block should be processed when missing_value is the storage, or
     /// Reject if the payload is invalid and the block should be dropped.
-    async fn verify(&self, payload: &[u8]) -> PayloadStatus;
+    async fn verify(&mut self, payload: &[u8]) -> PayloadStatus;
 
     /// Consensus calls this method upon commit a block. The mempool can use the
     /// knowledge that a block is committed to clean up its internal state.
-    async fn garbage_collect(&self, payload: &[u8]);
+    async fn garbage_collect(&mut self, payload: &[u8]);
 }
 
 type DriverMessage = (Vec<u8>, Block, Receiver<()>);
@@ -124,11 +124,11 @@ impl<Mempool: 'static + NodeMempool> MempoolDriver<Mempool> {
         }
     }
 
-    pub async fn garbage_collect(&self, payload: &[u8]) {
+    pub async fn garbage_collect(&mut self, payload: &[u8]) {
         self.mempool.garbage_collect(payload).await;
     }
 
-    pub async fn get(&self) -> Vec<u8> {
+    pub async fn get(&mut self) -> Vec<u8> {
         self.mempool.get().await
     }
 }

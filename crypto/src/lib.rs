@@ -4,7 +4,8 @@ use ed25519_dalek::Signer as _;
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
 use serde::{de, ser, Deserialize, Serialize};
-use std::convert::TryInto;
+use std::array::TryFromSliceError;
+use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::sync::oneshot;
@@ -33,6 +34,13 @@ impl fmt::Debug for Digest {
 impl AsRef<[u8]> for Digest {
     fn as_ref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl TryFrom<&[u8]> for Digest {
+    type Error = TryFromSliceError;
+    fn try_from(item: &[u8]) -> Result<Self, Self::Error> {
+        Ok(Digest(item.try_into()?))
     }
 }
 
