@@ -41,7 +41,7 @@ pub enum MempoolError {
     #[error("Payload exceed max size")]
     PayloadTooBig,
 
-    #[error("{0}")]
+    #[error(transparent)]
     ConfigError(#[from] ConfigError),
 }
 

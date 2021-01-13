@@ -5,8 +5,6 @@ use crate::network::NetMessage;
 use bytes::Bytes;
 use config::Committee;
 use crypto::{Digest, Hash, PublicKey, SignatureService};
-use futures::future::FutureExt as _;
-use futures::select;
 use log::{debug, error, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -153,43 +151,39 @@ impl Core {
 
     pub async fn run(&mut self) {
         loop {
-            select! {
-                message = self.core_channel.recv().fuse() => {
-                    if let Some(message) = message {
-                        let result = match message {
-                            CoreMessage::Transaction(tx) => self.handle_transaction(tx).await,
-                            CoreMessage::Payload(payload) => self.handle_payload(payload).await,
-                            CoreMessage::SyncRequest(digest, sender) => {
-                                self.handle_request(digest, sender).await
+            tokio::select! {
+                Some(message) = self.core_channel.recv() => {
+                    let result = match message {
+                        CoreMessage::Transaction(tx) => self.handle_transaction(tx).await,
+                        CoreMessage::Payload(payload) => self.handle_payload(payload).await,
+                        CoreMessage::SyncRequest(digest, sender) => {
+                            self.handle_request(digest, sender).await
+                        }
+                    };
+                    match result {
+                        Ok(()) => (),
+                        Err(MempoolError::StoreError(e)) => error!("{}", e),
+                        Err(MempoolError::SerializationError(e)) => error!("Store corrupted. {}", e),
+                        Err(e) => warn!("{}", e),
+                    }
+                },
+                Some(message) = self.consensus_channel.recv() => {
+                    match message {
+                        ConsensusMessage::Get(sender) => {
+                            let _ = sender.send(self.next_payload());
+                        },
+                        ConsensusMessage::Verify(digest, sender) => {
+                            let result = self.verify_payload(digest).await;
+                            match result {
+                                Ok(_) => (),
+                                Err(MempoolError::StoreError(ref e)) => error!("{}", e),
+                                Err(ref e) => warn!("{}", e),
                             }
-                        };
-                        match result {
-                            Ok(()) => (),
-                            Err(MempoolError::StoreError(e)) => error!("{}", e),
-                            Err(MempoolError::SerializationError(e)) => error!("Store corrupted. {}", e),
-                            Err(e) => warn!("{}", e),
+                            let _ = sender.send(result);
                         }
                     }
                 },
-                message = self.consensus_channel.recv().fuse() => {
-                    if let Some(message) = message {
-                        match message {
-                            ConsensusMessage::Get(sender) => {
-                                let _ = sender.send(self.next_payload());
-                            },
-                            ConsensusMessage::Verify(digest, sender) => {
-                                let result = self.verify_payload(digest).await;
-                                match result {
-                                    Ok(_) => (),
-                                    Err(MempoolError::StoreError(ref e)) => error!("{}", e),
-                                    Err(ref e) => warn!("{}", e),
-                                }
-                                let _ = sender.send(result);
-                            }
-                        }
-                    }
-                },
-                complete => break,
+                else => break,
             }
         }
     }

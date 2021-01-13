@@ -4,6 +4,7 @@ use futures::stream::StreamExt as _;
 use log::{debug, info, warn};
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::net::SocketAddr;
 use thiserror::Error;
 use tokio::net::{TcpListener, TcpStream};
@@ -39,18 +40,12 @@ impl NetSender {
                 // with a dedicated channel kept by the HashMap called `senders`. If the
                 // a connection die, we make a new one.
                 match senders.get(&address) {
-                    Some(tx) if !tx.is_closed() => {
-                        if let Err(e) = tx.send(bytes.clone()).await {
-                            panic!("Failed to send message to inner worker: {} ", e);
-                        }
+                    Some(tx) if tx.send(bytes.clone()).await.is_ok() => {
+                        debug!("Successfully sent message to {}", address);
                     }
                     _ => {
                         let tx = Self::spawn_worker(address).await;
-                        if !tx.is_closed() {
-                            debug!("Established new connection with {}", address);
-                            if let Err(e) = tx.send(bytes.clone()).await {
-                                panic!("Failed to send message to inner worker: {} ", e);
-                            }
+                        if let Ok(()) = tx.send(bytes.clone()).await {
                             senders.insert(address, tx);
                         }
                     }
@@ -87,7 +82,7 @@ pub struct NetReceiver<Message> {
     deliver: Sender<Message>,
 }
 
-impl<Message: 'static + Send + DeserializeOwned> NetReceiver<Message> {
+impl<Message: 'static + Send + DeserializeOwned + Debug> NetReceiver<Message> {
     pub fn new(address: SocketAddr, deliver: Sender<Message>) -> Self {
         Self { address, deliver }
     }
@@ -120,15 +115,13 @@ impl<Message: 'static + Send + DeserializeOwned> NetReceiver<Message> {
                     .and_then(|x| Ok(bincode::deserialize(&x)?))
                 {
                     Ok(message) => {
-                        //debug!("Received {:?}", message);
-                        if let Err(e) = deliver.send(message).await {
-                            panic!("Failed to send message to Core: {}", e);
-                        }
+                        debug!("Received {:?}", message);
+                        deliver.send(message).await.expect("Core channel closed");
                     }
                     Err(e) => warn!("{}", e),
                 }
             }
-            info!("Connection closed by peer {}", peer);
+            warn!("Connection closed by peer {}", peer);
         });
     }
 }
