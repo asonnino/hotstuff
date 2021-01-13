@@ -1,6 +1,7 @@
 use crate::error::{MempoolError, MempoolResult};
 use crate::messages::{Payload, PayloadMaker, Transaction};
 use crate::network::NetMessage;
+use crate::network::{NetReceiver, NetSender};
 use async_trait::async_trait;
 use config::Committee;
 use consensus::mempool::{NodeMempool, PayloadStatus};
@@ -11,6 +12,7 @@ use std::collections::VecDeque;
 use std::convert::TryInto;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::oneshot;
 
 pub struct Parameters {
     queue_capacity: usize,
@@ -41,8 +43,8 @@ impl Core {
         name: PublicKey,
         signature_service: SignatureService,
         parameters: Parameters,
-        network_channel: Sender<NetMessage>,
         store: Store,
+        network_channel: Sender<NetMessage>,
         receiver: Receiver<CoreMessage>,
     ) -> Self {
         Self {
@@ -167,12 +169,27 @@ impl SimpleMempool {
         name: PublicKey,
         signature_service: SignatureService,
         parameters: Parameters,
-        network_channel: Sender<NetMessage>,
         store: Store,
     ) {
-        //let (tx_network_sender, rx_core) = channel(100);
-        //let (tx_core, rx_core) = channel(100);
-        let (tx_core, rx_core) = channel(100);
+        let (tx_network, rx_network) = channel(1000);
+        let (tx_core, rx_core) = channel(1000);
+
+        let mut address = committee
+            .address(&name)
+            .expect("Our own public key is not in the committee");
+        address.set_ip("0.0.0.0".parse().unwrap());
+
+        // Run the network receiver.
+        let mut network_receiver = NetReceiver::new(address, tx_core);
+        tokio::spawn(async move {
+            network_receiver.run().await;
+        });
+
+        // Run the network sender.
+        let mut network_sender = NetSender::new(name, committee.clone(), rx_network);
+        tokio::spawn(async move {
+            network_sender.run().await;
+        });
 
         // Run the core.
         let mut core = Core::new(
@@ -180,15 +197,13 @@ impl SimpleMempool {
             name,
             signature_service,
             parameters,
-            network_channel,
             store,
+            tx_network,
             rx_core,
         );
         tokio::spawn(async move {
             core.run().await;
         });
-
-        // Run the network receiver.
     }
 }
 

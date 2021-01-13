@@ -7,6 +7,7 @@ use crypto::{Digest, PublicKey};
 use futures::sink::SinkExt as _;
 use futures::stream::StreamExt as _;
 use log::{debug, info, warn};
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use tokio::net::{TcpListener, TcpStream};
@@ -20,41 +21,6 @@ pub enum NetMessage {
     Reply(Payload, PublicKey),
 }
 
-pub struct Network;
-
-impl Network {
-    pub fn run(
-        name: PublicKey,
-        committee: Committee,
-        receiver: Receiver<NetMessage>,
-        core_channel: Sender<CoreMessage>,
-    ) {
-        let mut address = committee
-            .address(&name)
-            .expect("Our own public key is not in the committee");
-        address.set_ip("0.0.0.0".parse().unwrap());
-
-        // Run the network receiver.
-        let mut network_receiver = NetReceiver {
-            address,
-            core_channel,
-        };
-        tokio::spawn(async move {
-            network_receiver.run();
-        });
-
-        // Run the network sender.
-        let mut network_sender = NetSender {
-            name,
-            committee,
-            receiver,
-        };
-        tokio::spawn(async move {
-            network_sender.run();
-        });
-    }
-}
-
 pub struct NetSender {
     name: PublicKey,
     committee: Committee,
@@ -62,6 +28,14 @@ pub struct NetSender {
 }
 
 impl NetSender {
+    pub fn new(name: PublicKey, committee: Committee, receiver: Receiver<NetMessage>) -> Self {
+        Self {
+            name,
+            committee,
+            receiver,
+        }
+    }
+
     pub async fn run(&mut self) {
         let mut senders = HashMap::<_, Sender<_>>::new();
         while let Some(message) = self.receiver.recv().await {
@@ -147,12 +121,19 @@ impl NetSender {
     }
 }
 
-pub struct NetReceiver {
+pub struct NetReceiver<Message> {
     address: SocketAddr,
-    core_channel: Sender<CoreMessage>,
+    core_channel: Sender<Message>,
 }
 
-impl NetReceiver {
+impl<Message: 'static + Send + DeserializeOwned> NetReceiver<Message> {
+    pub fn new(address: SocketAddr, core_channel: Sender<Message>) -> Self {
+        Self {
+            address,
+            core_channel,
+        }
+    }
+
     pub async fn run(&self) {
         let listener = TcpListener::bind(&self.address)
             .await
@@ -168,33 +149,28 @@ impl NetReceiver {
                 }
             };
             info!("Connection established with peer {}", peer);
-            let core_channel = self.core_channel.clone();
-            Self::spawn_worker(socket, peer, core_channel);
+            Self::spawn_worker(socket, peer, self.core_channel.clone()).await;
         }
     }
 
-    async fn spawn_worker(socket: TcpStream, peer: SocketAddr, core_channel: Sender<CoreMessage>) {
+    async fn spawn_worker(socket: TcpStream, peer: SocketAddr, core_channel: Sender<Message>) {
         tokio::spawn(async move {
             let mut transport = Framed::new(socket, LengthDelimitedCodec::new());
             while let Some(frame) = transport.next().await {
-                if let Err(e) = Self::handle_message(frame, &core_channel).await {
-                    warn!("{}", e);
+                match frame
+                    .map_err(MempoolError::from)
+                    .and_then(|x| Ok(bincode::deserialize(&x)?))
+                {
+                    Ok(message) => {
+                        //debug!("Received {:?}", message);
+                        if let Err(e) = core_channel.send(message).await {
+                            panic!("Failed to send message to Core: {}", e);
+                        }
+                    }
+                    Err(e) => warn!("{}", e),
                 }
             }
             info!("Connection closed by peer {}", peer);
         });
-    }
-
-    async fn handle_message(
-        frame: Result<BytesMut, std::io::Error>,
-        core_channel: &Sender<CoreMessage>,
-    ) -> MempoolResult<()> {
-        let bytes = frame?;
-        let message = bincode::deserialize(&bytes)?;
-        debug!("Received {:?}", message);
-        if let Err(e) = core_channel.send(message).await {
-            panic!("Failed to send message to Core: {}", e);
-        }
-        Ok(())
     }
 }
