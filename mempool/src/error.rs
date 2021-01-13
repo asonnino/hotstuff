@@ -1,3 +1,4 @@
+use config::ConfigError;
 use crypto::{CryptoError, PublicKey};
 use store::StoreError;
 use thiserror::Error;
@@ -39,6 +40,9 @@ pub enum MempoolError {
 
     #[error("Payload exceed max size")]
     PayloadTooBig,
+
+    #[error("{0}")]
+    ConfigError(#[from] ConfigError),
 }
 
 impl From<CryptoError> for MempoolError {

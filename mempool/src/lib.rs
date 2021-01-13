@@ -1,5 +1,6 @@
 #[macro_use]
 mod error;
-pub mod core;
+mod core;
+pub mod mempool;
 mod messages;
 mod network;
