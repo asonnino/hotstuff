@@ -12,18 +12,18 @@ pub struct MockMempool;
 
 #[async_trait]
 impl NodeMempool for MockMempool {
-    async fn get(&self) -> Vec<u8> {
+    async fn get(&mut self) -> Vec<u8> {
         let mut rng = StdRng::from_seed([0; 32]);
         let mut payload = [0u8; 32];
         rng.fill_bytes(&mut payload);
         payload.to_vec()
     }
 
-    async fn verify(&self, _payload: &[u8]) -> PayloadStatus {
+    async fn verify(&mut self, _payload: &[u8]) -> PayloadStatus {
         PayloadStatus::Accept
     }
 
-    async fn garbage_collect(&self, _payload: &[u8]) {}
+    async fn garbage_collect(&mut self, _payload: &[u8]) {}
 }
 
 async fn core(
