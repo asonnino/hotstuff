@@ -75,15 +75,18 @@ impl PayloadMaker {
 
     pub async fn add(&mut self, transaction: Transaction) -> Option<Payload> {
         let length = transaction.len();
-        let ret = if self.size + length > self.max_size {
-            self.size = 0;
-            let transactions = self.transactions.drain(..).collect();
-            Some(Payload::new(transactions, self.name, self.signature_service.clone()).await)
-        } else {
-            None
+        let ret = match self.size + length > self.max_size {
+            true => Some(self.make().await),
+            false => None,
         };
         self.transactions.push(transaction);
         self.size += length;
         ret
+    }
+
+    pub async fn make(&mut self) -> Payload {
+        self.size = 0;
+        let transactions = self.transactions.drain(..).collect();
+        Payload::new(transactions, self.name, self.signature_service.clone()).await
     }
 }

@@ -1,4 +1,3 @@
-use config::ConfigError;
 use crypto::{CryptoError, PublicKey};
 use store::StoreError;
 use thiserror::Error;
@@ -38,12 +37,12 @@ pub enum MempoolError {
     #[error("Serialization error: {0}")]
     SerializationError(#[from] Box<bincode::ErrorKind>),
 
-    #[error(transparent)]
-    ConfigError(#[from] ConfigError),
-
     #[error("Payload exceed max size")]
     PayloadTooBig,
 
     #[error("Mempool full: dropping transaction")]
     MempoolFull,
+
+    #[error("Node {0:?} is not in the committee")]
+    NotInCommittee(PublicKey),
 }

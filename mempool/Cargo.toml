@@ -19,4 +19,6 @@ futures = "0.3.8"
 consensus = { path = "../consensus" }
 crypto = { path = "../crypto" }
 store = { path = "../store" }
-config = { path = "../config" }
+
+[dev_dependencies]
+rand = "0.7.3"

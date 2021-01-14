@@ -1,9 +1,9 @@
+use crate::config::{Committee, Config, Parameters};
 use crate::error::{MempoolError, MempoolResult};
-use crate::mempool::{ConsensusMessage, Parameters};
+use crate::mempool::ConsensusMessage;
 use crate::messages::{Payload, PayloadMaker, Transaction};
 use crate::network::NetMessage;
 use bytes::Bytes;
-use config::Committee;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
 use log::{debug, error, warn};
@@ -37,19 +37,22 @@ pub struct Core {
 
 impl Core {
     pub fn new(
-        committee: Committee,
-        name: PublicKey,
+        config: Config,
         signature_service: SignatureService,
-        parameters: Parameters,
         store: Store,
         network_channel: Sender<NetMessage>,
         core_channel: Receiver<CoreMessage>,
         consensus_channel: Receiver<ConsensusMessage>,
         client_channel: Receiver<Transaction>,
     ) -> Self {
+        let name = config.name;
+        let committee = config.committee;
+        let parameters = config.parameters;
+        let queue = VecDeque::with_capacity(parameters.queue_capacity);
+        let payload_maker = PayloadMaker::new(name, signature_service, parameters.max_payload_size);
         Self {
-            queue: VecDeque::with_capacity(parameters.queue_capacity),
-            payload_maker: PayloadMaker::new(name, signature_service, parameters.max_payload_size),
+            queue,
+            payload_maker,
             committee,
             name,
             parameters,
@@ -76,7 +79,7 @@ impl Core {
         to: Option<PublicKey>,
     ) -> MempoolResult<()> {
         let addresses = if let Some(to) = to {
-            vec![self.committee.address(&to)?]
+            vec![self.committee.mempool_address(&to)?]
         } else {
             self.committee.broadcast_addresses(&self.name)
         };
@@ -112,7 +115,7 @@ impl Core {
         // Ensure the author of the payload has stake.
         let author = payload.author;
         ensure!(
-            self.committee.stake(&author) > 0,
+            self.committee.exists(&author),
             MempoolError::UnknownAuthority(author)
         );
 
@@ -141,8 +144,18 @@ impl Core {
         Ok(())
     }
 
-    fn next_payload(&mut self) -> Option<Digest> {
-        self.queue.pop_back()
+    async fn get_payload(&mut self) -> MempoolResult<Digest> {
+        match self.queue.pop_back() {
+            Some(digest) => Ok(digest),
+            None => {
+                let payload = self.payload_maker.make().await;
+                let digest = payload.digest();
+                self.store_payload(&digest, &payload).await?;
+                let message = CoreMessage::Payload(payload);
+                self.transmit(&message, None).await?;
+                Ok(digest)
+            }
+        }
     }
 
     async fn verify_payload(&mut self, digest: Digest) -> MempoolResult<bool> {
@@ -158,7 +171,7 @@ impl Core {
     }
 
     pub async fn run(&mut self) {
-        let print = |result: Result<&(), &MempoolError>| match result {
+        let log = |result: Result<&(), &MempoolError>| match result {
             Ok(()) => (),
             Err(MempoolError::StoreError(e)) => error!("{}", e),
             Err(MempoolError::SerializationError(e)) => error!("Store corrupted. {}", e),
@@ -176,11 +189,13 @@ impl Core {
                 Some(message) = self.consensus_channel.recv() => {
                     match message {
                         ConsensusMessage::Get(sender) => {
-                            let _ = sender.send(self.next_payload());
+                            let result = self.get_payload().await;
+                            log(result.as_ref().map(|_| &()));
+                            let _ = sender.send(result);
                         },
                         ConsensusMessage::Verify(digest, sender) => {
                             let result = self.verify_payload(digest).await;
-                            print(result.as_ref().map(|_| &()));
+                            log(result.as_ref().map(|_| &()));
                             let _ = sender.send(result);
                         }
                     }
@@ -189,7 +204,7 @@ impl Core {
                 Some(tx) = self.client_channel.recv() => self.handle_transaction(tx).await,
                 else => break,
             };
-            print(result.as_ref());
+            log(result.as_ref());
         }
     }
 }
