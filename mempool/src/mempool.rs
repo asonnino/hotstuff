@@ -15,6 +15,7 @@ pub struct Parameters {
     pub max_payload_size: usize,
 }
 
+#[derive(Debug)]
 pub enum ConsensusMessage {
     Get(oneshot::Sender<Option<Digest>>),
     Verify(Digest, oneshot::Sender<MempoolResult<bool>>),
@@ -35,22 +36,31 @@ impl SimpleMempool {
         let (tx_network, rx_network) = channel(1000);
         let (tx_core, rx_core) = channel(1000);
         let (tx_consensus, rx_consensus) = channel(1000);
+        let (tx_client, rx_client) = channel(1000);
 
+        // TODO: Better committee structure: all mod use the
+        // same port.
         let mut address = committee
             .address(&name)
             .expect("Our own public key is not in the committee");
         address.set_ip("0.0.0.0".parse().unwrap());
 
-        // Run the network receiver.
-        let network_receiver = NetReceiver::new(address, tx_core);
+        // Run the mempool network receiver.
+        let network_receiver = NetReceiver::new(address.clone(), tx_core);
         tokio::spawn(async move {
             network_receiver.run().await;
         });
 
-        // Run the network sender.
+        // Run the mempool network sender.
         let mut network_sender = NetSender::new(rx_network);
         tokio::spawn(async move {
             network_sender.run().await;
+        });
+
+        // Run the front end that receives client transactions.
+        let front = NetReceiver::new(address, tx_client);
+        tokio::spawn(async move {
+            front.run().await;
         });
 
         // Run the core.
@@ -63,6 +73,7 @@ impl SimpleMempool {
             tx_network,
             rx_core,
             rx_consensus,
+            rx_client,
         );
         tokio::spawn(async move {
             core.run().await;
@@ -79,9 +90,10 @@ impl NodeMempool for SimpleMempool {
     async fn get(&mut self) -> Vec<u8> {
         let (sender, receiver) = oneshot::channel();
         let message = ConsensusMessage::Get(sender);
-        if let Err(e) = self.channel.send(message).await {
-            panic!("Failed to send message to core: {}", e);
-        }
+        self.channel
+            .send(message)
+            .await
+            .expect("Consensus channel closed");
         receiver
             .await
             .expect("Failed to receive payload from core")
@@ -94,9 +106,10 @@ impl NodeMempool for SimpleMempool {
             Ok(x) => ConsensusMessage::Verify(x, sender),
             Err(_) => return PayloadStatus::Reject,
         };
-        if let Err(e) = self.channel.send(message).await {
-            panic!("Failed to send message to core: {}", e);
-        }
+        self.channel
+            .send(message)
+            .await
+            .expect("Consensus channel closed");
         match receiver.await.expect("Failed to receive payload from core") {
             Ok(true) => PayloadStatus::Accept,
             Ok(false) => PayloadStatus::Wait(digest.to_vec()),

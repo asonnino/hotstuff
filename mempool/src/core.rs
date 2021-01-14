@@ -4,16 +4,20 @@ use crate::messages::{Payload, PayloadMaker, Transaction};
 use crate::network::NetMessage;
 use bytes::Bytes;
 use config::Committee;
-use crypto::{Digest, Hash, PublicKey, SignatureService};
+use crypto::Hash as _;
+use crypto::{Digest, PublicKey, SignatureService};
 use log::{debug, error, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
 
+#[cfg(test)]
+#[path = "tests/core_tests.rs"]
+pub mod core_tests;
+
 #[derive(Deserialize, Serialize, Debug)]
 pub enum CoreMessage {
-    Transaction(Transaction),
     Payload(Payload),
     SyncRequest(Digest, PublicKey),
 }
@@ -28,6 +32,7 @@ pub struct Core {
     network_channel: Sender<NetMessage>,
     core_channel: Receiver<CoreMessage>,
     consensus_channel: Receiver<ConsensusMessage>,
+    client_channel: Receiver<Transaction>,
 }
 
 impl Core {
@@ -40,6 +45,7 @@ impl Core {
         network_channel: Sender<NetMessage>,
         core_channel: Receiver<CoreMessage>,
         consensus_channel: Receiver<ConsensusMessage>,
+        client_channel: Receiver<Transaction>,
     ) -> Self {
         Self {
             queue: VecDeque::with_capacity(parameters.queue_capacity),
@@ -51,6 +57,7 @@ impl Core {
             network_channel,
             core_channel,
             consensus_channel,
+            client_channel,
         }
     }
 
@@ -83,9 +90,10 @@ impl Core {
 
     async fn handle_transaction(&mut self, transaction: Transaction) -> MempoolResult<()> {
         // Drop the transaction if our mempool is full.
-        if self.queue.len() >= self.parameters.queue_capacity {
-            return Ok(());
-        }
+        ensure!(
+            self.queue.len() < self.parameters.queue_capacity,
+            MempoolError::MempoolFull
+        );
 
         // Otherwise, try to add the transaction to the next payload
         // we will add to the queue.
@@ -150,21 +158,19 @@ impl Core {
     }
 
     pub async fn run(&mut self) {
+        let print = |result: Result<&(), &MempoolError>| match result {
+            Ok(()) => (),
+            Err(MempoolError::StoreError(e)) => error!("{}", e),
+            Err(MempoolError::SerializationError(e)) => error!("Store corrupted. {}", e),
+            Err(e) => warn!("{}", e),
+        };
+
         loop {
-            tokio::select! {
+            let result = tokio::select! {
                 Some(message) = self.core_channel.recv() => {
-                    let result = match message {
-                        CoreMessage::Transaction(tx) => self.handle_transaction(tx).await,
+                    match message {
                         CoreMessage::Payload(payload) => self.handle_payload(payload).await,
-                        CoreMessage::SyncRequest(digest, sender) => {
-                            self.handle_request(digest, sender).await
-                        }
-                    };
-                    match result {
-                        Ok(()) => (),
-                        Err(MempoolError::StoreError(e)) => error!("{}", e),
-                        Err(MempoolError::SerializationError(e)) => error!("Store corrupted. {}", e),
-                        Err(e) => warn!("{}", e),
+                        CoreMessage::SyncRequest(digest, sender) => self.handle_request(digest, sender).await,
                     }
                 },
                 Some(message) = self.consensus_channel.recv() => {
@@ -174,17 +180,16 @@ impl Core {
                         },
                         ConsensusMessage::Verify(digest, sender) => {
                             let result = self.verify_payload(digest).await;
-                            match result {
-                                Ok(_) => (),
-                                Err(MempoolError::StoreError(ref e)) => error!("{}", e),
-                                Err(ref e) => warn!("{}", e),
-                            }
+                            print(result.as_ref().map(|_| &()));
                             let _ = sender.send(result);
                         }
                     }
+                    Ok(())
                 },
+                Some(tx) = self.client_channel.recv() => self.handle_transaction(tx).await,
                 else => break,
-            }
+            };
+            print(result.as_ref());
         }
     }
 }

@@ -33,20 +33,17 @@ pub enum MempoolError {
     UnknownAuthority(PublicKey),
 
     #[error("Invalid signature")]
-    InvalidSignature,
+    InvalidSignature(#[from] CryptoError),
 
     #[error("Serialization error: {0}")]
     SerializationError(#[from] Box<bincode::ErrorKind>),
 
+    #[error(transparent)]
+    ConfigError(#[from] ConfigError),
+
     #[error("Payload exceed max size")]
     PayloadTooBig,
 
-    #[error(transparent)]
-    ConfigError(#[from] ConfigError),
-}
-
-impl From<CryptoError> for MempoolError {
-    fn from(_e: CryptoError) -> Self {
-        MempoolError::InvalidSignature
-    }
+    #[error("Mempool full: dropping transaction")]
+    MempoolFull,
 }
