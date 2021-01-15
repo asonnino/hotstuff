@@ -25,9 +25,6 @@ pub enum MempoolError {
     #[error("Store error: {0}")]
     StoreError(#[from] StoreError),
 
-    #[error("Network error: {0}")]
-    NetworkError(#[from] std::io::Error),
-
     #[error("Received payload from unknown authority {0:?}")]
     UnknownAuthority(PublicKey),
 

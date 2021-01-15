@@ -1,4 +1,4 @@
-use crate::config::Committee;
+use crate::config::{Committee, EpochNumber, Authority};
 use crate::messages::Payload;
 use crypto::Hash as _;
 use crypto::{generate_keypair, PublicKey, SecretKey, Signature};
@@ -18,6 +18,23 @@ pub fn committee() -> Committee {
 }
 
 impl Committee {
+    pub fn new(authorities: &[PublicKey], epoch: EpochNumber) -> Self {
+        let authorities = authorities
+            .iter()
+            .enumerate()
+            .map(|(i, name)| {
+                let (front_port, mempool_port) = (i, i + authorities.len());
+                let authority = Authority {
+                    name: *name,
+                    front_address: format!("127.0.0.1:{}", front_port).parse().unwrap(),
+                    mempool_address: format!("127.0.0.1:{}", mempool_port).parse().unwrap(),
+                };
+                (*name, authority)
+            })
+            .collect();
+        Self { authorities, epoch }
+    }
+
     pub fn increment_base_port(&mut self, base_port: u16) {
         for authority in self.authorities.values_mut() {
             let port = authority.front_address.port();

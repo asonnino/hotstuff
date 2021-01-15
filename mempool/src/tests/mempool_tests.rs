@@ -40,7 +40,7 @@ async fn end_to_end() {
                 let digest = payload().digest().to_vec();
                 match mempool.verify(&digest).await {
                     PayloadStatus::Accept => assert!(true),
-                    _ => assert!(false)
+                    _ => assert!(false),
                 }
             })
         })

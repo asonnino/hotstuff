@@ -31,14 +31,14 @@ impl NetSender {
         Self { transmit }
     }
 
+    // We keep alive one TCP connection per peer, each of which is handled
+    // by a separate thread (called worker). We communicate with our workers
+    // with a dedicated channel kept by the HashMap called `senders`. If the
+    // a connection die, we make a new one.
     pub async fn run(&mut self) {
         let mut senders = HashMap::<_, Sender<_>>::new();
         while let Some(NetMessage(bytes, addresses)) = self.transmit.recv().await {
             for address in addresses {
-                // We keep alive one TCP connection per peer, each of which is handled
-                // by a separate thread (called worker). We communicate with our workers
-                // with a dedicated channel kept by the HashMap called `senders`. If the
-                // a connection die, we make a new one.
                 match senders.get(&address) {
                     Some(tx) if tx.send(bytes.clone()).await.is_ok() => {
                         debug!("Successfully sent message to {}", address);
@@ -87,6 +87,8 @@ impl<Message: 'static + Send + DeserializeOwned + Debug> NetReceiver<Message> {
         Self { address, deliver }
     }
 
+    // For each incoming request, we spawn a new worker responsible to receive
+    // messages and replay them through the provided deliver channel.
     pub async fn run(&self) {
         let listener = TcpListener::bind(&self.address)
             .await

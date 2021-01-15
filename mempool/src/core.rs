@@ -112,7 +112,7 @@ impl Core {
     }
 
     async fn handle_payload(&mut self, payload: Payload) -> MempoolResult<()> {
-        // Ensure the author of the payload has stake.
+        // Ensure the author of the payload is in the committee.
         let author = payload.author;
         ensure!(
             self.committee.exists(&author),
@@ -130,7 +130,8 @@ impl Core {
         payload.signature.verify(&digest, &author)?;
 
         // Store payload.
-        // TODO: A bad node may make us store a lot of crap...
+        // NOTE: A bad node may make us store a lot of crap. There is no limit
+        // to how many payload they can send us, and we will store them all.
         self.store_payload(&digest, &payload).await?;
         Ok(())
     }

@@ -35,27 +35,10 @@ pub type EpochNumber = u128;
 #[derive(Clone)]
 pub struct Committee {
     pub authorities: HashMap<PublicKey, Authority>,
-    epoch: EpochNumber,
+    pub epoch: EpochNumber,
 }
 
 impl Committee {
-    pub fn new(authorities: &[PublicKey], epoch: EpochNumber) -> Self {
-        let authorities = authorities
-            .iter()
-            .enumerate()
-            .map(|(i, name)| {
-                let (front_port, mempool_port) = (i, i + authorities.len());
-                let authority = Authority {
-                    name: *name,
-                    front_address: format!("127.0.0.1:{}", front_port).parse().unwrap(),
-                    mempool_address: format!("127.0.0.1:{}", mempool_port).parse().unwrap(),
-                };
-                (*name, authority)
-            })
-            .collect();
-        Self { authorities, epoch }
-    }
-
     pub fn exists(&self, name: &PublicKey) -> bool {
         self.authorities.contains_key(name)
     }
