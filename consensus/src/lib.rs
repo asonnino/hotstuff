@@ -1,12 +1,13 @@
 #[macro_use]
 pub mod error;
 mod aggregator;
+mod config;
 pub mod consensus;
-pub mod core;
-pub mod leader;
+mod core;
+mod leader;
 pub mod mempool;
-pub mod messages;
-pub mod network;
+mod messages;
+mod network;
 mod synchronizer;
 mod timer;
 

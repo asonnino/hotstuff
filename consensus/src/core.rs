@@ -1,4 +1,5 @@
 use crate::aggregator::Aggregator;
+use crate::config::{Committee, Parameters};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
 use crate::mempool::MempoolDriver;
@@ -7,7 +8,6 @@ use crate::messages::{Block, GenericQC, Vote, QC, TC};
 use crate::network::NetMessage;
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
-use config::{Committee, Parameters};
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
 use log::{debug, error, info, warn};

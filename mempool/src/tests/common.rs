@@ -1,4 +1,4 @@
-use crate::config::{Authority, Committee, EpochNumber};
+use crate::config::{Authority, Committee};
 use crate::messages::Payload;
 use crypto::Hash as _;
 use crypto::{generate_keypair, PublicKey, SecretKey, Signature};
@@ -13,28 +13,26 @@ pub fn keys() -> Vec<(PublicKey, SecretKey)> {
 
 // Fixture.
 pub fn committee() -> Committee {
-    let authorities: Vec<_> = keys().into_iter().map(|(name, _)| name).collect();
-    Committee::new(&authorities, /* epoch */ 1)
+    let authorities = keys()
+        .into_iter()
+        .enumerate()
+        .map(|(i, (name, _))| {
+            let (front_port, mempool_port) = (i, i + keys().len());
+            let authority = Authority {
+                name,
+                front_address: format!("127.0.0.1:{}", front_port).parse().unwrap(),
+                mempool_address: format!("127.0.0.1:{}", mempool_port).parse().unwrap(),
+            };
+            (name, authority)
+        })
+        .collect();
+    Committee {
+        authorities,
+        epoch: 1,
+    }
 }
 
 impl Committee {
-    pub fn new(authorities: &[PublicKey], epoch: EpochNumber) -> Self {
-        let authorities = authorities
-            .iter()
-            .enumerate()
-            .map(|(i, name)| {
-                let (front_port, mempool_port) = (i, i + authorities.len());
-                let authority = Authority {
-                    name: *name,
-                    front_address: format!("127.0.0.1:{}", front_port).parse().unwrap(),
-                    mempool_address: format!("127.0.0.1:{}", mempool_port).parse().unwrap(),
-                };
-                (*name, authority)
-            })
-            .collect();
-        Self { authorities, epoch }
-    }
-
     pub fn increment_base_port(&mut self, base_port: u16) {
         for authority in self.authorities.values_mut() {
             let port = authority.front_address.port();

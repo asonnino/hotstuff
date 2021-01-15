@@ -1,9 +1,9 @@
+use crate::config::{Committee, Parameters};
 use crate::core::Core;
 use crate::leader::LeaderElector;
 use crate::mempool::NodeMempool;
 use crate::messages::Block;
 use crate::network::{NetReceiver, NetSender};
-use config::{Committee, Parameters};
 use crypto::{PublicKey, SignatureService};
 use store::Store;
 use tokio::sync::mpsc::Sender;

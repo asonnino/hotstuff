@@ -1,5 +1,4 @@
 use crate::core::RoundNumber;
-use config::ConfigError;
 use crypto::{CryptoError, Digest, PublicKey};
 use store::StoreError;
 use thiserror::Error;
@@ -33,8 +32,8 @@ pub enum ConsensusError {
     #[error("Store error: {0}")]
     StoreError(#[from] StoreError),
 
-    #[error("{0}")]
-    ConfigError(#[from] ConfigError),
+    #[error("Node {0:?} is not in the committee")]
+    NotInCommittee(PublicKey),
 
     #[error("Invalid signature")]
     InvalidSignature,

@@ -1,5 +1,4 @@
 use super::*;
-use crate::common::TestCommittee as _;
 use crate::common::{block, committee, keys, vote};
 use futures::future::try_join_all;
 use tokio::task::JoinHandle;

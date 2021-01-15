@@ -18,7 +18,6 @@ async-trait = "0.1.42"
 
 store = { path = "../store" }
 crypto = { path = "../crypto" }
-config = { path = "../config" }
 
 [dev-dependencies]
 rand = "0.7.3"
