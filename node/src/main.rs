@@ -1,12 +1,15 @@
+mod config;
 mod node;
 
 use crate::node::Node;
 use clap::{crate_name, crate_version, App, AppSettings, SubCommand};
-use config::Config as _;
+use config::Export as _;
 use config::{Committee, Secret};
+use consensus::Committee as ConsensusCommittee;
 use env_logger::Env;
 use futures::future::try_join_all;
 use log::error;
+use mempool::Committee as MempoolCommittee;
 use std::fs;
 use tokio::task::JoinHandle;
 
@@ -51,19 +54,17 @@ async fn main() -> MainResult<()> {
     match matches.subcommand() {
         ("keys", Some(subm)) => {
             let filename = subm.value_of("filename").unwrap();
-            Node::print_key_file(&filename)?;
+            if let Err(e) = Node::print_key_file(&filename) {
+                error!("{}", e);
+            }
         }
         ("run", Some(subm)) => {
             let key_file = subm.value_of("keys").unwrap();
             let committee_file = subm.value_of("committee").unwrap();
             let parameters_file = subm.value_of("parameters");
             let store_path = subm.value_of("store").unwrap();
-            match Node::make(committee_file, key_file, store_path, parameters_file).await {
-                Ok(mut rx) => {
-                    // Sink the commit channel.
-                    while rx.recv().await.is_some() {}
-                }
-                Err(e) => error!("{}", e),
+            if let Err(e) = Node::run(committee_file, key_file, store_path, parameters_file).await {
+                error!("{}", e);
             }
         }
         ("deploy", Some(subm)) => {
@@ -84,17 +85,43 @@ async fn main() -> MainResult<()> {
 }
 
 fn deploy_testbed(nodes: usize) -> MainResult<Vec<JoinHandle<()>>> {
+    let epoch = 1;
     let keys: Vec<_> = (0..nodes).map(|_| Secret::new()).collect();
 
+    // Print the committee file.
+    let mempool_committee = MempoolCommittee::new(
+        keys.iter()
+            .enumerate()
+            .map(|(i, key)| {
+                let name = key.name;
+                let front = format!("127.0.0.1:{}", 7000 + i).parse().unwrap();
+                let mempool = format!("127.0.0.1:{}", 7100 + i).parse().unwrap();
+                (name, front, mempool)
+            })
+            .collect(),
+        epoch,
+    );
+    let consensus_committee = ConsensusCommittee::new(
+        keys.iter()
+            .enumerate()
+            .map(|(i, key)| {
+                let name = key.name;
+                let stake = 1;
+                let addresses = format!("127.0.0.1:{}", 7200 + i).parse().unwrap();
+                (name, stake, addresses)
+            })
+            .collect(),
+        epoch,
+    );
     let committee_file = "committee.json";
     let _ = fs::remove_file(committee_file);
-    let authorities: Vec<_> = keys.iter().map(|keys| (keys.name, /* stake */ 1)).collect();
-    let mut committee = Committee::new(&authorities, /* epoch */ 1);
-    for x in committee.authorities.values_mut() {
-        x.address.set_port(x.address.port() + 7000);
+    Committee {
+        mempool: mempool_committee,
+        consensus: consensus_committee,
     }
-    committee.write(committee_file)?;
+    .write(committee_file)?;
 
+    // Write the key files and spawn all nodes.
     keys.iter()
         .enumerate()
         .map(|(i, keypair)| {
@@ -102,16 +129,12 @@ fn deploy_testbed(nodes: usize) -> MainResult<Vec<JoinHandle<()>>> {
             let _ = fs::remove_file(&key_file);
             keypair.write(&key_file)?;
 
-            let store_path = format!("store_{}", i);
+            let store_path = format!("db_{}", i);
             let _ = fs::remove_dir_all(&store_path);
 
             Ok(tokio::spawn(async move {
-                match Node::make(committee_file, &key_file, &store_path, None).await {
-                    Ok(mut rx) => {
-                        // Sink the commit channel.
-                        while rx.recv().await.is_some() {}
-                    }
-                    Err(e) => error!("{}", e),
+                if let Err(e) = Node::run(committee_file, &key_file, &store_path, None).await {
+                    error!("{}", e);
                 }
             }))
         })

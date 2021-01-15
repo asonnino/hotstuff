@@ -13,13 +13,9 @@ async fn core(
     let (tx_network, rx_network) = channel(3);
     let (tx_commit, rx_commit) = channel(1);
 
-    let config = Config {
-        name: name.clone(),
-        committee: committee(),
-        parameters: Parameters {
-            timeout_delay: 100,
-            ..Parameters::default()
-        },
+    let parameters = Parameters {
+        timeout_delay: 100,
+        ..Parameters::default()
     };
     let signature_service = SignatureService::new(secret);
     let _ = fs::remove_dir_all(store_path);
@@ -31,11 +27,13 @@ async fn core(
         store.clone(),
         /* network_channel */ tx_network.clone(),
         /* core_channel */ tx_core.clone(),
-        config.parameters.sync_retry_delay,
+        parameters.sync_retry_delay,
     )
     .await;
     let mut core = Core::new(
-        config,
+        name,
+        committee(),
+        parameters,
         signature_service,
         store,
         leader_elector,

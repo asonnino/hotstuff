@@ -1,5 +1,5 @@
 use crate::aggregator::Aggregator;
-use crate::config::{Committee, Config, Parameters};
+use crate::config::{Committee, Parameters};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
 use crate::mempool::{MempoolDriver, NodeMempool};
@@ -53,7 +53,9 @@ pub struct Core<Mempool> {
 impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        config: Config,
+        name: PublicKey,
+        committee: Committee,
+        parameters: Parameters,
         signature_service: SignatureService,
         store: Store,
         leader_elector: LeaderElector,
@@ -64,9 +66,6 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         network_channel: Sender<NetMessage>,
         commit_channel: Sender<Block>,
     ) -> Self {
-        let name = config.name;
-        let committee = config.committee;
-        let parameters = config.parameters;
         let aggregator = Aggregator::new(committee.clone());
         Self {
             name,

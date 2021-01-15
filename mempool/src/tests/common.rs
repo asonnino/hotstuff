@@ -1,4 +1,4 @@
-use crate::config::{Authority, Committee};
+use crate::config::Committee;
 use crate::messages::Payload;
 use crypto::Hash as _;
 use crypto::{generate_keypair, PublicKey, SecretKey, Signature};
@@ -13,23 +13,18 @@ pub fn keys() -> Vec<(PublicKey, SecretKey)> {
 
 // Fixture.
 pub fn committee() -> Committee {
-    let authorities = keys()
-        .into_iter()
-        .enumerate()
-        .map(|(i, (name, _))| {
-            let (front_port, mempool_port) = (i, i + keys().len());
-            let authority = Authority {
-                name,
-                front_address: format!("127.0.0.1:{}", front_port).parse().unwrap(),
-                mempool_address: format!("127.0.0.1:{}", mempool_port).parse().unwrap(),
-            };
-            (name, authority)
-        })
-        .collect();
-    Committee {
-        authorities,
-        epoch: 1,
-    }
+    Committee::new(
+        keys()
+            .into_iter()
+            .enumerate()
+            .map(|(i, (name, _))| {
+                let front = format!("127.0.0.1:{}", i).parse().unwrap();
+                let mempool = format!("127.0.0.1:{}", i + keys().len()).parse().unwrap();
+                (name, front, mempool)
+            })
+            .collect(),
+        /* epoch */ 1,
+    )
 }
 
 impl Committee {

@@ -1,38 +1,55 @@
-use config::Config as _;
-use config::{Committee, Parameters, Secret};
-use consensus::core::Core;
-use consensus::error::{ConsensusError, ConsensusResult};
-use consensus::leader::LeaderElector;
-use consensus::messages::Block;
-use consensus::network::{NetReceiver, NetSender};
+use crate::config::Export as _;
+use crate::config::{Committee, Parameters, Secret};
+use consensus::{Consensus, ConsensusError};
 use crypto::SignatureService;
 use log::info;
-use mempool::SimpleMempool;
-use store::Store;
-use tokio::sync::mpsc::{channel, Receiver};
+use mempool::{MempoolError, SimpleMempool};
+use store::{Store, StoreError};
+use thiserror::Error;
+use tokio::sync::mpsc::channel;
 
 #[cfg(test)]
 #[path = "tests/node_tests.rs"]
 pub mod node_tests;
 
+#[derive(Error, Debug)]
+pub enum NodeError {
+    #[error("Failed to read config file '{file}': {message}")]
+    ReadError { file: String, message: String },
+
+    #[error("Failed to write config file '{file}': {message}")]
+    WriteError { file: String, message: String },
+
+    #[error("Store error: {0}")]
+    StoreError(#[from] StoreError),
+
+    #[error(transparent)]
+    ConsensusError(#[from] ConsensusError),
+
+    #[error(transparent)]
+    MempoolError(#[from] MempoolError),
+}
+
 pub struct Node;
 
 impl Node {
-    pub async fn make(
+    pub async fn run(
         committee_file: &str,
         key_file: &str,
         store_path: &str,
         parameters: Option<&str>,
-    ) -> ConsensusResult<Receiver<Block>> {
-        // Read the committee and secret key from file.
-        let committee = Committee::read(committee_file)?;
-        let secret = Secret::read(key_file)?;
+    ) -> Result<(), NodeError> {
+        let (tx_commit, mut rx_commit) = channel(100);
+        tokio::spawn(async move {
+            // Sink the commit channel.
+            while rx_commit.recv().await.is_some() {}
+        });
 
-        // Retrieve node's information.
+        // Read the committee and secret key from file.
+        let committee: Committee = Committee::read(committee_file)?;
+        let secret = Secret::read(key_file)?;
         let name = secret.name;
         let secret_key = secret.secret;
-        let mut address = committee.address(&name)?;
-        address.set_ip("0.0.0.0".parse().unwrap());
 
         // Load default parameters if none are specified.
         let parameters = match parameters {
@@ -46,36 +63,32 @@ impl Node {
         // Run the signature service.
         let signature_service = SignatureService::new(secret_key);
 
-        // Choose the mempool and leader election algorithm.
-        let mempool = SimpleMempool::new(mempool_config, signature_service.clone(), store.clone());
-        let leader_elector = LeaderElector::new(committee.clone());
-
-        // Create the commit channel from which we can read the sequence of
-        // committed blocks.
-        let (tx_commit, rx_commit) = channel(1000);
-
-        // Now wire together the network sender, core, and network receiver.
-        let network_channel = NetSender::make(name, committee.clone());
-        let core_channel = Core::make(
+        // Make a new mempool.
+        let mempool = SimpleMempool::new(
             name,
-            committee,
-            parameters,
-            store,
-            signature_service,
-            leader_elector,
-            mempool,
-            network_channel,
-            tx_commit,
-        )
-        .await;
-        let () = NetReceiver::make(&address, core_channel).await;
+            committee.mempool,
+            parameters.mempool,
+            signature_service.clone(),
+            store.clone(),
+        )?;
 
-        // Return the commit receiver.
-        info!("Node {:?} successfully booted on {}", name, address);
-        Ok(rx_commit)
+        // Run the consensus core.
+        Consensus::run(
+            name,
+            committee.consensus,
+            parameters.consensus,
+            signature_service,
+            store,
+            mempool,
+            /* commit_channel */ tx_commit,
+        )
+        .await?;
+
+        info!("Node {:?} successfully booted", name);
+        Ok(())
     }
 
-    pub fn print_key_file(filename: &str) -> ConsensusResult<()> {
-        Secret::new().write(filename).map_err(ConsensusError::from)
+    pub fn print_key_file(filename: &str) -> Result<(), NodeError> {
+        Secret::new().write(filename)
     }
 }

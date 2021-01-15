@@ -1,11 +1,11 @@
 #[macro_use]
-pub mod error;
+mod error;
 mod aggregator;
 mod config;
-pub mod consensus;
+mod consensus;
 mod core;
 mod leader;
-pub mod mempool;
+mod mempool;
 mod messages;
 mod network;
 mod synchronizer;
@@ -15,4 +15,7 @@ mod timer;
 #[path = "tests/common.rs"]
 mod common;
 
+pub use crate::config::{Committee, Parameters};
 pub use crate::consensus::Consensus;
+pub use crate::error::ConsensusError;
+pub use crate::mempool::{NodeMempool, PayloadStatus};

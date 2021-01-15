@@ -20,19 +20,17 @@ async fn core(
     let (tx_client, rx_client) = channel(1);
 
     let (name, secret) = keys().pop().unwrap();
-    let config = Config {
-        name,
-        committee: committee(),
-        parameters: Parameters {
-            queue_capacity: 1,
-            max_payload_size: 1,
-        },
+    let parameters = Parameters {
+        queue_capacity: 1,
+        max_payload_size: 1,
     };
     let signature_service = SignatureService::new(secret);
     let _ = fs::remove_dir_all(store_path);
     let store = Store::new(store_path).unwrap();
     let mut core = Core::new(
-        config,
+        name,
+        committee(),
+        parameters,
         signature_service,
         store,
         /* core_channel */ rx_core,

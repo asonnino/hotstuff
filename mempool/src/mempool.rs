@@ -1,10 +1,10 @@
-use crate::config::Config;
+use crate::config::{Committee, Parameters};
 use crate::core::Core;
 use crate::error::MempoolResult;
 use crate::network::{NetReceiver, NetSender};
 use async_trait::async_trait;
-use consensus::mempool::{NodeMempool, PayloadStatus};
-use crypto::{Digest, SignatureService};
+use consensus::{NodeMempool, PayloadStatus};
+use crypto::{Digest, PublicKey, SignatureService};
 use std::convert::TryInto;
 use store::Store;
 use tokio::sync::mpsc::{channel, Sender};
@@ -25,21 +25,23 @@ pub struct SimpleMempool {
 }
 
 impl SimpleMempool {
-    pub fn new(config: Config, signature_service: SignatureService, store: Store) -> Self {
+    pub fn new(
+        name: PublicKey,
+        committee: Committee,
+        parameters: Parameters,
+        signature_service: SignatureService,
+        store: Store,
+    ) -> MempoolResult<Self> {
         let (tx_network, rx_network) = channel(1000);
         let (tx_core, rx_core) = channel(1000);
         let (tx_consensus, rx_consensus) = channel(1000);
         let (tx_client, rx_client) = channel(1000);
 
         // Run the front end that receives client transactions.
-        let  address = config
-            .committee
-            .front_address(&config.name)
-            .map(|mut x| {
-                x.set_ip("0.0.0.0".parse().unwrap());
-                x
-            })
-            .expect("Our own public key is not in the committee");
+        let address = committee.front_address(&name).map(|mut x| {
+            x.set_ip("0.0.0.0".parse().unwrap());
+            x
+        })?;
 
         let front = NetReceiver::new(address, tx_client);
         tokio::spawn(async move {
@@ -47,14 +49,10 @@ impl SimpleMempool {
         });
 
         // Run the mempool network sender and receiver.
-        let  address = config
-            .committee
-            .mempool_address(&config.name)
-            .map(|mut x| {
-                x.set_ip("0.0.0.0".parse().unwrap());
-                x
-            })
-            .expect("Our own public key is not in the committee");
+        let address = committee.mempool_address(&name).map(|mut x| {
+            x.set_ip("0.0.0.0".parse().unwrap());
+            x
+        })?;
         let network_receiver = NetReceiver::new(address, tx_core);
         tokio::spawn(async move {
             network_receiver.run().await;
@@ -67,7 +65,9 @@ impl SimpleMempool {
 
         // Run the core.
         let mut core = Core::new(
-            config,
+            name,
+            committee,
+            parameters,
             signature_service,
             store,
             /* core_channel */ rx_core,
@@ -79,9 +79,9 @@ impl SimpleMempool {
             core.run().await;
         });
 
-        Self {
+        Ok(Self {
             channel: tx_consensus,
-        }
+        })
     }
 }
 

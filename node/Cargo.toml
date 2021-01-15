@@ -12,12 +12,12 @@ bincode = "1.3.1"
 futures = "0.3.8"
 clap = "2.33.3"
 env_logger = "0.8.2"
-
-consensus = { path = "../consensus" }
-config = { path = "../config" }
-store = { path = "../store" }
-mempool = { path = "../mempool" }
-crypto = { path = "../crypto" }
-
-[dev-dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.61"
 rand = "0.7.3"
+thiserror = "1.0.21"
+
+crypto = { path = "../crypto" }
+store = { path = "../store" }
+consensus = { path = "../consensus" }
+mempool = { path = "../mempool" }

@@ -1,4 +1,4 @@
-use crate::config::{Authority, Committee};
+use crate::config::Committee;
 use crate::core::RoundNumber;
 use crate::mempool::NodeMempool;
 use crate::mempool::PayloadStatus;
@@ -18,22 +18,18 @@ pub fn keys() -> Vec<(PublicKey, SecretKey)> {
 
 // Fixture.
 pub fn committee() -> Committee {
-    let authorities = keys()
-        .into_iter()
-        .enumerate()
-        .map(|(i, (name, _))| {
-            let authority = Authority {
-                name,
-                stake: 1,
-                address: format!("127.0.0.1:{}", i).parse().unwrap(),
-            };
-            (name, authority)
-        })
-        .collect();
-    Committee {
-        authorities,
-        epoch: 1,
-    }
+    Committee::new(
+        keys()
+            .into_iter()
+            .enumerate()
+            .map(|(i, (name, _))| {
+                let address = format!("127.0.0.1:{}", i).parse().unwrap();
+                let stake = 1;
+                (name, stake, address)
+            })
+            .collect(),
+        /* epoch */ 1,
+    )
 }
 
 impl Committee {

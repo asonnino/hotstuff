@@ -1,4 +1,4 @@
-use crate::config::{Committee, Config, Parameters};
+use crate::config::{Committee, Parameters};
 use crate::error::{MempoolError, MempoolResult};
 use crate::mempool::ConsensusMessage;
 use crate::messages::{Payload, PayloadMaker, Transaction};
@@ -36,8 +36,11 @@ pub struct Core {
 }
 
 impl Core {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        config: Config,
+        name: PublicKey,
+        committee: Committee,
+        parameters: Parameters,
         signature_service: SignatureService,
         store: Store,
         core_channel: Receiver<CoreMessage>,
@@ -45,9 +48,6 @@ impl Core {
         client_channel: Receiver<Transaction>,
         network_channel: Sender<NetMessage>,
     ) -> Self {
-        let name = config.name;
-        let committee = config.committee;
-        let parameters = config.parameters;
         let queue = VecDeque::with_capacity(parameters.queue_capacity);
         let payload_maker = PayloadMaker::new(name, signature_service, parameters.max_payload_size);
         Self {

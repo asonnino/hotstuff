@@ -14,20 +14,17 @@ use tokio_util::codec::{Framed, LengthDelimitedCodec};
 #[tokio::test]
 async fn end_to_end() {
     let mut committee = committee();
-    committee.increment_base_port(8000);
+    committee.increment_base_port(5000);
 
     // Run all mempools.
     let mempool_handles: Vec<_> = keys()
         .into_iter()
         .enumerate()
         .map(|(i, (name, secret))| {
-            let config = Config {
-                name,
-                committee: committee.clone(),
-                parameters: Parameters {
-                    queue_capacity: 1,
-                    max_payload_size: 1,
-                },
+            let committee = committee.clone();
+            let parameters = Parameters {
+                queue_capacity: 1,
+                max_payload_size: 1,
             };
             let signature_service = SignatureService::new(secret);
             let store_path = format!(".store_test_end_to_end_{}", i);
@@ -35,7 +32,9 @@ async fn end_to_end() {
             let store = Store::new(&store_path).unwrap();
 
             tokio::spawn(async move {
-                let mut mempool = SimpleMempool::new(config, signature_service, store);
+                let mut mempool =
+                    SimpleMempool::new(name, committee, parameters, signature_service, store)
+                        .unwrap();
                 sleep(Duration::from_millis(200)).await;
                 let digest = payload().digest().to_vec();
                 match mempool.verify(&digest).await {

@@ -1,8 +1,8 @@
 #[macro_use]
 mod error;
-pub mod config;
+mod config;
 mod core;
-pub mod mempool;
+mod mempool;
 mod messages;
 mod network;
 
@@ -10,4 +10,6 @@ mod network;
 #[path = "tests/common.rs"]
 mod common;
 
+pub use crate::config::{Committee, Parameters};
+pub use crate::error::MempoolError;
 pub use crate::mempool::SimpleMempool;
