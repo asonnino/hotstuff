@@ -8,7 +8,6 @@ use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
 use log::{debug, error};
 use std::collections::HashMap;
-use std::marker::Send;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
