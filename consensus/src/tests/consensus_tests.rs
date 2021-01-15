@@ -1,21 +1,9 @@
 use super::*;
 use crate::common::{committee, keys, MockMempool};
+use crate::config::Parameters;
 use futures::future::try_join_all;
 use std::fs;
 use tokio::sync::mpsc::channel;
-
-pub trait TestCommittee {
-    fn increment_base_port(&mut self, base_port: u16);
-}
-
-impl TestCommittee for Committee {
-    fn increment_base_port(&mut self, base_port: u16) {
-        for authority in self.authorities.values_mut() {
-            let port = authority.address.port();
-            authority.address.set_port(base_port + port);
-        }
-    }
-}
 
 #[tokio::test]
 async fn end_to_end() {
@@ -27,7 +15,11 @@ async fn end_to_end() {
         .into_iter()
         .enumerate()
         .map(|(i, (name, secret))| {
-            let committee = committee.clone();
+            let config = Config {
+                name,
+                committee: committee.clone(),
+                parameters: Parameters::default(),
+            };
             let store_path = format!(".store_test_end_to_end_{}", i);
             let _ = fs::remove_dir_all(&store_path);
             let store = Store::new(&store_path).unwrap();
@@ -35,16 +27,7 @@ async fn end_to_end() {
             let mempool = MockMempool;
             let (tx_commit, mut rx_commit) = channel(1000);
             tokio::spawn(async move {
-                Consensus::run(
-                    name,
-                    committee,
-                    Parameters::default(),
-                    store,
-                    signature_service,
-                    mempool,
-                    tx_commit,
-                )
-                .await;
+                Consensus::run(config, signature_service, store, mempool, tx_commit).await;
 
                 match rx_commit.recv().await {
                     Some(block) => assert_eq!(block, Block::genesis()),
@@ -70,7 +53,11 @@ async fn dead_node() {
         .into_iter()
         .enumerate()
         .map(|(i, (name, secret))| {
-            let committee = committee.clone();
+            let config = Config {
+                name,
+                committee: committee.clone(),
+                parameters: Parameters::default(),
+            };
             let store_path = format!(".store_test_dead_node_{}", i);
             let _ = fs::remove_dir_all(&store_path);
             let store = Store::new(&store_path).unwrap();
@@ -78,16 +65,7 @@ async fn dead_node() {
             let mempool = MockMempool;
             let (tx_commit, mut rx_commit) = channel(1000);
             tokio::spawn(async move {
-                Consensus::run(
-                    name,
-                    committee,
-                    Parameters::default(),
-                    store,
-                    signature_service,
-                    mempool,
-                    tx_commit,
-                )
-                .await;
+                Consensus::run(config, signature_service, store, mempool, tx_commit).await;
 
                 match rx_commit.recv().await {
                     Some(block) => assert_eq!(block, Block::genesis()),

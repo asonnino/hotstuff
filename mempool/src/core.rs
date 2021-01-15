@@ -23,16 +23,16 @@ pub enum CoreMessage {
 }
 
 pub struct Core {
-    queue: VecDeque<Digest>,
-    payload_maker: PayloadMaker,
-    committee: Committee,
     name: PublicKey,
+    committee: Committee,
     parameters: Parameters,
     store: Store,
-    network_channel: Sender<NetMessage>,
     core_channel: Receiver<CoreMessage>,
     consensus_channel: Receiver<ConsensusMessage>,
     client_channel: Receiver<Transaction>,
+    network_channel: Sender<NetMessage>,
+    queue: VecDeque<Digest>,
+    payload_maker: PayloadMaker,
 }
 
 impl Core {
@@ -40,10 +40,10 @@ impl Core {
         config: Config,
         signature_service: SignatureService,
         store: Store,
-        network_channel: Sender<NetMessage>,
         core_channel: Receiver<CoreMessage>,
         consensus_channel: Receiver<ConsensusMessage>,
         client_channel: Receiver<Transaction>,
+        network_channel: Sender<NetMessage>,
     ) -> Self {
         let name = config.name;
         let committee = config.committee;
@@ -51,16 +51,16 @@ impl Core {
         let queue = VecDeque::with_capacity(parameters.queue_capacity);
         let payload_maker = PayloadMaker::new(name, signature_service, parameters.max_payload_size);
         Self {
-            queue,
-            payload_maker,
-            committee,
             name,
+            committee,
             parameters,
             store,
-            network_channel,
             core_channel,
             consensus_channel,
             client_channel,
+            network_channel,
+            queue,
+            payload_maker,
         }
     }
 

@@ -1,9 +1,8 @@
 use crate::aggregator::Aggregator;
-use crate::config::{Committee, Parameters};
+use crate::config::{Committee, Config, Parameters};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
-use crate::mempool::MempoolDriver;
-use crate::mempool::NodeMempool;
+use crate::mempool::{MempoolDriver, NodeMempool};
 use crate::messages::{Block, GenericQC, Vote, QC, TC};
 use crate::network::NetMessage;
 use crate::synchronizer::Synchronizer;
@@ -14,7 +13,7 @@ use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
 use store::Store;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::mpsc::{Receiver, Sender};
 
 #[cfg(test)]
 #[path = "tests/core_tests.rs"]
@@ -38,6 +37,8 @@ pub struct Core<Mempool> {
     signature_service: SignatureService,
     leader_elector: LeaderElector,
     mempool_driver: MempoolDriver<Mempool>,
+    synchronizer: Synchronizer,
+    core_channel: Receiver<CoreMessage>,
     loopback_channel: Sender<CoreMessage>,
     network_channel: Sender<NetMessage>,
     commit_channel: Sender<Block>,
@@ -45,75 +46,48 @@ pub struct Core<Mempool> {
     last_voted_round: RoundNumber,
     preferred_round: RoundNumber,
     highest_qc: QC,
-    synchronizer: Synchronizer,
-    aggregator: Aggregator,
     timer: Timer<RoundNumber>,
+    aggregator: Aggregator,
 }
 
 impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     #[allow(clippy::too_many_arguments)]
-    pub async fn make(
-        name: PublicKey,
-        committee: Committee,
-        parameters: Parameters,
-        store: Store,
+    pub fn new(
+        config: Config,
         signature_service: SignatureService,
+        store: Store,
         leader_elector: LeaderElector,
-        mempool: Mempool,
+        mempool_driver: MempoolDriver<Mempool>,
+        synchronizer: Synchronizer,
+        core_channel: Receiver<CoreMessage>,
+        loopback_channel: Sender<CoreMessage>,
         network_channel: Sender<NetMessage>,
         commit_channel: Sender<Block>,
-    ) -> Sender<CoreMessage> {
-        let (tx_core, rx_core) = channel(1000);
-        // Make a Timer Manager instance allowing to schedule and cancel timers.
-        let timer = Timer::new();
-
-        // Make the synchronizer. This instance runs in a background thread
-        // and asks other nodes for any block that we may be missing.
-        let synchronizer = Synchronizer::new(
-            name,
-            store.clone(),
-            network_channel.clone(),
-            tx_core.clone(),
-            parameters.sync_retry_delay,
-        )
-        .await;
-
-        // Make a votes aggregator. This is the instance that keeps track
-        // of incoming votes and aggregates them into quorums.
+    ) -> Self {
+        let name = config.name;
+        let committee = config.committee;
+        let parameters = config.parameters;
         let aggregator = Aggregator::new(committee.clone());
-
-        // Make the mempool driver which will mediate our requests the
-        // the mempool.
-        let mempool_driver = MempoolDriver::new(mempool, tx_core.clone(), store.clone());
-
-        // Run the core in a separate thread.
-        let loopback_channel = tx_core.clone();
-        tokio::spawn(async move {
-            let mut core = Self {
-                name,
-                committee,
-                parameters,
-                store,
-                signature_service,
-                leader_elector,
-                mempool_driver,
-                loopback_channel,
-                network_channel,
-                commit_channel,
-                round: 0,
-                last_voted_round: 0,
-                preferred_round: 0,
-                highest_qc: QC::genesis(),
-                synchronizer,
-                aggregator,
-                timer,
-            };
-            core.run(rx_core).await;
-        });
-
-        // Return sender channel. The network receiver will use it to
-        // send us new messages to process.
-        tx_core
+        Self {
+            name,
+            committee,
+            parameters,
+            signature_service,
+            store,
+            leader_elector,
+            mempool_driver,
+            synchronizer,
+            loopback_channel,
+            network_channel,
+            commit_channel,
+            core_channel,
+            round: 0,
+            last_voted_round: 0,
+            preferred_round: 0,
+            highest_qc: QC::genesis(),
+            timer: Timer::new(),
+            aggregator,
+        }
     }
 
     async fn store_block(&mut self, block: &Block) -> ConsensusResult<()> {
@@ -359,7 +333,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         Ok(())
     }
 
-    async fn run(&mut self, mut rx_core: Receiver<CoreMessage>) {
+    pub async fn run(&mut self) {
         // Upon booting, send the very first block (if we are the leader).
         // Also, schedule a timer in case we don't hear back from it.
         self.schedule_timer().await;
@@ -373,7 +347,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         // and receive timeout notifications from our Timeout Manager.
         loop {
             tokio::select! {
-                Some(message) = rx_core.recv() => {
+                Some(message) = self.core_channel.recv() => {
                     debug!("Received {:?}", message);
                     let result = match message {
                         CoreMessage::Propose(block) => self.handle_propose(&block).await,

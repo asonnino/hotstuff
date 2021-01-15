@@ -2,29 +2,54 @@ use super::*;
 use crate::common::{chain, committee, keys, MockMempool};
 use crypto::SecretKey;
 use std::fs;
+use tokio::sync::mpsc::channel;
 
 async fn core(
-    public_key: PublicKey,
-    secret_key: SecretKey,
-    store: Store,
-    tx_network: Sender<NetMessage>,
-    tx_commit: Sender<Block>,
-) -> Sender<CoreMessage> {
-    let signature_service = SignatureService::new(secret_key);
+    name: PublicKey,
+    secret: SecretKey,
+    store_path: &str,
+) -> (Sender<CoreMessage>, Receiver<NetMessage>, Receiver<Block>) {
+    let (tx_core, rx_core) = channel(3);
+    let (tx_network, rx_network) = channel(3);
+    let (tx_commit, rx_commit) = channel(1);
+
+    let config = Config {
+        name: name.clone(),
+        committee: committee(),
+        parameters: Parameters {
+            timeout_delay: 100,
+            ..Parameters::default()
+        },
+    };
+    let signature_service = SignatureService::new(secret);
+    let _ = fs::remove_dir_all(store_path);
+    let store = Store::new(store_path).unwrap();
     let leader_elector = LeaderElector::new(committee());
-    let mempool = MockMempool;
-    Core::make(
-        public_key,
-        committee(),
-        Parameters::default(),
-        store,
-        signature_service,
-        leader_elector,
-        mempool,
-        tx_network,
-        tx_commit,
+    let mempool_driver = MempoolDriver::new(MockMempool, tx_core.clone(), store.clone());
+    let synchronizer = Synchronizer::new(
+        name,
+        store.clone(),
+        /* network_channel */ tx_network.clone(),
+        /* core_channel */ tx_core.clone(),
+        config.parameters.sync_retry_delay,
     )
-    .await
+    .await;
+    let mut core = Core::new(
+        config,
+        signature_service,
+        store,
+        leader_elector,
+        mempool_driver,
+        synchronizer,
+        /* core_channel */ rx_core,
+        /* loopback_channel */ tx_core.clone(),
+        /* network_channel */ tx_network,
+        /* commit_channel */ tx_commit,
+    );
+    tokio::spawn(async move {
+        core.run().await;
+    });
+    (tx_core, rx_network, rx_commit)
 }
 
 fn leader_keys(round: RoundNumber) -> (PublicKey, SecretKey) {
@@ -44,16 +69,12 @@ async fn handle_block() {
     let vote = Vote::new_from_key(block.digest(), block.round, public_key, &secret_key);
 
     // Run a core instance.
-    let path = ".store_test_handle_block";
-    let _ = fs::remove_dir_all(path);
-    let store = Store::new(path).unwrap();
-    let (tx_network, mut rx_network) = channel(1);
-    let (tx_commit, _) = channel(1);
-    let core_channel = core(public_key, secret_key, store, tx_network, tx_commit).await;
+    let store_path = ".store_test_handle_block";
+    let (tx_core, mut rx_network, _rx_commit) = core(public_key, secret_key, store_path).await;
 
     // Send a block to the core.
     let message = CoreMessage::Propose(block.clone());
-    core_channel.send(message).await.unwrap();
+    tx_core.send(message).await.unwrap();
 
     // Ensure we get a vote back.
     match rx_network.recv().await {
@@ -92,17 +113,14 @@ async fn make_block() {
     };
 
     // Run a core instance.
-    let path = ".store_test_make_block";
-    let _ = fs::remove_dir_all(path);
-    let store = Store::new(path).unwrap();
-    let (tx_network, mut rx_network) = channel(1);
-    let (tx_commit, _) = channel(1);
-    let core_channel = core(next_leader, next_leader_key, store, tx_network, tx_commit).await;
+    let store_path = ".store_test_make_block";
+    let (tx_core, mut rx_network, _rx_commit) =
+        core(next_leader, next_leader_key, store_path).await;
 
     // Send all votes to the core.
     for vote in votes.clone() {
         let message = CoreMessage::Vote(vote);
-        core_channel.send(message).await.unwrap();
+        tx_core.send(message).await.unwrap();
     }
 
     // Ensure the core makes a new block.
@@ -123,18 +141,14 @@ async fn commit_block() {
     let chain = chain(leaders);
 
     // Run a core instance.
-    let path = ".store_test_commit_block";
-    let _ = fs::remove_dir_all(path);
-    let store = Store::new(path).unwrap();
-    let (tx_network, mut _rx_network) = channel(3);
-    let (tx_commit, mut rx_commit) = channel(1);
+    let store_path = ".store_test_commit_block";
     let (public_key, secret_key) = keys().pop().unwrap();
-    let core_channel = core(public_key, secret_key, store, tx_network, tx_commit).await;
+    let (tx_core, _rx_network, mut rx_commit) = core(public_key, secret_key, store_path).await;
 
     // Send a 3-chain to the core.
     for block in chain.clone() {
         let message = CoreMessage::Propose(block);
-        core_channel.send(message).await.unwrap();
+        tx_core.send(message).await.unwrap();
     }
 
     // Ensure the core commits the head.
@@ -151,30 +165,8 @@ async fn make_timeout() {
     let timeout = Vote::new_from_key(Digest::default(), 1, public_key, &secret_key);
 
     // Run a core instance.
-    let path = ".store_test_make_timeout";
-    let _ = fs::remove_dir_all(path);
-    let store = Store::new(path).unwrap();
-    let (tx_network, mut rx_network) = channel(1);
-    let (tx_commit, _) = channel(1);
-    let signature_service = SignatureService::new(secret_key);
-    let leader_elector = LeaderElector::new(committee());
-    let mempool = MockMempool;
-    let parameters = Parameters {
-        timeout_delay: 100,
-        ..Parameters::default()
-    };
-    let _ = Core::make(
-        public_key,
-        committee(),
-        parameters,
-        store,
-        signature_service,
-        leader_elector,
-        mempool,
-        tx_network,
-        tx_commit,
-    )
-    .await;
+    let store_path = ".store_test_make_timeout";
+    let (_tx_core, mut rx_network, _rx_commit) = core(public_key, secret_key, store_path).await;
 
     // Ensure the following operation happen in the right order.
     match rx_network.recv().await {

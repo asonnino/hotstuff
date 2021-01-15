@@ -32,11 +32,14 @@ impl SimpleMempool {
         let (tx_client, rx_client) = channel(1000);
 
         // Run the front end that receives client transactions.
-        let mut address = config
+        let  address = config
             .committee
             .front_address(&config.name)
+            .map(|mut x| {
+                x.set_ip("0.0.0.0".parse().unwrap());
+                x
+            })
             .expect("Our own public key is not in the committee");
-        address.set_ip("0.0.0.0".parse().unwrap());
 
         let front = NetReceiver::new(address, tx_client);
         tokio::spawn(async move {
@@ -44,11 +47,14 @@ impl SimpleMempool {
         });
 
         // Run the mempool network sender and receiver.
-        let mut address = config
+        let  address = config
             .committee
             .mempool_address(&config.name)
+            .map(|mut x| {
+                x.set_ip("0.0.0.0".parse().unwrap());
+                x
+            })
             .expect("Our own public key is not in the committee");
-        address.set_ip("0.0.0.0".parse().unwrap());
         let network_receiver = NetReceiver::new(address, tx_core);
         tokio::spawn(async move {
             network_receiver.run().await;
@@ -64,10 +70,10 @@ impl SimpleMempool {
             config,
             signature_service,
             store,
-            tx_network,
-            rx_core,
-            rx_consensus,
-            rx_client,
+            /* core_channel */ rx_core,
+            /* consensus_channel */ rx_consensus,
+            /* client_channel */ rx_client,
+            /* network_channel */ tx_network,
         );
         tokio::spawn(async move {
             core.run().await;

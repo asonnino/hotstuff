@@ -35,10 +35,10 @@ async fn core(
         config,
         signature_service,
         store,
-        tx_network,
-        rx_core,
-        rx_consensus,
-        rx_client,
+        /* core_channel */ rx_core,
+        /* consensus_channel */ rx_consensus,
+        /* client_channel */ rx_client,
+        /* network_channel */ tx_network,
     );
     tokio::spawn(async move {
         core.run().await;

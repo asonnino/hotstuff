@@ -1,13 +1,17 @@
 use crate::error::{ConsensusError, ConsensusResult};
 use crypto::PublicKey;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
 pub type Stake = u32;
 pub type EpochNumber = u128;
 
-#[derive(Serialize, Deserialize)]
+pub struct Config {
+    pub name: PublicKey,
+    pub committee: Committee,
+    pub parameters: Parameters,
+}
+
 pub struct Parameters {
     pub timeout_delay: u64,
     pub sync_retry_delay: u64,
@@ -22,14 +26,14 @@ impl Default for Parameters {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct Authority {
     pub name: PublicKey,
     pub stake: Stake,
     pub address: SocketAddr,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct Committee {
     pub authorities: HashMap<PublicKey, Authority>,
     pub epoch: EpochNumber,
