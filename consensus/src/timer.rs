@@ -1,10 +1,10 @@
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::time::Duration;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::time::sleep;
-use std::hash::Hash;
 
 #[cfg(test)]
 #[path = "tests/timer_tests.rs"]
@@ -22,7 +22,7 @@ pub struct Timer<Id> {
     pub notifier: Receiver<Id>,
 }
 
-impl<Id: 'static + Hash + Eq + Clone+ Send + Sync> Timer<Id> {
+impl<Id: 'static + Hash + Eq + Clone + Send + Sync> Timer<Id> {
     pub fn new() -> Self {
         let (tx_notifier, rx_notifier) = channel(100);
         let (tx_inner, mut rx_inner): (Sender<Command<Id>>, _) = channel(100);
@@ -66,11 +66,7 @@ impl<Id: 'static + Hash + Eq + Clone+ Send + Sync> Timer<Id> {
         }
     }
 
-    async fn waiter(
-        delay: TimerDuration,
-        id: Id,
-        mut handler: Receiver<()>,
-    ) -> Option<Id> {
+    async fn waiter(delay: TimerDuration, id: Id, mut handler: Receiver<()>) -> Option<Id> {
         tokio::select! {
             () = sleep(Duration::from_millis(delay)) => Some(id),
             _ = handler.recv() => None,
