@@ -6,12 +6,10 @@ use crate::mempool::NodeMempool;
 use crate::messages::{Block, GenericQC, Vote, QC, TC};
 use crate::network::NetMessage;
 use crate::synchronizer::Synchronizer;
-use crate::timer::{TimerId, TimerManager};
+use crate::timer::Timer;
 use config::{Committee, Parameters};
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
-use futures::future::FutureExt as _;
-use futures::select;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
@@ -41,7 +39,6 @@ pub struct Core<Mempool> {
     leader_elector: LeaderElector,
     mempool_driver: MempoolDriver<Mempool>,
     loopback_channel: Sender<CoreMessage>,
-    timer_channel: Sender<TimerId>,
     network_channel: Sender<NetMessage>,
     commit_channel: Sender<Block>,
     round: RoundNumber,
@@ -50,52 +47,11 @@ pub struct Core<Mempool> {
     highest_qc: QC,
     synchronizer: Synchronizer,
     aggregator: Aggregator,
-    timer_manager: TimerManager,
+    timer: Timer<RoundNumber>,
 }
 
 impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     #[allow(clippy::too_many_arguments)]
-    /*
-    pub new(
-        name: PublicKey,
-        committee: Committee,
-        parameters: Parameters,
-        store: Store,
-        signature_service: SignatureService,
-        leader_elector: LeaderElector,
-        mempool_driver: MempoolDriver,
-        synchronizer: Synchronizer,
-        aggregator: Aggregator,
-        loopback_channel: Sender<CoreMessage>,
-        core_channel: Receiver<CoreMessage>,
-        network_channel: Sender<NetMessage>,
-        commit_channel: Sender<Block>,
-    ) -> Self {
-        let timer_manager = TimerManager::new().await;
-        let (tx_timer, rx_timer) = channel(100);
-
-        Self {
-            name,
-            committee,
-            parameters,
-            store,
-            signature_service,
-            leader_elector,
-            mempool_driver,
-            loopback_channel,
-            timer_channel: tx_timer,
-            network_channel,
-            commit_channel,
-            round: 0,
-            last_voted_round: 0,
-            preferred_round: 0,
-            highest_qc: QC::genesis(),
-            synchronizer,
-            aggregator,
-            timer_manager,
-        }
-    }
-    */
     pub async fn make(
         name: PublicKey,
         committee: Committee,
@@ -108,11 +64,8 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         commit_channel: Sender<Block>,
     ) -> Sender<CoreMessage> {
         let (tx_core, rx_core) = channel(1000);
-
         // Make a Timer Manager instance allowing to schedule and cancel timers.
-        // We communicate with the timer manager with a dedicated channel.
-        let timer_manager = TimerManager::new().await;
-        let (tx_timer, rx_timer) = channel(100);
+        let timer = Timer::new();
 
         // Make the synchronizer. This instance runs in a background thread
         // and asks other nodes for any block that we may be missing.
@@ -121,7 +74,6 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             store.clone(),
             network_channel.clone(),
             tx_core.clone(),
-            timer_manager.clone(),
             parameters.sync_retry_delay,
         )
         .await;
@@ -146,7 +98,6 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
                 leader_elector,
                 mempool_driver,
                 loopback_channel,
-                timer_channel: tx_timer,
                 network_channel,
                 commit_channel,
                 round: 0,
@@ -155,9 +106,9 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
                 highest_qc: QC::genesis(),
                 synchronizer,
                 aggregator,
-                timer_manager,
+                timer,
             };
-            core.run(rx_core, rx_timer).await;
+            core.run(rx_core).await;
         });
 
         // Return sender channel. The network receiver will use it to
@@ -175,13 +126,8 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     }
 
     async fn schedule_timer(&mut self) {
-        let timer_id = format!("core:{}", self.round);
-        self.timer_manager
-            .schedule(
-                self.parameters.timeout_delay,
-                timer_id,
-                self.timer_channel.clone(),
-            )
+        self.timer
+            .schedule(self.parameters.timeout_delay, self.round)
             .await;
     }
 
@@ -283,8 +229,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         };
         if self.round < possible_new_round {
             // Cancel the timeout timer for this round and update the round number.
-            let timer_id = format!("core:{}", self.round);
-            self.timer_manager.cancel(timer_id).await;
+            self.timer.cancel(self.round).await;
             self.round = possible_new_round;
             info!("Moved to round {}", self.round);
 
@@ -414,7 +359,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         Ok(())
     }
 
-    async fn run(&mut self, mut rx_core: Receiver<CoreMessage>, mut rx_timer: Receiver<TimerId>) {
+    async fn run(&mut self, mut rx_core: Receiver<CoreMessage>) {
         // Upon booting, send the very first block (if we are the leader).
         // Also, schedule a timer in case we don't hear back from it.
         self.schedule_timer().await;
@@ -427,30 +372,27 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         // This is the main loop: it processes incoming blocks and votes,
         // and receive timeout notifications from our Timeout Manager.
         loop {
-            select! {
-                message = rx_core.recv().fuse() => {
-                    if let Some(message) = message {
-                        debug!("Received {:?}", message);
-                        let result = match message {
-                            CoreMessage::Propose(block) => self.handle_propose(&block).await,
-                            CoreMessage::Vote(vote) => self.handle_vote(vote).await,
-                            CoreMessage::LoopBack(block) => self.process_block(&block).await,
-                            CoreMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await
-                        };
-                        match result {
-                            Ok(()) => (),
-                            Err(ConsensusError::StoreError(e)) => error!("{}", e),
-                            Err(ConsensusError::SerializationError(e)) => error!("Store corrupted. {}", e),
-                            Err(e) => warn!("{}", e),
-                        }
+            tokio::select! {
+                Some(message) = rx_core.recv() => {
+                    debug!("Received {:?}", message);
+                    let result = match message {
+                        CoreMessage::Propose(block) => self.handle_propose(&block).await,
+                        CoreMessage::Vote(vote) => self.handle_vote(vote).await,
+                        CoreMessage::LoopBack(block) => self.process_block(&block).await,
+                        CoreMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await
+                    };
+                    match result {
+                        Ok(()) => (),
+                        Err(ConsensusError::StoreError(e)) => error!("{}", e),
+                        Err(ConsensusError::SerializationError(e)) => error!("Store corrupted. {}", e),
+                        Err(e) => warn!("{}", e),
                     }
                 },
-                message = rx_timer.recv().fuse() => {
-                    if message.is_some() {
-                        warn!("Timeout reached for round {}", self.round);
-                        self.make_timeout().await
-                    }
-                }
+                Some(_) = self.timer.notifier.recv() => {
+                    warn!("Timeout reached for round {}", self.round);
+                    self.make_timeout().await
+                },
+                else => break,
             }
         }
     }
