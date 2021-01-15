@@ -1,0 +1,73 @@
+use super::*;
+use crate::common::{committee, keys, payload};
+use crate::config::Parameters;
+use bytes::Bytes;
+use crypto::Hash as _;
+use futures::future::try_join_all;
+use futures::sink::SinkExt as _;
+use std::fs;
+use std::time::Duration;
+use tokio::net::TcpStream;
+use tokio::time::sleep;
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
+
+#[tokio::test]
+async fn end_to_end() {
+    let mut committee = committee();
+    committee.increment_base_port(8000);
+
+    // Run all mempools.
+    let mempool_handles: Vec<_> = keys()
+        .into_iter()
+        .enumerate()
+        .map(|(i, (name, secret))| {
+            let config = Config {
+                name,
+                committee: committee.clone(),
+                parameters: Parameters {
+                    queue_capacity: 1,
+                    max_payload_size: 1,
+                },
+            };
+            let signature_service = SignatureService::new(secret);
+            let store_path = format!(".store_test_end_to_end_{}", i);
+            let _ = fs::remove_dir_all(&store_path);
+            let store = Store::new(&store_path).unwrap();
+
+            tokio::spawn(async move {
+                let mut mempool = SimpleMempool::new(config, signature_service, store);
+                sleep(Duration::from_millis(200)).await;
+                let digest = payload().digest().to_vec();
+                match mempool.verify(&digest).await {
+                    PayloadStatus::Accept => assert!(true),
+                    _ => assert!(false)
+                }
+            })
+        })
+        .collect();
+
+    // Wait for the mempools to boot.
+    sleep(Duration::from_millis(100)).await;
+
+    // Send a payload to all mempools.
+    let client_handles: Vec<_> = keys()
+        .into_iter()
+        .map(|(name, _)| {
+            let address = committee.clone().front_address(&name).unwrap();
+            tokio::spawn(async move {
+                let stream = TcpStream::connect(address).await.unwrap();
+                let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
+                let transaction = vec![1_u8];
+                let bytes = Bytes::from(bincode::serialize(&transaction).unwrap());
+                transport.send(bytes.clone()).await.unwrap();
+                transport.send(bytes.clone()).await.unwrap();
+            })
+        })
+        .collect();
+
+    // Ensure all transactions are sent.
+    assert!(try_join_all(client_handles).await.is_ok());
+
+    // Ensure all threads terminated correctly.
+    assert!(try_join_all(mempool_handles).await.is_ok());
+}

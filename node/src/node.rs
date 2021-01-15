@@ -7,7 +7,7 @@ use consensus::messages::Block;
 use consensus::network::{NetReceiver, NetSender};
 use crypto::SignatureService;
 use log::info;
-use mempool::simple::SimpleMempool;
+use mempool::mempool::SimpleMempool;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver};
 
