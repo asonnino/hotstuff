@@ -71,6 +71,12 @@ impl fmt::Debug for PublicKey {
     }
 }
 
+impl fmt::Display for PublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "{}", self.to_base64().get(0..16).unwrap())
+    }
+}
+
 impl Serialize for PublicKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

@@ -84,7 +84,7 @@ impl Node {
         )
         .await?;
 
-        info!("Node {:?} successfully booted", name);
+        info!("Node {} successfully booted", name);
         Ok(())
     }
 
