@@ -1,30 +1,7 @@
 use super::*;
-use crate::common::{chain, committee, keys};
-use crate::mempool::PayloadStatus;
-use async_trait::async_trait;
+use crate::common::{chain, committee, keys, MockMempool};
 use crypto::SecretKey;
-use rand::rngs::StdRng;
-use rand::RngCore as _;
-use rand::SeedableRng as _;
 use std::fs;
-
-pub struct MockMempool;
-
-#[async_trait]
-impl NodeMempool for MockMempool {
-    async fn get(&mut self) -> Vec<u8> {
-        let mut rng = StdRng::from_seed([0; 32]);
-        let mut payload = [0u8; 32];
-        rng.fill_bytes(&mut payload);
-        payload.to_vec()
-    }
-
-    async fn verify(&mut self, _payload: &[u8]) -> PayloadStatus {
-        PayloadStatus::Accept
-    }
-
-    async fn garbage_collect(&mut self, _payload: &[u8]) {}
-}
 
 async fn core(
     public_key: PublicKey,
@@ -35,7 +12,7 @@ async fn core(
 ) -> Sender<CoreMessage> {
     let signature_service = SignatureService::new(secret_key);
     let leader_elector = LeaderElector::new(committee());
-    let mempool = MockMempool {};
+    let mempool = MockMempool;
     Core::make(
         public_key,
         committee(),
@@ -181,7 +158,7 @@ async fn make_timeout() {
     let (tx_commit, _) = channel(1);
     let signature_service = SignatureService::new(secret_key);
     let leader_elector = LeaderElector::new(committee());
-    let mempool = MockMempool {};
+    let mempool = MockMempool;
     let parameters = Parameters {
         timeout_delay: 100,
         ..Parameters::default()

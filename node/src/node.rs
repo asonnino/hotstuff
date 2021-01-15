@@ -7,7 +7,7 @@ use consensus::messages::Block;
 use consensus::network::{NetReceiver, NetSender};
 use crypto::SignatureService;
 use log::info;
-use mempool::mempool::SimpleMempool;
+use mempool::SimpleMempool;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver};
 
@@ -47,7 +47,7 @@ impl Node {
         let signature_service = SignatureService::new(secret_key);
 
         // Choose the mempool and leader election algorithm.
-        let mempool = SimpleMempool::new();
+        let mempool = SimpleMempool::new(mempool_config, signature_service.clone(), store.clone());
         let leader_elector = LeaderElector::new(committee.clone());
 
         // Create the commit channel from which we can read the sequence of

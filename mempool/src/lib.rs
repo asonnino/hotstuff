@@ -9,3 +9,5 @@ mod network;
 #[cfg(test)]
 #[path = "tests/common.rs"]
 mod common;
+
+pub use crate::mempool::SimpleMempool;

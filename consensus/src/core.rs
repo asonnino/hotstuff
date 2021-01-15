@@ -55,6 +55,47 @@ pub struct Core<Mempool> {
 
 impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     #[allow(clippy::too_many_arguments)]
+    /*
+    pub new(
+        name: PublicKey,
+        committee: Committee,
+        parameters: Parameters,
+        store: Store,
+        signature_service: SignatureService,
+        leader_elector: LeaderElector,
+        mempool_driver: MempoolDriver,
+        synchronizer: Synchronizer,
+        aggregator: Aggregator,
+        loopback_channel: Sender<CoreMessage>,
+        core_channel: Receiver<CoreMessage>,
+        network_channel: Sender<NetMessage>,
+        commit_channel: Sender<Block>,
+    ) -> Self {
+        let timer_manager = TimerManager::new().await;
+        let (tx_timer, rx_timer) = channel(100);
+
+        Self {
+            name,
+            committee,
+            parameters,
+            store,
+            signature_service,
+            leader_elector,
+            mempool_driver,
+            loopback_channel,
+            timer_channel: tx_timer,
+            network_channel,
+            commit_channel,
+            round: 0,
+            last_voted_round: 0,
+            preferred_round: 0,
+            highest_qc: QC::genesis(),
+            synchronizer,
+            aggregator,
+            timer_manager,
+        }
+    }
+    */
     pub async fn make(
         name: PublicKey,
         committee: Committee,

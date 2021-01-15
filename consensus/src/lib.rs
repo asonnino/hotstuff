@@ -1,6 +1,7 @@
 #[macro_use]
 pub mod error;
 mod aggregator;
+pub mod consensus;
 pub mod core;
 pub mod leader;
 pub mod mempool;
@@ -12,3 +13,5 @@ mod timer;
 #[cfg(test)]
 #[path = "tests/common.rs"]
 mod common;
+
+pub use crate::consensus::Consensus;

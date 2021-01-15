@@ -1,9 +1,13 @@
 use crate::core::RoundNumber;
+use crate::mempool::NodeMempool;
+use crate::mempool::PayloadStatus;
 use crate::messages::{Block, Vote, QC, TC};
+use async_trait::async_trait;
 use config::Committee;
 use crypto::Hash as _;
 use crypto::{generate_keypair, Digest, PublicKey, SecretKey, Signature};
 use rand::rngs::StdRng;
+use rand::RngCore as _;
 use rand::SeedableRng as _;
 
 // Fixture.
@@ -147,4 +151,23 @@ pub fn chain(keys: Vec<(PublicKey, SecretKey)>) -> Vec<Block> {
             block
         })
         .collect()
+}
+
+// Fixture
+pub struct MockMempool;
+
+#[async_trait]
+impl NodeMempool for MockMempool {
+    async fn get(&mut self) -> Vec<u8> {
+        let mut rng = StdRng::from_seed([0; 32]);
+        let mut payload = [0u8; 32];
+        rng.fill_bytes(&mut payload);
+        payload.to_vec()
+    }
+
+    async fn verify(&mut self, _payload: &[u8]) -> PayloadStatus {
+        PayloadStatus::Accept
+    }
+
+    async fn garbage_collect(&mut self, _payload: &[u8]) {}
 }

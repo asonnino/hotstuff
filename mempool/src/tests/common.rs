@@ -1,4 +1,4 @@
-use crate::config::{Committee, EpochNumber, Authority};
+use crate::config::{Authority, Committee, EpochNumber};
 use crate::messages::Payload;
 use crypto::Hash as _;
 use crypto::{generate_keypair, PublicKey, SecretKey, Signature};
