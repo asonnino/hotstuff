@@ -9,7 +9,7 @@ async fn core(
     secret: SecretKey,
     store_path: &str,
 ) -> (Sender<CoreMessage>, Receiver<NetMessage>, Receiver<Block>) {
-    let (tx_core, rx_core) = channel(3);
+    let (tx_core, rx_core) = channel(1);
     let (tx_network, rx_network) = channel(3);
     let (tx_commit, rx_commit) = channel(1);
 

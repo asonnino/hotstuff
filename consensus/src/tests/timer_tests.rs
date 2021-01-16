@@ -7,10 +7,10 @@ async fn schedule() {
     sleep(Duration::from_millis(50)).await;
 
     // schedule a timer.
-    let timer_id = "id".to_string();
-    timer.schedule(50, timer_id.clone()).await;
+    let id = 1;
+    timer.schedule(50, id).await;
     match timer.notifier.recv().await {
-        Some(id) => assert_eq!(id, timer_id),
+        Some(id) => assert_eq!(id, id),
         _ => assert!(false),
     }
 }
@@ -22,17 +22,17 @@ async fn cancel() {
     sleep(Duration::from_millis(50)).await;
 
     // schedule two timers.
-    let timer_1 = "timer_1".to_string();
-    timer.schedule(50, timer_1.clone()).await;
-    let timer_2 = "timer_2".to_string();
-    timer.schedule(100, timer_2.clone()).await;
+    let id_1 = 1;
+    timer.schedule(50, id_1).await;
+    let id_2 = 2;
+    timer.schedule(100, id_2).await;
 
     // Cancel timer 1.
-    timer.cancel(timer_1.clone()).await;
+    timer.cancel(id_1).await;
 
     // Ensure we receive timer 2 (and not timer 1).
     match timer.notifier.recv().await {
-        Some(id) => assert_eq!(id, timer_2),
+        Some(id) => assert_eq!(id, id_2),
         _ => assert!(false),
     }
 }

@@ -1,37 +1,14 @@
 use crate::core::{CoreMessage, RoundNumber};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::messages::Block;
-use async_trait::async_trait;
 use futures::future::FutureExt as _;
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
 use log::{debug, error};
+use mempool::{NodeMempool, PayloadStatus};
 use std::collections::HashMap;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-
-pub enum PayloadStatus {
-    Accept,
-    Reject,
-    Wait(Vec<u8>),
-}
-
-#[async_trait]
-pub trait NodeMempool: Send + Sync {
-    /// Consensus calls this method whenever it needs to create a new block.
-    /// The mempool needs to promptly provide a payload.
-    async fn get(&mut self) -> Vec<u8>;
-
-    /// Consensus calls this method when receiving a new block. The mempool should
-    /// return Accept if the block can be processed right away, Wait(missing_value)
-    /// if the block should be processed when missing_value is the storage, or
-    /// Reject if the payload is invalid and the block should be dropped.
-    async fn verify(&mut self, payload: &[u8]) -> PayloadStatus;
-
-    /// Consensus calls this method upon commit a block. The mempool can use the
-    /// knowledge that a block is committed to clean up its internal state.
-    async fn garbage_collect(&mut self, payload: &[u8]);
-}
 
 type DriverMessage = (Vec<u8>, Block, Receiver<()>);
 
@@ -43,7 +20,7 @@ pub struct MempoolDriver<Mempool> {
 
 impl<Mempool: 'static + NodeMempool> MempoolDriver<Mempool> {
     pub fn new(mempool: Mempool, core_channel: Sender<CoreMessage>, store: Store) -> Self {
-        let (tx_inner, mut rx_inner): (_, Receiver<DriverMessage>) = channel(1_000);
+        let (tx_inner, mut rx_inner): (_, Receiver<DriverMessage>) = channel(1000);
         let mut waiting = FuturesUnordered::new();
         tokio::spawn(async move {
             loop {

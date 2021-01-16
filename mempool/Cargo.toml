@@ -1,12 +1,13 @@
 [package]
 name = "mempool"
 version = "0.1.0"
-authors = ["Alberto Sonnino <asonnino@fb.com>"]
+authors = ["Alberto Sonnino <alberto@sonnino.com>"]
 edition = "2018"
+publish = false
 
 [dependencies]
 async-trait = "0.1.42"
-tokio = { version = "0.3.1", features = ["rt", "net", "macros", "sync"] }
+tokio = { version = "0.3.1", features = ["rt", "net", "time", "macros", "sync"] }
 ed25519-dalek = "1.0.1"
 thiserror = "1.0.21"
 serde = { version = "1.0", features = ["derive"] }
@@ -18,7 +19,6 @@ futures = "0.3.8"
 crypto = { path = "../crypto" }
 store = { path = "../store" }
 network = { path = "../network" }
-consensus = { path = "../consensus" }
 
 [dev-dependencies]
 tokio-util = { version = "0.5", features= ["codec"] }

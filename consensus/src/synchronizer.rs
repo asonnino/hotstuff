@@ -32,7 +32,7 @@ impl Synchronizer {
         core_channel: Sender<CoreMessage>,
         sync_retry_delay: u64,
     ) -> Self {
-        let (tx_inner, mut rx_inner): (_, Receiver<Block>) = channel(1_000);
+        let (tx_inner, mut rx_inner): (_, Receiver<Block>) = channel(1000);
         let mut timer = Timer::new();
         timer.schedule(sync_retry_delay, true).await;
 

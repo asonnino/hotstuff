@@ -1,11 +1,10 @@
 use crate::config::Committee;
 use crate::core::RoundNumber;
-use crate::mempool::NodeMempool;
-use crate::mempool::PayloadStatus;
 use crate::messages::{Block, Vote, QC, TC};
 use async_trait::async_trait;
 use crypto::Hash as _;
 use crypto::{generate_keypair, Digest, PublicKey, SecretKey, Signature};
+use mempool::{NodeMempool, PayloadStatus};
 use rand::rngs::StdRng;
 use rand::RngCore as _;
 use rand::SeedableRng as _;

@@ -35,7 +35,7 @@ async fn end_to_end() {
                 let mut mempool =
                     SimpleMempool::new(name, committee, parameters, signature_service, store)
                         .unwrap();
-                sleep(Duration::from_millis(200)).await;
+                sleep(Duration::from_millis(100)).await;
                 let digest = payload().digest().to_vec();
                 match mempool.verify(&digest).await {
                     PayloadStatus::Accept => assert!(true),
@@ -46,7 +46,7 @@ async fn end_to_end() {
         .collect();
 
     // Wait for the mempools to boot.
-    sleep(Duration::from_millis(100)).await;
+    sleep(Duration::from_millis(50)).await;
 
     // Send a payload to all mempools.
     let client_handles: Vec<_> = keys()

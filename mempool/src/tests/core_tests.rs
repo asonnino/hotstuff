@@ -46,19 +46,19 @@ async fn core(
 }
 
 #[tokio::test]
-async fn test_handle_transaction() {
+async fn handle_transaction() {
     // Run the core.
     let path = ".store_test_handle_transaction";
     let (mut rx_network, _tx_core, _tx_consensus, tx_client) = core(path).await;
 
     // Ensure the core transmits the payload to the network.
-    tx_client.send(vec![1_u8]).await.unwrap();
-    tx_client.send(vec![1_u8]).await.unwrap();
+    tx_client.send(vec![1u8]).await.unwrap();
+    tx_client.send(vec![1u8]).await.unwrap();
     assert!(rx_network.recv().await.is_some());
 }
 
 #[tokio::test]
-async fn test_handle_request() {
+async fn handle_request() {
     // Run the core.
     let path = ".store_test_handle_request";
     let (mut rx_network, tx_core, _tx_consensus, _tx_client) = core(path).await;
@@ -66,7 +66,7 @@ async fn test_handle_request() {
     // Send a payload to the core.
     let message = CoreMessage::Payload(payload());
     tx_core.send(message).await.unwrap();
-    sleep(Duration::from_millis(100)).await;
+    sleep(Duration::from_millis(50)).await;
 
     // Send a sync request.
     let (name, _) = keys().pop().unwrap();
@@ -79,14 +79,14 @@ async fn test_handle_request() {
 }
 
 #[tokio::test]
-async fn test_get_payload() {
+async fn get_payload() {
     // Run the core.
     let path = ".store_test_get_payload";
     let (_rx_network, _tx_core, tx_consensus, tx_client) = core(path).await;
 
     // Send enough transactions to generate a payload.
-    tx_client.send(vec![1_u8]).await.unwrap();
-    tx_client.send(vec![1_u8]).await.unwrap();
+    tx_client.send(vec![1u8]).await.unwrap();
+    tx_client.send(vec![1u8]).await.unwrap();
 
     // Get the next payload.
     let (sender, receiver) = oneshot::channel();
@@ -98,7 +98,7 @@ async fn test_get_payload() {
 }
 
 #[tokio::test]
-async fn test_verify_existing_payload() {
+async fn verify_existing_payload() {
     // Run the core.
     let path = ".store_test_verify_existing_payload";
     let (_rx_network, tx_core, tx_consensus, _tx_client) = core(path).await;
@@ -106,7 +106,7 @@ async fn test_verify_existing_payload() {
     // Send a payload to the core.
     let message = CoreMessage::Payload(payload());
     tx_core.send(message).await.unwrap();
-    sleep(Duration::from_millis(100)).await;
+    sleep(Duration::from_millis(50)).await;
 
     // Verify a payload.
     let (sender, receiver) = oneshot::channel();

@@ -1,9 +1,5 @@
 use super::*;
-use futures::future::FutureExt as _;
-use futures::select;
 use std::fs;
-use std::time::Duration;
-use tokio::time::sleep;
 
 #[tokio::test]
 async fn create_store() {
@@ -60,20 +56,19 @@ async fn read_notify() {
     // for that key and check that notify read returns the result.
     let key = vec![0u8, 1u8, 2u8, 3u8];
     let value = vec![4u8, 5u8, 6u8, 7u8];
-    let mut operations_order = Vec::<u8>::new();
-    loop {
-        select! {
-            result = store.notify_read(key.clone()).fuse() => {
-                operations_order.push(2);
-                assert!(result.is_ok());
-                assert_eq!(result.unwrap(), value);
-                break;
-            },
-            () = sleep(Duration::from_millis(100)).fuse() => {
-                operations_order.push(1);
-                let _ = store.write(key.clone(), value.clone()).await;
-            }
+
+    // Try to read a missing value.
+    let mut store_copy = store.clone();
+    let key_copy = key.clone();
+    let value_copy = value.clone();
+    let handle = tokio::spawn(async move {
+        match store_copy.notify_read(key_copy).await {
+            Ok(v) => assert_eq!(v, value_copy),
+            _ => assert!(false),
         }
-    }
-    assert_eq!(operations_order, vec![1, 2]);
+    });
+
+    // Write the missing value and ensure the handle terminates correctly.
+    store.write(key, value).await.unwrap();
+    assert!(handle.await.is_ok());
 }
