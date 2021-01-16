@@ -1,12 +1,12 @@
 use crate::config::Export as _;
 use crate::config::{Committee, Parameters, Secret};
-use consensus::{Consensus, ConsensusError, Block};
+use consensus::{Block, Consensus, ConsensusError};
 use crypto::SignatureService;
 use log::info;
 use mempool::{MempoolError, SimpleMempool};
 use store::{Store, StoreError};
 use thiserror::Error;
-use tokio::sync::mpsc::{Receiver,channel};
+use tokio::sync::mpsc::{channel, Receiver};
 
 #[derive(Error, Debug)]
 pub enum NodeError {
@@ -27,7 +27,7 @@ pub enum NodeError {
 }
 
 pub struct Node {
-    pub commit: Receiver<Block>
+    pub commit: Receiver<Block>,
 }
 
 impl Node {
@@ -79,9 +79,7 @@ impl Node {
         .await?;
 
         info!("Node {} successfully booted", name);
-        Ok(Self {
-            commit: rx_commit
-        })
+        Ok(Self { commit: rx_commit })
     }
 
     pub fn print_key_file(filename: &str) -> Result<(), NodeError> {

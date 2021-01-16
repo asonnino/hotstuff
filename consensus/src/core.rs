@@ -4,12 +4,13 @@ use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
 use crate::mempool::{MempoolDriver, NodeMempool};
 use crate::messages::{Block, GenericQC, Vote, QC, TC};
-use crate::network::NetMessage;
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
+use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
 use log::{debug, error, info, warn};
+use network::NetMessage;
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
 use store::Store;
@@ -104,6 +105,36 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             .await;
     }
 
+    async fn transmit(
+        &mut self,
+        message: &CoreMessage,
+        to: Option<PublicKey>,
+    ) -> ConsensusResult<()> {
+        // TODO: Make it nicer.
+        /*
+        if let Some(to) = to {
+            if to == self.name {
+                if let Err(e) = self.loopback_channel.send(message.clone()).await {
+                    panic!("Failed to loopback message to itself: {}", e);
+                }
+                return Ok(());
+            }
+        }
+        */
+
+        let addresses = if let Some(to) = to {
+            vec![self.committee.address(&to)?]
+        } else {
+            self.committee.broadcast_addresses(&self.name)
+        };
+        let bytes = bincode::serialize(message).expect("Failed to serialize core message");
+        let message = NetMessage(Bytes::from(bytes), addresses);
+        if let Err(e) = self.network_channel.send(message).await {
+            panic!("Failed to send block through network channel: {}", e);
+        }
+        Ok(())
+    }
+
     async fn make_block(
         &mut self,
         qc: QC,
@@ -123,14 +154,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         info!("Created {}", block);
         debug!("Created {:?}", block);
         let message = CoreMessage::LoopBack(block.clone());
-        if let Err(e) = self.loopback_channel.send(message).await {
-            panic!("Failed to loopback message to itself: {}", e);
-        }
-        let message = NetMessage::Block(block);
-        if let Err(e) = self.network_channel.send(message).await {
-            panic!("Failed to send block to the network: {}", e);
-        }
-        Ok(())
+        self.transmit(&message, None).await
     }
 
     async fn handle_propose(&mut self, block: &Block) -> ConsensusResult<()> {
@@ -238,20 +262,10 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         let safety_rule_2 = block.round > self.last_voted_round;
         if safety_rule_1 && safety_rule_2 {
             debug!("Voted for {:?}", block);
-
             let vote = Vote::new(&block, self.name, self.signature_service.clone()).await;
             let next_leader = self.leader_elector.get_leader(self.round + 1);
-            if next_leader == self.name {
-                let message = CoreMessage::Vote(vote.clone());
-                if let Err(e) = self.loopback_channel.send(message).await {
-                    panic!("Failed to loopback message to itself: {}", e);
-                }
-            } else {
-                let message = NetMessage::Vote(vote, next_leader);
-                if let Err(e) = self.network_channel.send(message).await {
-                    panic!("Failed to send vote to the network: {}", e);
-                }
-            }
+            let message = CoreMessage::Vote(vote);
+            self.transmit(&message, Some(next_leader)).await?;
 
             // Finally, update our state to ensure we won't vote for conflicting blocks.
             self.preferred_round = max(self.preferred_round, b1.round);
@@ -293,7 +307,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         Ok(())
     }
 
-    async fn make_timeout(&mut self) {
+    async fn make_timeout(&mut self) -> ConsensusResult<()> {
         // First move to the next round (the current round timed out).
         self.round += 1;
         info!("Moved to round {}", self.round);
@@ -301,20 +315,12 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         // Make a timeout vote and send it to the next leader.
         let vote = Vote::new_timeout(self.round, self.name, self.signature_service.clone()).await;
         let next_leader = self.leader_elector.get_leader(self.round + 1);
-        if next_leader == self.name {
-            let message = CoreMessage::Vote(vote.clone());
-            if let Err(e) = self.loopback_channel.send(message).await {
-                panic!("Failed to loopback message to itself: {}", e);
-            }
-        } else {
-            let message = NetMessage::Vote(vote, next_leader);
-            if let Err(e) = self.network_channel.send(message).await {
-                panic!("Failed to send vote to the network: {}", e);
-            }
-        }
+        let message = CoreMessage::Vote(vote);
+        self.transmit(&message, Some(next_leader)).await?;
 
         // Finally, schedule an other timer in case we timeout again.
         self.schedule_timer().await;
+        Ok(())
     }
 
     async fn handle_sync_request(
@@ -324,10 +330,8 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     ) -> ConsensusResult<()> {
         if let Some(bytes) = self.store.read(digest.to_vec()).await? {
             let block = bincode::deserialize(&bytes)?;
-            let message = NetMessage::SyncReply(block, sender);
-            if let Err(e) = self.network_channel.send(message).await {
-                panic!("Failed to send sync reply to the network: {}", e);
-            }
+            let message = CoreMessage::Propose(block);
+            self.transmit(&message, Some(sender)).await?;
         }
         Ok(())
     }
@@ -345,20 +349,14 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         // This is the main loop: it processes incoming blocks and votes,
         // and receive timeout notifications from our Timeout Manager.
         loop {
-            tokio::select! {
+            let result = tokio::select! {
                 Some(message) = self.core_channel.recv() => {
                     debug!("Received {:?}", message);
-                    let result = match message {
+                    match message {
                         CoreMessage::Propose(block) => self.handle_propose(&block).await,
                         CoreMessage::Vote(vote) => self.handle_vote(vote).await,
                         CoreMessage::LoopBack(block) => self.process_block(&block).await,
                         CoreMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await
-                    };
-                    match result {
-                        Ok(()) => (),
-                        Err(ConsensusError::StoreError(e)) => error!("{}", e),
-                        Err(ConsensusError::SerializationError(e)) => error!("Store corrupted. {}", e),
-                        Err(e) => warn!("{}", e),
                     }
                 },
                 Some(_) = self.timer.notifier.recv() => {
@@ -366,6 +364,12 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
                     self.make_timeout().await
                 },
                 else => break,
+            };
+            match result {
+                Ok(()) => (),
+                Err(ConsensusError::StoreError(e)) => error!("{}", e),
+                Err(ConsensusError::SerializationError(e)) => error!("Store corrupted. {}", e),
+                Err(e) => warn!("{}", e),
             }
         }
     }

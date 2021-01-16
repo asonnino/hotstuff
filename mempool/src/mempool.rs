@@ -1,10 +1,10 @@
 use crate::config::{Committee, Parameters};
 use crate::core::Core;
 use crate::error::MempoolResult;
-use network::{NetReceiver, NetSender};
 use async_trait::async_trait;
 use consensus::{NodeMempool, PayloadStatus};
 use crypto::{Digest, PublicKey, SignatureService};
+use network::{NetReceiver, NetSender};
 use std::convert::TryInto;
 use store::Store;
 use tokio::sync::mpsc::{channel, Sender};

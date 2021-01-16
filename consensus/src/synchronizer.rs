@@ -1,13 +1,15 @@
+use crate::config::Committee;
 use crate::core::CoreMessage;
 use crate::error::ConsensusResult;
 use crate::messages::{Block, QC};
-use crate::network::NetMessage;
 use crate::timer::Timer;
+use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey};
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
 use log::{debug, error};
+use network::NetMessage;
 use std::collections::HashSet;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -24,6 +26,7 @@ pub struct Synchronizer {
 impl Synchronizer {
     pub async fn new(
         name: PublicKey,
+        committee: Committee,
         store: Store,
         network_channel: Sender<NetMessage>,
         core_channel: Sender<CoreMessage>,
@@ -44,10 +47,7 @@ impl Synchronizer {
                             let previous = block.previous().clone();
                             let fut = Self::waiter(store_copy.clone(), previous.clone(), block);
                             waiting.push(fut);
-                            let sync_request = NetMessage::SyncRequest(previous, name);
-                            if let Err(e) = network_channel.send(sync_request).await {
-                                panic!("Failed to send Sync Request to network: {}", e);
-                            }
+                            Self::transmit(previous, &name, &committee, &network_channel).await;
                         }
                     },
                     Some(result) = waiting.next() => {
@@ -66,10 +66,7 @@ impl Synchronizer {
                         // This ensure liveness in case Sync Requests are lost.
                         // It should not happen in theory, but the internet is wild.
                         for digest in &pending {
-                            let sync_request = NetMessage::SyncRequest(digest.clone(), name);
-                            if let Err(e) = network_channel.send(sync_request).await {
-                                panic!("Failed to send Sync Request to network: {}", e);
-                            }
+                            Self::transmit(digest.clone(), &name, &committee, &network_channel).await;
                         }
                         timer
                             .schedule(sync_retry_delay, true)
@@ -88,6 +85,21 @@ impl Synchronizer {
     async fn waiter(mut store: Store, wait_on: Digest, deliver: Block) -> ConsensusResult<Block> {
         let _ = store.notify_read(wait_on.to_vec()).await?;
         Ok(deliver)
+    }
+
+    async fn transmit(
+        digest: Digest,
+        name: &PublicKey,
+        committee: &Committee,
+        network_channel: &Sender<NetMessage>,
+    ) {
+        let addresses = committee.broadcast_addresses(&name);
+        let message = CoreMessage::SyncRequest(digest, *name);
+        let bytes = bincode::serialize(&message).expect("Failed to serialize core message");
+        let message = NetMessage(Bytes::from(bytes), addresses);
+        if let Err(e) = network_channel.send(message).await {
+            panic!("Failed to send block through network channel: {}", e);
+        }
     }
 
     async fn get_previous_block(&mut self, block: &Block) -> ConsensusResult<Option<Block>> {

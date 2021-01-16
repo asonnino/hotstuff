@@ -68,7 +68,7 @@ async fn main() -> MainResult<()> {
                     // Sink the commit channel.
                     while node.commit.recv().await.is_some() {}
                 }
-                Err(e) => error!("{}", e)
+                Err(e) => error!("{}", e),
             }
         }
         ("deploy", Some(subm)) => {
@@ -142,7 +142,7 @@ fn deploy_testbed(nodes: usize) -> MainResult<Vec<JoinHandle<()>>> {
                         // Sink the commit channel.
                         while node.commit.recv().await.is_some() {}
                     }
-                    Err(e) => error!("{}", e)
+                    Err(e) => error!("{}", e),
                 }
             }))
         })
