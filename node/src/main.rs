@@ -7,7 +7,7 @@ use config::Export as _;
 use config::{Committee, Secret};
 use consensus::Committee as ConsensusCommittee;
 use env_logger::Env;
-use futures::future::try_join_all;
+use futures::future::join_all;
 use log::error;
 use mempool::Committee as MempoolCommittee;
 use std::fs;
@@ -76,7 +76,7 @@ async fn main() -> MainResult<()> {
             match nodes.parse::<usize>() {
                 Ok(nodes) if nodes > 0 => match deploy_testbed(nodes) {
                     Ok(handles) => {
-                        let _ = try_join_all(handles).await;
+                        let _ = join_all(handles).await;
                     }
                     Err(e) => error!("{}", e),
                 },
@@ -89,10 +89,10 @@ async fn main() -> MainResult<()> {
 }
 
 fn deploy_testbed(nodes: usize) -> MainResult<Vec<JoinHandle<()>>> {
-    let epoch = 1;
     let keys: Vec<_> = (0..nodes).map(|_| Secret::new()).collect();
 
     // Print the committee file.
+    let epoch = 1;
     let mempool_committee = MempoolCommittee::new(
         keys.iter()
             .enumerate()

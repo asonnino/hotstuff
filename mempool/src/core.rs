@@ -2,7 +2,7 @@ use crate::config::{Committee, Parameters};
 use crate::error::{MempoolError, MempoolResult};
 use crate::mempool::ConsensusMessage;
 use crate::messages::{Payload, PayloadMaker, Transaction};
-use crate::network::NetMessage;
+use network::NetMessage;
 use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};

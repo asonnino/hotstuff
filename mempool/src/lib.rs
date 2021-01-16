@@ -4,7 +4,6 @@ mod config;
 mod core;
 mod mempool;
 mod messages;
-mod network;
 
 #[cfg(test)]
 #[path = "tests/common.rs"]

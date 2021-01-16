@@ -1,7 +1,7 @@
 use crate::config::{Committee, Parameters};
 use crate::core::Core;
 use crate::error::MempoolResult;
-use crate::network::{NetReceiver, NetSender};
+use network::{NetReceiver, NetSender};
 use async_trait::async_trait;
 use consensus::{NodeMempool, PayloadStatus};
 use crypto::{Digest, PublicKey, SignatureService};
