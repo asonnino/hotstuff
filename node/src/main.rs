@@ -53,7 +53,7 @@ async fn main() -> MainResult<()> {
     #[cfg(feature = "benchmark")]
     logger.format_timestamp_millis();
     logger.init();
-      
+
     match matches.subcommand() {
         ("keys", Some(subm)) => {
             let filename = subm.value_of("filename").unwrap();
