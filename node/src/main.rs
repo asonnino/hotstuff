@@ -49,8 +49,11 @@ async fn main() -> MainResult<()> {
         3 => "debug",
         _ => "trace",
     };
-    env_logger::Builder::from_env(Env::default().default_filter_or(log_level)).init();
-
+    let mut logger = env_logger::Builder::from_env(Env::default().default_filter_or(log_level));
+    #[cfg(feature = "benchmark")]
+    logger.format_timestamp_millis();
+    logger.init();
+      
     match matches.subcommand() {
         ("keys", Some(subm)) => {
             let filename = subm.value_of("filename").unwrap();
