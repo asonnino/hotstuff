@@ -8,10 +8,6 @@ use store::{Store, StoreError};
 use thiserror::Error;
 use tokio::sync::mpsc::{Receiver,channel};
 
-#[cfg(test)]
-#[path = "tests/node_tests.rs"]
-pub mod node_tests;
-
 #[derive(Error, Debug)]
 pub enum NodeError {
     #[error("Failed to read config file '{file}': {message}")]
