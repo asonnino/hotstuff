@@ -6,6 +6,7 @@ use crate::mempool::{MempoolDriver, NodeMempool};
 use crate::messages::{Block, GenericQC, Vote, QC, TC};
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
+use async_recursion::async_recursion;
 use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
@@ -40,7 +41,6 @@ pub struct Core<Mempool> {
     mempool_driver: MempoolDriver<Mempool>,
     synchronizer: Synchronizer,
     core_channel: Receiver<CoreMessage>,
-    loopback_channel: Sender<CoreMessage>,
     network_channel: Sender<NetMessage>,
     commit_channel: Sender<Block>,
     round: RoundNumber,
@@ -63,7 +63,6 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         mempool_driver: MempoolDriver<Mempool>,
         synchronizer: Synchronizer,
         core_channel: Receiver<CoreMessage>,
-        loopback_channel: Sender<CoreMessage>,
         network_channel: Sender<NetMessage>,
         commit_channel: Sender<Block>,
     ) -> Self {
@@ -77,7 +76,6 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             leader_elector,
             mempool_driver,
             synchronizer,
-            loopback_channel,
             network_channel,
             commit_channel,
             core_channel,
@@ -110,22 +108,9 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         message: &CoreMessage,
         to: Option<PublicKey>,
     ) -> ConsensusResult<()> {
-        // TODO: Make it nicer.
-        /*
-        if let Some(to) = to {
-            if to == self.name {
-                if let Err(e) = self.loopback_channel.send(message.clone()).await {
-                    panic!("Failed to loopback message to itself: {}", e);
-                }
-                return Ok(());
-            }
-        }
-        */
-
-        let addresses = if let Some(to) = to {
-            vec![self.committee.address(&to)?]
-        } else {
-            self.committee.broadcast_addresses(&self.name)
+        let addresses = match to {
+            Some(to) => vec![self.committee.address(&to)?],
+            None => self.committee.broadcast_addresses(&self.name)
         };
         let bytes = bincode::serialize(message).expect("Failed to serialize core message");
         let message = NetMessage(Bytes::from(bytes), addresses);
@@ -135,6 +120,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         Ok(())
     }
 
+    #[async_recursion]
     async fn make_block(
         &mut self,
         qc: QC,
@@ -153,7 +139,8 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         .await;
         info!("Created {}", block);
         debug!("Created {:?}", block);
-        let message = CoreMessage::LoopBack(block.clone());
+        self.process_block(&block).await?;
+        let message = CoreMessage::Propose(block);
         self.transmit(&message, None).await
     }
 
@@ -204,6 +191,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         self.process_block(&block).await
     }
 
+    #[async_recursion]
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
         // Let's see if we have the last three ancestors of the block, that is:
         //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
@@ -264,8 +252,12 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             debug!("Voted for {:?}", block);
             let vote = Vote::new(&block, self.name, self.signature_service.clone()).await;
             let next_leader = self.leader_elector.get_leader(self.round + 1);
-            let message = CoreMessage::Vote(vote);
-            self.transmit(&message, Some(next_leader)).await?;
+            if next_leader == self.name {
+                self.handle_vote(vote).await?;
+            } else {
+                let message = CoreMessage::Vote(vote);
+                self.transmit(&message, Some(next_leader)).await?;
+            }
 
             // Finally, update our state to ensure we won't vote for conflicting blocks.
             self.preferred_round = max(self.preferred_round, b1.round);
@@ -315,8 +307,12 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         // Make a timeout vote and send it to the next leader.
         let vote = Vote::new_timeout(self.round, self.name, self.signature_service.clone()).await;
         let next_leader = self.leader_elector.get_leader(self.round + 1);
-        let message = CoreMessage::Vote(vote);
-        self.transmit(&message, Some(next_leader)).await?;
+        if next_leader == self.name {
+            self.handle_vote(vote).await?;
+        } else {
+            let message = CoreMessage::Vote(vote);
+            self.transmit(&message, Some(next_leader)).await?;
+        }
 
         // Finally, schedule an other timer in case we timeout again.
         self.schedule_timer().await;

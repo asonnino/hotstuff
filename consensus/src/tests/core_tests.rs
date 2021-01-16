@@ -24,6 +24,7 @@ async fn core(
     let mempool_driver = MempoolDriver::new(MockMempool, tx_core.clone(), store.clone());
     let synchronizer = Synchronizer::new(
         name,
+        committee(),
         store.clone(),
         /* network_channel */ tx_network.clone(),
         /* core_channel */ tx_core.clone(),
@@ -40,7 +41,6 @@ async fn core(
         mempool_driver,
         synchronizer,
         /* core_channel */ rx_core,
-        /* loopback_channel */ tx_core.clone(),
         /* network_channel */ tx_network,
         /* commit_channel */ tx_commit,
     );
@@ -76,10 +76,14 @@ async fn handle_block() {
 
     // Ensure we get a vote back.
     match rx_network.recv().await {
-        Some(NetMessage::Vote(v, recipient)) => {
-            assert_eq!(v, vote);
+        Some(NetMessage(bytes, recipient)) => {
+            match bincode::deserialize(&bytes).unwrap() {
+                CoreMessage::Vote(v) => assert_eq!(v, vote),
+                _ => assert!(false),
+            }
             let (next_leader, _) = leader_keys(2);
-            assert_eq!(recipient, next_leader);
+            let address = committee().address(&next_leader).unwrap();
+            assert_eq!(recipient, vec![address]);
         }
         _ => assert!(false),
     }
@@ -121,13 +125,22 @@ async fn make_block() {
         tx_core.send(message).await.unwrap();
     }
 
-    // Ensure the core makes a new block.
+    // Ensure the core sends a new block.
     match rx_network.recv().await {
-        Some(NetMessage::Block(b)) => {
-            assert_eq!(b.round, 2);
-            assert_eq!(b.qc, qc);
-            assert!(b.tc.is_none());
-        }
+        Some(NetMessage(bytes, mut recipients)) => {
+            match bincode::deserialize(&bytes).unwrap() {
+                CoreMessage::Propose(b) => {
+                    assert_eq!(b.round, 2);
+                    assert_eq!(b.qc, qc);
+                    assert!(b.tc.is_none());
+                }
+                _ => assert!(false),
+            }
+            let mut addresses = committee().broadcast_addresses(&next_leader);
+            addresses.sort();
+            recipients.sort();
+            assert_eq!(recipients, addresses);
+        },
         _ => assert!(false),
     }
 }
@@ -168,11 +181,15 @@ async fn make_timeout() {
 
     // Ensure the following operation happen in the right order.
     match rx_network.recv().await {
-        Some(NetMessage::Vote(v, recipient)) => {
-            assert_eq!(v, timeout);
+        Some(NetMessage(bytes, recipient)) => {
+            match bincode::deserialize(&bytes).unwrap() {
+                CoreMessage::Vote(v) => assert_eq!(v, timeout),
+                _ => assert!(false),
+            }
             let (next_leader, _) = leader_keys(2);
-            assert_eq!(recipient, next_leader);
-        }
+            let address = committee().address(&next_leader).unwrap();
+            assert_eq!(recipient, vec![address]);
+        },
         _ => assert!(false),
     }
 }

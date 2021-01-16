@@ -63,9 +63,10 @@ async fn dead_node() {
     let mut committee = committee();
     committee.increment_base_port(6100);
 
-    // Run all nodes but one.
-    let mut keys = keys();
-    let _ = keys.remove(0);
+    // Run all nodes but the last.
+    let leader_elector = LeaderElector::new(committee.clone());
+    let dead = leader_elector.get_leader(0);
+    let keys = keys().into_iter().filter(|(x, _)| *x != dead).collect();
     let store_path = ".store_test_dead_node";
     let handles = spawn_nodes(keys, committee, store_path);
 

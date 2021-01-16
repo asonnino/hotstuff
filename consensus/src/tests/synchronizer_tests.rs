@@ -1,5 +1,5 @@
 use super::*;
-use crate::common::{block, chain, keys};
+use crate::common::{block, chain, keys, committee};
 use std::fs;
 
 #[tokio::test]
@@ -17,11 +17,11 @@ async fn get_existing_previous_block() {
     let _ = store.write(key, value).await;
 
     // Make a new synchronizer.
-    let (public_key, _) = keys().pop().unwrap();
+    let (name, _) = keys().pop().unwrap();
     let (tx_network, _) = channel(10);
     let (tx_core, _) = channel(10);
     let mut synchronizer = Synchronizer::new(
-        public_key, store, tx_network, tx_core, /* sync_retry_delay */ 10_000,
+        name, committee(), store, tx_network, tx_core, /* sync_retry_delay */ 10_000,
     )
     .await;
 
@@ -38,11 +38,11 @@ async fn get_genesis_previous_block() {
     let path = ".store_test_get_genesis_previous_block";
     let _ = fs::remove_dir_all(path);
     let store = Store::new(path).unwrap();
-    let (public_key, _) = keys().pop().unwrap();
+    let (name, _) = keys().pop().unwrap();
     let (tx_network, _) = channel(1);
     let (tx_core, _) = channel(1);
     let mut synchronizer = Synchronizer::new(
-        public_key, store, tx_network, tx_core, /* sync_retry_delay */ 10_000,
+        name, committee(), store, tx_network, tx_core, /* sync_retry_delay */ 10_000,
     )
     .await;
 
@@ -63,11 +63,12 @@ async fn get_missing_previous_block() {
     let path = ".store_test_get_missing_previous_block";
     let _ = fs::remove_dir_all(path);
     let mut store = Store::new(path).unwrap();
-    let (myself, _) = keys().pop().unwrap();
+    let (name, _) = keys().pop().unwrap();
     let (tx_network, mut rx_network) = channel(1);
     let (tx_core, mut rx_core) = channel(1);
     let mut synchronizer = Synchronizer::new(
-        myself.clone(),
+        name,
+        committee(),
         store.clone(),
         tx_network,
         tx_core,
@@ -88,10 +89,19 @@ async fn get_missing_previous_block() {
     // Ensure the synchronizer sends a sync request
     // asking for the parent block.
     match rx_network.recv().await {
-        Some(NetMessage::SyncRequest(digest, sender)) => {
-            assert_eq!(digest, previous_block.digest());
-            assert_eq!(sender, myself);
-        }
+        Some(NetMessage(bytes, mut recipients)) => {
+            match bincode::deserialize(&bytes).unwrap() {
+                CoreMessage::SyncRequest(b, s) => {
+                    assert_eq!(b, previous_block.digest());
+                    assert_eq!(s, name);
+                },
+                _ => assert!(false),
+            }
+            let mut addresses = committee().broadcast_addresses(&name);
+            addresses.sort();
+            recipients.sort();
+            assert_eq!(recipients, addresses);
+        },
         _ => assert!(false),
     }
 
