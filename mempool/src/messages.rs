@@ -50,7 +50,7 @@ impl Hash for Payload {
 
 impl fmt::Debug for Payload {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "Payload({:?})", self.digest())
+        write!(f, "Payload({:?})", &self.digest().to_vec()[..8])
     }
 }
 

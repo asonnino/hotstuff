@@ -94,7 +94,7 @@ impl<Message: 'static + Send + DeserializeOwned + Debug> NetReceiver<Message> {
             .await
             .expect("Failed to bind to TCP port");
 
-        debug!("Listening on {}", self.address);
+        info!("Listening on {}", self.address);
         loop {
             let (socket, peer) = match listener.accept().await {
                 Ok(value) => value,

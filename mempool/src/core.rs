@@ -163,7 +163,10 @@ impl Core {
         match self.store.read(digest.to_vec()).await? {
             Some(_) => Ok(true),
             None => {
-                debug!("Requesting sync for missing payload {:?}", digest);
+                debug!(
+                    "Requesting sync for missing payload {:?}",
+                    &digest.to_vec()[..8]
+                );
                 let message = CoreMessage::SyncRequest(digest, self.name);
                 self.transmit(&message, None).await?;
                 Ok(false)
