@@ -1,12 +1,12 @@
 use crate::config::Export as _;
 use crate::config::{Committee, Parameters, Secret};
-use consensus::{Consensus, ConsensusError};
+use consensus::{Consensus, ConsensusError, Block};
 use crypto::SignatureService;
 use log::info;
 use mempool::{MempoolError, SimpleMempool};
 use store::{Store, StoreError};
 use thiserror::Error;
-use tokio::sync::mpsc::channel;
+use tokio::sync::mpsc::{Receiver,channel};
 
 #[cfg(test)]
 #[path = "tests/node_tests.rs"]
@@ -30,20 +30,18 @@ pub enum NodeError {
     MempoolError(#[from] MempoolError),
 }
 
-pub struct Node;
+pub struct Node {
+    pub commit: Receiver<Block>
+}
 
 impl Node {
-    pub async fn run(
+    pub async fn new(
         committee_file: &str,
         key_file: &str,
         store_path: &str,
         parameters: Option<&str>,
-    ) -> Result<(), NodeError> {
-        let (tx_commit, mut rx_commit) = channel(100);
-        tokio::spawn(async move {
-            // Sink the commit channel.
-            while rx_commit.recv().await.is_some() {}
-        });
+    ) -> Result<Self, NodeError> {
+        let (tx_commit, rx_commit) = channel(100);
 
         // Read the committee and secret key from file.
         let committee: Committee = Committee::read(committee_file)?;
@@ -85,7 +83,9 @@ impl Node {
         .await?;
 
         info!("Node {} successfully booted", name);
-        Ok(())
+        Ok(Self {
+            commit: rx_commit
+        })
     }
 
     pub fn print_key_file(filename: &str) -> Result<(), NodeError> {

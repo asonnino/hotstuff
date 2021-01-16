@@ -63,8 +63,12 @@ async fn main() -> MainResult<()> {
             let committee_file = subm.value_of("committee").unwrap();
             let parameters_file = subm.value_of("parameters");
             let store_path = subm.value_of("store").unwrap();
-            if let Err(e) = Node::run(committee_file, key_file, store_path, parameters_file).await {
-                error!("{}", e);
+            match Node::new(committee_file, key_file, store_path, parameters_file).await {
+                Ok(mut node) => {
+                    // Sink the commit channel.
+                    while node.commit.recv().await.is_some() {}
+                }
+                Err(e) => error!("{}", e)
             }
         }
         ("deploy", Some(subm)) => {
@@ -133,8 +137,12 @@ fn deploy_testbed(nodes: usize) -> MainResult<Vec<JoinHandle<()>>> {
             let _ = fs::remove_dir_all(&store_path);
 
             Ok(tokio::spawn(async move {
-                if let Err(e) = Node::run(committee_file, &key_file, &store_path, None).await {
-                    error!("{}", e);
+                match Node::new(committee_file, &key_file, &store_path, None).await {
+                    Ok(mut node) => {
+                        // Sink the commit channel.
+                        while node.commit.recv().await.is_some() {}
+                    }
+                    Err(e) => error!("{}", e)
                 }
             }))
         })
