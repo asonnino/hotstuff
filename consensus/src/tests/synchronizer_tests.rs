@@ -1,5 +1,5 @@
 use super::*;
-use crate::common::{block, chain, keys, committee};
+use crate::common::{block, chain, committee, keys};
 use std::fs;
 
 #[tokio::test]
@@ -21,7 +21,12 @@ async fn get_existing_previous_block() {
     let (tx_network, _) = channel(10);
     let (tx_core, _) = channel(10);
     let mut synchronizer = Synchronizer::new(
-        name, committee(), store, tx_network, tx_core, /* sync_retry_delay */ 10_000,
+        name,
+        committee(),
+        store,
+        tx_network,
+        tx_core,
+        /* sync_retry_delay */ 10_000,
     )
     .await;
 
@@ -42,7 +47,12 @@ async fn get_genesis_previous_block() {
     let (tx_network, _) = channel(1);
     let (tx_core, _) = channel(1);
     let mut synchronizer = Synchronizer::new(
-        name, committee(), store, tx_network, tx_core, /* sync_retry_delay */ 10_000,
+        name,
+        committee(),
+        store,
+        tx_network,
+        tx_core,
+        /* sync_retry_delay */ 10_000,
     )
     .await;
 
@@ -94,14 +104,14 @@ async fn get_missing_previous_block() {
                 CoreMessage::SyncRequest(b, s) => {
                     assert_eq!(b, previous_block.digest());
                     assert_eq!(s, name);
-                },
+                }
                 _ => assert!(false),
             }
             let mut addresses = committee().broadcast_addresses(&name);
             addresses.sort();
             recipients.sort();
             assert_eq!(recipients, addresses);
-        },
+        }
         _ => assert!(false),
     }
 

@@ -140,7 +140,7 @@ async fn make_block() {
             addresses.sort();
             recipients.sort();
             assert_eq!(recipients, addresses);
-        },
+        }
         _ => assert!(false),
     }
 }
@@ -189,7 +189,7 @@ async fn make_timeout() {
             let (next_leader, _) = leader_keys(2);
             let address = committee().address(&next_leader).unwrap();
             assert_eq!(recipient, vec![address]);
-        },
+        }
         _ => assert!(false),
     }
 }

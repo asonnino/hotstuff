@@ -32,7 +32,7 @@ impl Synchronizer {
         core_channel: Sender<CoreMessage>,
         sync_retry_delay: u64,
     ) -> Self {
-        let (tx_inner, mut rx_inner): (_, Receiver<Block>) = channel(1000);
+        let (tx_inner, mut rx_inner): (_, Receiver<Block>) = channel(1_000);
         let mut timer = Timer::new();
         timer.schedule(sync_retry_delay, true).await;
 
@@ -63,8 +63,7 @@ impl Synchronizer {
                         }
                     },
                     Some(_) = timer.notifier.recv() => {
-                        // This ensure liveness in case Sync Requests are lost.
-                        // It should not happen in theory, but the internet is wild.
+                        // This implements the 'perfect point to point link' abstraction.
                         for digest in &pending {
                             Self::transmit(digest.clone(), &name, &committee, &network_channel).await;
                         }

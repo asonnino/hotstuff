@@ -32,25 +32,25 @@ pub enum ConsensusError {
     #[error("Store error: {0}")]
     StoreError(#[from] StoreError),
 
-    #[error("Node {0:?} is not in the committee")]
+    #[error("Node {0} is not in the committee")]
     NotInCommittee(PublicKey),
 
     #[error("Invalid signature")]
-    InvalidSignature,
+    InvalidSignature(#[from] CryptoError),
 
-    #[error("Received more than one vote from {0:?}")]
+    #[error("Received more than one vote from {0}")]
     AuthorityReuse(PublicKey),
 
-    #[error("Received vote from unknown authority {0:?}")]
+    #[error("Received vote from unknown authority {0}")]
     UnknownAuthority(PublicKey),
 
     #[error("Received QC without a quorum")]
     QCRequiresQuorum,
 
-    #[error("Malformed block {0:?}")]
+    #[error("Malformed block {0}")]
     MalformedBlock(Digest),
 
-    #[error("Received block {digest:?} from leader {leader:?} at round {round}")]
+    #[error("Received block {digest} from leader {leader} at round {round}")]
     WrongLeader {
         digest: Digest,
         leader: PublicKey,
@@ -59,10 +59,4 @@ pub enum ConsensusError {
 
     #[error("Invalid payload")]
     InvalidPayload,
-}
-
-impl From<CryptoError> for ConsensusError {
-    fn from(_e: CryptoError) -> Self {
-        ConsensusError::InvalidSignature
-    }
 }

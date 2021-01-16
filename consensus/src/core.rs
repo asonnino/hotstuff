@@ -110,7 +110,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     ) -> ConsensusResult<()> {
         let addresses = match to {
             Some(to) => vec![self.committee.address(&to)?],
-            None => self.committee.broadcast_addresses(&self.name)
+            None => self.committee.broadcast_addresses(&self.name),
         };
         let bytes = bincode::serialize(message).expect("Failed to serialize core message");
         let message = NetMessage(Bytes::from(bytes), addresses);
@@ -137,7 +137,6 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             self.signature_service.clone(),
         )
         .await;
-        info!("Created {}", block);
         debug!("Created {:?}", block);
         self.process_block(&block).await?;
         let message = CoreMessage::Propose(block);
@@ -193,6 +192,8 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
 
     #[async_recursion]
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
+        debug!("Processing {:?}", block);
+
         // Let's see if we have the last three ancestors of the block, that is:
         //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
         // If we don't, the synchronizer asks for them to other nodes. It will
@@ -268,6 +269,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     }
 
     async fn handle_vote(&mut self, vote: Vote) -> ConsensusResult<()> {
+        debug!("Processing {:?}", vote);
         if vote.round < self.round {
             return Ok(());
         }

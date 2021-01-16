@@ -3,7 +3,6 @@ use crate::error::{ConsensusError, ConsensusResult};
 use crate::messages::Block;
 use async_trait::async_trait;
 use futures::future::FutureExt as _;
-use futures::select;
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
 use log::{debug, error};
@@ -44,18 +43,16 @@ pub struct MempoolDriver<Mempool> {
 
 impl<Mempool: 'static + NodeMempool> MempoolDriver<Mempool> {
     pub fn new(mempool: Mempool, core_channel: Sender<CoreMessage>, store: Store) -> Self {
-        let (tx_inner, mut rx_inner): (_, Receiver<DriverMessage>) = channel(1000);
+        let (tx_inner, mut rx_inner): (_, Receiver<DriverMessage>) = channel(1_000);
         let mut waiting = FuturesUnordered::new();
         tokio::spawn(async move {
             loop {
-                select! {
-                    message = rx_inner.recv().fuse() => {
-                        if let Some((wait_on, block, handler)) = message {
-                            let fut = Self::waiter(store.clone(), wait_on, block, handler);
-                            waiting.push(fut);
-                        }
+                tokio::select! {
+                    Some((wait_on, block, handler)) = rx_inner.recv().fuse() => {
+                        let fut = Self::waiter(store.clone(), wait_on, block, handler);
+                        waiting.push(fut);
                     },
-                    result = waiting.select_next_some() => {
+                    Some(result) = waiting.next() => {
                         match result {
                             Ok(Some(block)) => {
                                 let message = CoreMessage::LoopBack(block);
@@ -66,7 +63,8 @@ impl<Mempool: 'static + NodeMempool> MempoolDriver<Mempool> {
                             Ok(None) => (),
                             Err(e) => error!("{}", e)
                         }
-                    }
+                    },
+                    else => break,
                 }
             }
         });
@@ -83,14 +81,12 @@ impl<Mempool: 'static + NodeMempool> MempoolDriver<Mempool> {
         deliver: Block,
         mut handler: Receiver<()>,
     ) -> ConsensusResult<Option<Block>> {
-        select! {
-            result = store.notify_read(wait_on).fuse() => {
+        tokio::select! {
+            result = store.notify_read(wait_on) => {
                 let _ = result?;
                 Ok(Some(deliver))
             },
-            _ = handler.recv().fuse() => {
-                Ok(None)
-            }
+            _ = handler.recv() => Ok(None),
         }
     }
 

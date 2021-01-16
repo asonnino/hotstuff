@@ -68,7 +68,7 @@ impl fmt::Debug for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(
             f,
-            "B({:?}, {}, {:?}, {:?})",
+            "B({}, {}, {:?}, {:?})",
             self.author,
             self.round,
             self.qc,
@@ -141,8 +141,8 @@ impl Hash for Vote {
 impl fmt::Debug for Vote {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self.timeout() {
-            true => write!(f, "TV({:?}, {})", self.author, self.round),
-            false => write!(f, "V({:?}, {}, {:?})", self.author, self.round, self.hash),
+            true => write!(f, "TV({}, {})", self.author, self.round),
+            false => write!(f, "V({}, {}, {})", self.author, self.round, self.hash),
         }
     }
 }
@@ -201,7 +201,7 @@ impl Hash for QC {
 
 impl fmt::Debug for QC {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "QC({:?}, {})", self.hash, self.round)
+        write!(f, "QC({}, {})", self.hash, self.round)
     }
 }
 
