@@ -1,0 +1,16 @@
+[package]
+name = "benchmark"
+version = "0.1.0"
+authors = ["Alberto Sonnino <alberto@sonnino.com>"]
+edition = "2018"
+publish = false
+
+[dependencies]
+tokio = { version = "0.3.1", features = ["time", "macros", "net", "rt-multi-thread"] }
+tokio-util = { version = "0.5", features= ["codec"] }
+clap = "2.33.3"
+env_logger = "0.8.2"
+log = "0.4.0"
+anyhow = "1.0.38"
+bytes = "0.6"
+futures = "0.3.8"

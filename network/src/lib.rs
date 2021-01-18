@@ -94,7 +94,7 @@ impl<Message: 'static + Send + DeserializeOwned + Debug> NetReceiver<Message> {
             .await
             .expect("Failed to bind to TCP port");
 
-        info!("Listening on {}", self.address);
+        debug!("Listening on {}", self.address);
         loop {
             let (socket, peer) = match listener.accept().await {
                 Ok(value) => value,
@@ -114,7 +114,7 @@ impl<Message: 'static + Send + DeserializeOwned + Debug> NetReceiver<Message> {
             while let Some(frame) = transport.next().await {
                 match frame
                     .map_err(NetworkError::from)
-                    .and_then(|x| Ok(bincode::deserialize(&x)?))
+                    .and_then(|x| bincode::deserialize(&x).map_err(NetworkError::from))
                 {
                     Ok(message) => {
                         debug!("Received {:?}", message);
@@ -122,6 +122,65 @@ impl<Message: 'static + Send + DeserializeOwned + Debug> NetReceiver<Message> {
                     }
                     Err(e) => warn!("{}", e),
                 }
+            }
+            warn!("Connection closed by peer {}", peer);
+        });
+    }
+}
+
+pub struct NetReceiver2 {
+    address: SocketAddr,
+    deliver: Sender<Vec<u8>>,
+}
+
+impl NetReceiver2 {
+    pub fn new(address: SocketAddr, deliver: Sender<Vec<u8>>) -> Self {
+        Self { address, deliver }
+    }
+
+    // For each incoming request, we spawn a new worker responsible to receive
+    // messages and replay them through the provided deliver channel.
+    pub async fn run(&self) {
+        let listener = TcpListener::bind(&self.address)
+            .await
+            .expect("Failed to bind to TCP port");
+
+        debug!("Listening on {}", self.address);
+        loop {
+            let (socket, peer) = match listener.accept().await {
+                Ok(value) => value,
+                Err(e) => {
+                    warn!("{}", NetworkError::from(e));
+                    continue;
+                }
+            };
+            info!("Connection established with peer {}", peer);
+            Self::spawn_worker(socket, peer, self.deliver.clone()).await;
+        }
+    }
+
+    async fn spawn_worker(socket: TcpStream, peer: SocketAddr, deliver: Sender<Vec<u8>>) {
+        tokio::spawn(async move {
+            let mut transport = Framed::new(socket, LengthDelimitedCodec::new());
+            while let Some(frame) = transport.next().await {
+                let tmp = match frame.map_err(NetworkError::from) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        warn!("{}", e);
+                        continue;
+                    }
+                };
+                //match bincode::deserialize(&tmp)
+                //{
+                //   Ok(message) => {
+                debug!("Received {:?}", tmp);
+                deliver
+                    .send(tmp.to_vec())
+                    .await
+                    .expect("Core channel closed");
+                //  }
+                //Err(e) => warn!("{}", e),
+                //}
             }
             warn!("Connection closed by peer {}", peer);
         });

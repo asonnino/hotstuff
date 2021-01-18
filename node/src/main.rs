@@ -13,10 +13,8 @@ use mempool::Committee as MempoolCommittee;
 use std::fs;
 use tokio::task::JoinHandle;
 
-type MainResult<T> = Result<T, Box<dyn std::error::Error>>;
-
 #[tokio::main]
-async fn main() -> MainResult<()> {
+async fn main() {
     let matches = App::new(crate_name!())
         .version(crate_version!())
         .about("A research implementation of the HostStuff protocol.")
@@ -81,17 +79,16 @@ async fn main() -> MainResult<()> {
                     Ok(handles) => {
                         let _ = join_all(handles).await;
                     }
-                    Err(e) => error!("{}", e),
+                    Err(e) => error!("Failed to deploy testbed: {}", e),
                 },
                 _ => error!("The number of nodes must be a positive integer"),
             }
         }
         _ => unreachable!(),
     }
-    Ok(())
 }
 
-fn deploy_testbed(nodes: usize) -> MainResult<Vec<JoinHandle<()>>> {
+fn deploy_testbed(nodes: usize) -> Result<Vec<JoinHandle<()>>, Box<dyn std::error::Error>> {
     let keys: Vec<_> = (0..nodes).map(|_| Secret::new()).collect();
 
     // Print the committee file.
