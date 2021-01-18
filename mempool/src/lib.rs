@@ -2,6 +2,7 @@
 mod error;
 mod config;
 mod core;
+mod front;
 mod mempool;
 mod messages;
 mod simple;

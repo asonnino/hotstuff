@@ -1,10 +1,11 @@
 use crate::config::{Committee, Parameters};
 use crate::core::Core;
 use crate::error::MempoolResult;
+use crate::front::Front;
 use crate::mempool::{NodeMempool, PayloadStatus};
 use async_trait::async_trait;
 use crypto::{Digest, PublicKey, SignatureService};
-use network::{NetReceiver, NetReceiver2, NetSender};
+use network::{NetReceiver, NetSender};
 use std::convert::TryInto;
 use store::Store;
 use tokio::sync::mpsc::{channel, Sender};
@@ -43,7 +44,7 @@ impl SimpleMempool {
             x
         })?;
 
-        let front = NetReceiver2::new(address, tx_client);
+        let front = Front::new(address, tx_client);
         tokio::spawn(async move {
             front.run().await;
         });
