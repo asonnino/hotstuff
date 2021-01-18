@@ -67,7 +67,7 @@ async fn handle_block() {
     let vote = Vote::new_from_key(block.digest(), block.round, public_key, &secret_key);
 
     // Run a core instance.
-    let store_path = ".store_test_handle_block";
+    let store_path = ".db_test_handle_block";
     let (tx_core, mut rx_network, _rx_commit) = core(public_key, secret_key, store_path).await;
 
     // Send a block to the core.
@@ -115,7 +115,7 @@ async fn make_block() {
     };
 
     // Run a core instance.
-    let store_path = ".store_test_make_block";
+    let store_path = ".db_test_make_block";
     let (tx_core, mut rx_network, _rx_commit) =
         core(next_leader, next_leader_key, store_path).await;
 
@@ -152,7 +152,7 @@ async fn commit_block() {
     let chain = chain(leaders);
 
     // Run a core instance.
-    let store_path = ".store_test_commit_block";
+    let store_path = ".db_test_commit_block";
     let (public_key, secret_key) = keys().pop().unwrap();
     let (tx_core, _rx_network, mut rx_commit) = core(public_key, secret_key, store_path).await;
 
@@ -176,7 +176,7 @@ async fn make_timeout() {
     let timeout = Vote::new_from_key(Digest::default(), 1, public_key, &secret_key);
 
     // Run a core instance.
-    let store_path = ".store_test_make_timeout";
+    let store_path = ".db_test_make_timeout";
     let (_tx_core, mut rx_network, _rx_commit) = core(public_key, secret_key, store_path).await;
 
     // Ensure the following operation happen in the right order.
