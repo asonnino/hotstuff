@@ -94,7 +94,7 @@ async fn get_payload() {
     tx_consensus.send(message).await.unwrap();
     let result = receiver.await.unwrap();
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), payload().digest());
+    assert_eq!(result.unwrap(), payload().digest().to_vec());
 }
 
 #[tokio::test]
