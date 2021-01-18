@@ -17,7 +17,7 @@ pub mod mempool_tests;
 
 #[derive(Debug)]
 pub enum ConsensusMessage {
-    Get(oneshot::Sender<MempoolResult<Digest>>),
+    Get(oneshot::Sender<MempoolResult<Vec<u8>>>),
     Verify(Digest, oneshot::Sender<MempoolResult<bool>>),
 }
 
@@ -98,11 +98,14 @@ impl NodeMempool for SimpleMempool {
         receiver
             .await
             .expect("Failed to receive payload from core")
-            .unwrap_or_else(|_| Digest::default())
-            .to_vec()
+            .unwrap_or_default()
     }
 
     async fn verify(&mut self, digest: &[u8]) -> PayloadStatus {
+        if digest.is_empty() {
+            return PayloadStatus::Accept;
+        }
+
         let (sender, receiver) = oneshot::channel();
         let message = match digest.try_into() {
             Ok(x) => ConsensusMessage::Verify(x, sender),

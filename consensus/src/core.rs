@@ -139,6 +139,9 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         )
         .await;
         debug!("Created {:?}", block);
+        if !block.payload.is_empty() {
+            info!("Created {}", block);
+        }
         self.process_block(&block).await?;
         let message = CoreMessage::Propose(block);
         self.transmit(&message, None).await

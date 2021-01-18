@@ -145,16 +145,19 @@ impl Core {
         Ok(())
     }
 
-    async fn get_payload(&mut self) -> MempoolResult<Digest> {
+    async fn get_payload(&mut self) -> MempoolResult<Vec<u8>> {
         match self.queue.pop_back() {
-            Some(digest) => Ok(digest),
+            Some(digest) => Ok(digest.to_vec()),
             None => {
                 let payload = self.payload_maker.make().await;
+                if payload.size() == 0 {
+                    return Ok(Vec::default());
+                }
                 let digest = payload.digest();
                 self.store_payload(&digest, &payload).await?;
                 let message = CoreMessage::Payload(payload);
                 self.transmit(&message, None).await?;
-                Ok(digest)
+                Ok(digest.to_vec())
             }
         }
     }
