@@ -30,5 +30,5 @@ benchmark = []
 
 [[bin]]         
 name = "client"   
-path = "src/benchmark.rs" 
+path = "src/client.rs" 
 required-features = ["benchmark"] 
