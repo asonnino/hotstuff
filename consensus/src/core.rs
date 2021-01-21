@@ -10,7 +10,7 @@ use async_recursion::async_recursion;
 use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
-use log::{debug, error, info, warn};
+use log::{debug, error, info, warn, log_enabled, Level};
 use mempool::NodeMempool;
 use network::NetMessage;
 use serde::{Deserialize, Serialize};
@@ -139,10 +139,11 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         )
         .await;
         debug!("Created {:?}", block);
-        if !block.payload.is_empty() {
+        if !block.payload.is_empty() && !log_enabled!(Level::Debug){
             info!("Created {}", block);
         }
         self.process_block(&block).await?;
+        debug!("Broadcasting {:?}", block);
         let message = CoreMessage::Propose(block);
         self.transmit(&message, None).await
     }
@@ -261,6 +262,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
                 self.handle_vote(vote).await?;
             } else {
                 let message = CoreMessage::Vote(vote);
+                debug!("Sending vote to {}", next_leader);
                 self.transmit(&message, Some(next_leader)).await?;
             }
 

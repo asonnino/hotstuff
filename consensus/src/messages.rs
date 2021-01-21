@@ -225,8 +225,10 @@ impl GenericQC for TC {
 
 impl Hash for TC {
     fn digest(&self) -> Digest {
-        let hash = Sha512::digest(&self.round.to_le_bytes());
-        Digest(hash.as_slice()[..32].try_into().unwrap())
+        let mut hasher = Sha512::new();
+        hasher.update(&Digest::default());
+        hasher.update(self.round.to_le_bytes());
+        Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }
 }
 

@@ -79,8 +79,10 @@ impl Core {
         to: Option<PublicKey>,
     ) -> MempoolResult<()> {
         let addresses = if let Some(to) = to {
+            debug!("Sending {:?} to {}", message, to);
             vec![self.committee.mempool_address(&to)?]
         } else {
+            debug!("Broadcasting {:?}", message);
             self.committee.broadcast_addresses(&self.name)
         };
         let bytes = bincode::serialize(message).expect("Failed to serialize core message");
