@@ -79,8 +79,10 @@ impl Core {
         to: Option<PublicKey>,
     ) -> MempoolResult<()> {
         let addresses = if let Some(to) = to {
+            debug!("Sending {:?} to {}", message, to);
             vec![self.committee.mempool_address(&to)?]
         } else {
+            debug!("Broadcasting {:?}", message);
             self.committee.broadcast_addresses(&self.name)
         };
         let bytes = bincode::serialize(message).expect("Failed to serialize core message");
@@ -166,10 +168,7 @@ impl Core {
         match self.store.read(digest.to_vec()).await? {
             Some(_) => Ok(true),
             None => {
-                debug!(
-                    "Requesting sync for missing payload {:?}",
-                    &digest.to_vec()[..8]
-                );
+                debug!("Requesting sync for payload {:?}", &digest.to_vec()[..8]);
                 let message = CoreMessage::SyncRequest(digest, self.name);
                 self.transmit(&message, None).await?;
                 Ok(false)

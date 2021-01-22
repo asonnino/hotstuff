@@ -39,15 +39,14 @@ impl NetSender {
         let mut senders = HashMap::<_, Sender<_>>::new();
         while let Some(NetMessage(bytes, addresses)) = self.transmit.recv().await {
             for address in addresses {
-                match senders.get(&address) {
-                    Some(tx) if tx.send(bytes.clone()).await.is_ok() => {
-                        debug!("Successfully sent message to {}", address);
-                    }
-                    _ => {
-                        let tx = Self::spawn_worker(address).await;
-                        if let Ok(()) = tx.send(bytes.clone()).await {
-                            senders.insert(address, tx);
-                        }
+                let spawn = match senders.get(&address) {
+                    Some(tx) => tx.send(bytes.clone()).await.is_err(),
+                    None => true,
+                };
+                if spawn {
+                    let tx = Self::spawn_worker(address).await;
+                    if let Ok(()) = tx.send(bytes.clone()).await {
+                        senders.insert(address, tx);
                     }
                 }
             }
@@ -59,7 +58,10 @@ impl NetSender {
         let (tx, mut rx) = channel(1000);
         tokio::spawn(async move {
             let stream = match TcpStream::connect(address).await {
-                Ok(stream) => stream,
+                Ok(stream) => {
+                    info!("Outgoing connection established with {}", address);
+                    stream
+                }
                 Err(e) => {
                     warn!("Failed to connect to {}: {}", address, e);
                     return;
@@ -67,9 +69,12 @@ impl NetSender {
             };
             let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
             while let Some(message) = rx.recv().await {
-                if let Err(e) = transport.send(message).await {
-                    warn!("Failed to send message to {}: {}", address, e);
-                    return;
+                match transport.send(message).await {
+                    Ok(_) => debug!("Successfully sent message to {}", address),
+                    Err(e) => {
+                        warn!("Failed to send message to {}: {}", address, e);
+                        return;
+                    }
                 }
             }
         });
@@ -103,7 +108,7 @@ impl<Message: 'static + Send + DeserializeOwned + Debug> NetReceiver<Message> {
                     continue;
                 }
             };
-            info!("Connection established with peer {}", peer);
+            info!("Incoming connection established with {}", peer);
             Self::spawn_worker(socket, peer, self.deliver.clone()).await;
         }
     }

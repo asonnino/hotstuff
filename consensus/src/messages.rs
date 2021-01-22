@@ -5,7 +5,6 @@ use crypto::{Digest, Hash, PublicKey, Signature, SignatureService};
 use ed25519_dalek::Digest as _;
 use ed25519_dalek::Sha512;
 use serde::{Deserialize, Serialize};
-use std::cmp::min;
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fmt;
@@ -68,11 +67,12 @@ impl fmt::Debug for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(
             f,
-            "B({}, {}, {:?}, {:?})",
+            "B({}, {}, {:?}, {}) -> [{}]",
             self.author,
             self.round,
             self.qc,
-            &self.payload[..min(8, self.payload.len())]
+            self.payload.len(),
+            self.digest()
         )
     }
 }
@@ -225,8 +225,10 @@ impl GenericQC for TC {
 
 impl Hash for TC {
     fn digest(&self) -> Digest {
-        let hash = Sha512::digest(&self.round.to_le_bytes());
-        Digest(hash.as_slice()[..32].try_into().unwrap())
+        let mut hasher = Sha512::new();
+        hasher.update(&Digest::default());
+        hasher.update(self.round.to_le_bytes());
+        Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }
 }
 
