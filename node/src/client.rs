@@ -120,10 +120,10 @@ impl Client {
             tx.put_u64(nonce);
             tx.put_u64(x as u64);
             tx.resize(self.size, 0u8);
-            //transport
-            //    .send(tx.freeze())
-            //    .await
-            //    .context("Failed to send transaction")?;
+            transport
+                .send(tx.freeze())
+                .await
+                .context("Failed to send transaction")?;
         }
         Ok(())
     }
