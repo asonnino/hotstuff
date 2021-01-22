@@ -258,6 +258,12 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         let safety_rule_2 = block.round > self.last_voted_round;
         if safety_rule_1 && safety_rule_2 {
             debug!("Voted for {:?}", block);
+
+            // Update our state to ensure we won't vote for conflicting blocks.
+            self.preferred_round = max(self.preferred_round, b1.round);
+            self.last_voted_round = block.round;
+
+            // Send the vote the next leader.
             let vote = Vote::new(&block, self.name, self.signature_service.clone()).await;
             let next_leader = self.leader_elector.get_leader(self.round + 1);
             if next_leader == self.name {
@@ -267,10 +273,6 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
                 debug!("Sending vote to {}", next_leader);
                 self.transmit(&message, Some(next_leader)).await?;
             }
-
-            // Finally, update our state to ensure we won't vote for conflicting blocks.
-            self.preferred_round = max(self.preferred_round, b1.round);
-            self.last_voted_round = block.round;
         }
 
         Ok(())
