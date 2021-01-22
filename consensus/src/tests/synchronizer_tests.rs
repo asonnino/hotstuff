@@ -127,7 +127,7 @@ async fn get_missing_previous_block() {
     // Now that we have the parent, ensure the synchronizer
     // loops back the block to the core to resume processing.
     match rx_core.recv().await {
-        Some(CoreMessage::LoopBack(b)) => assert_eq!(b, block.clone()),
+        Some(CoreMessage::Propose(b)) => assert_eq!(b, block.clone()),
         _ => assert!(false),
     }
 }

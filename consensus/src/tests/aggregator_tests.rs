@@ -1,6 +1,5 @@
 use super::*;
 use crate::common::{committee, keys, qc, vote};
-use crate::messages::GenericQC as _;
 use crate::messages::QC;
 use crypto::generate_keypair;
 use rand::rngs::StdRng;

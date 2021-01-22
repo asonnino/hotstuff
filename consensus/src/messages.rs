@@ -16,7 +16,6 @@ pub mod messages_tests;
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Block {
     pub qc: QC,
-    pub tc: Option<TC>,
     pub author: PublicKey,
     pub round: RoundNumber,
     pub payload: Vec<u8>,
@@ -26,7 +25,6 @@ pub struct Block {
 impl Block {
     pub async fn new(
         qc: QC,
-        tc: Option<TC>,
         author: PublicKey,
         round: RoundNumber,
         payload: Vec<u8>,
@@ -34,7 +32,6 @@ impl Block {
     ) -> Self {
         let block = Self {
             qc,
-            tc,
             author,
             round,
             payload,
@@ -124,7 +121,7 @@ impl Vote {
         }
     }
 
-    pub fn timeout(&self) -> bool {
+    fn timeout(&self) -> bool {
         self.hash == Digest::default()
     }
 }
@@ -147,12 +144,27 @@ impl fmt::Debug for Vote {
     }
 }
 
-pub trait GenericQC: Hash {
-    fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
+#[derive(Clone, Serialize, Deserialize, Default)]
+pub struct QC {
+    pub hash: Digest,
+    pub round: RoundNumber,
+    pub votes: Vec<(PublicKey, Signature)>,
+}
+
+impl QC {
+    pub fn genesis() -> Self {
+        QC::default()
+    }
+
+    pub fn timeout(&self) -> bool {
+        self.hash == Digest::default() && self.round != 0
+    }
+
+    pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
         // Ensure the QC has a quorum.
         let mut weight = 0;
         let mut used = HashSet::new();
-        for (name, _) in self.votes().iter() {
+        for (name, _) in self.votes.iter() {
             ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
             let voting_rights = committee.stake(name);
             ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
@@ -165,28 +177,7 @@ pub trait GenericQC: Hash {
         );
 
         // Check the signatures.
-        Signature::verify_batch(&self.digest(), self.votes()).map_err(ConsensusError::from)
-    }
-
-    fn votes(&self) -> &Vec<(PublicKey, Signature)>;
-}
-
-#[derive(Clone, Serialize, Deserialize, Default)]
-pub struct QC {
-    pub hash: Digest,
-    pub round: RoundNumber,
-    pub votes: Vec<(PublicKey, Signature)>,
-}
-
-impl QC {
-    pub fn genesis() -> Self {
-        QC::default()
-    }
-}
-
-impl GenericQC for QC {
-    fn votes(&self) -> &Vec<(PublicKey, Signature)> {
-        &self.votes
+        Signature::verify_batch(&self.digest(), &self.votes).map_err(ConsensusError::from)
     }
 }
 
@@ -201,39 +192,15 @@ impl Hash for QC {
 
 impl fmt::Debug for QC {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "QC({}, {})", self.hash, self.round)
+        match self.timeout() {
+            true => write!(f, "TC({})", self.round),
+            false => write!(f, "QC({}, {})", self.hash, self.round),
+        }
     }
 }
 
 impl PartialEq for QC {
     fn eq(&self, other: &Self) -> bool {
         self.hash == other.hash && self.round == other.round
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct TC {
-    pub round: RoundNumber,
-    pub votes: Vec<(PublicKey, Signature)>,
-}
-
-impl GenericQC for TC {
-    fn votes(&self) -> &Vec<(PublicKey, Signature)> {
-        &self.votes
-    }
-}
-
-impl Hash for TC {
-    fn digest(&self) -> Digest {
-        let mut hasher = Sha512::new();
-        hasher.update(&Digest::default());
-        hasher.update(self.round.to_le_bytes());
-        Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
-    }
-}
-
-impl fmt::Debug for TC {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "TC({})", self.round)
     }
 }

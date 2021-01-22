@@ -54,7 +54,7 @@ impl Synchronizer {
                         match result {
                             Ok(block) => {
                                 let _ = pending.remove(&block.digest());
-                                let message = CoreMessage::LoopBack(block);
+                                let message = CoreMessage::Propose(block);
                                 if let Err(e) = core_channel.send(message).await {
                                     panic!("Failed to send message through core channel: {}", e);
                                 }
