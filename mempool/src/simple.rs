@@ -1,6 +1,7 @@
 use crate::config::{Committee, Parameters};
 use crate::core::Core;
 use crate::error::MempoolResult;
+use crate::front::Front;
 use crate::mempool::{NodeMempool, PayloadStatus};
 use async_trait::async_trait;
 use crypto::{Digest, PublicKey, SignatureService};
@@ -16,7 +17,7 @@ pub mod mempool_tests;
 
 #[derive(Debug)]
 pub enum ConsensusMessage {
-    Get(oneshot::Sender<MempoolResult<Digest>>),
+    Get(oneshot::Sender<MempoolResult<Vec<u8>>>),
     Verify(Digest, oneshot::Sender<MempoolResult<bool>>),
 }
 
@@ -43,7 +44,7 @@ impl SimpleMempool {
             x
         })?;
 
-        let front = NetReceiver::new(address, tx_client);
+        let front = Front::new(address, tx_client);
         tokio::spawn(async move {
             front.run().await;
         });
@@ -97,11 +98,14 @@ impl NodeMempool for SimpleMempool {
         receiver
             .await
             .expect("Failed to receive payload from core")
-            .unwrap_or_else(|_| Digest::default())
-            .to_vec()
+            .unwrap_or_default()
     }
 
     async fn verify(&mut self, digest: &[u8]) -> PayloadStatus {
+        if digest.is_empty() {
+            return PayloadStatus::Accept;
+        }
+
         let (sender, receiver) = oneshot::channel();
         let message = match digest.try_into() {
             Ok(x) => ConsensusMessage::Verify(x, sender),

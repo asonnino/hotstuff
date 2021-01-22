@@ -4,7 +4,7 @@ use std::fs;
 #[tokio::test]
 async fn create_store() {
     // Create new store.
-    let path = ".store_test_create_store";
+    let path = ".db_test_create_store";
     let _ = fs::remove_dir_all(path);
     let store = Store::new(path);
     assert!(store.is_ok());
@@ -13,7 +13,7 @@ async fn create_store() {
 #[tokio::test]
 async fn read_write_value() {
     // Create new store.
-    let path = ".store_test_read_write_value";
+    let path = ".db_test_read_write_value";
     let _ = fs::remove_dir_all(path);
     let mut store = Store::new(path).unwrap();
 
@@ -34,7 +34,7 @@ async fn read_write_value() {
 #[tokio::test]
 async fn read_unknown_key() {
     // Create new store.
-    let path = ".store_test_read_unknown_key";
+    let path = ".db_test_read_unknown_key";
     let _ = fs::remove_dir_all(path);
     let mut store = Store::new(path).unwrap();
 
@@ -48,7 +48,7 @@ async fn read_unknown_key() {
 #[tokio::test]
 async fn read_notify() {
     // Create new store.
-    let path = ".store_test_read_notify";
+    let path = ".db_test_read_notify";
     let _ = fs::remove_dir_all(path);
     let mut store = Store::new(path).unwrap();
 

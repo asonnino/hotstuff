@@ -51,7 +51,7 @@ async fn end_to_end() {
     committee.increment_base_port(6000);
 
     // Run all nodes.
-    let store_path = ".store_test_end_to_end";
+    let store_path = ".db_test_end_to_end";
     let handles = spawn_nodes(keys(), committee, store_path);
 
     // Ensure all threads terminated correctly.
@@ -67,7 +67,7 @@ async fn dead_node() {
     let leader_elector = LeaderElector::new(committee.clone());
     let dead = leader_elector.get_leader(0);
     let keys = keys().into_iter().filter(|(x, _)| *x != dead).collect();
-    let store_path = ".store_test_dead_node";
+    let store_path = ".db_test_dead_node";
     let handles = spawn_nodes(keys, committee, store_path);
 
     // Ensure all threads terminated correctly.

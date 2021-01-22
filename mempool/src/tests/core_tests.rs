@@ -48,7 +48,7 @@ async fn core(
 #[tokio::test]
 async fn handle_transaction() {
     // Run the core.
-    let path = ".store_test_handle_transaction";
+    let path = ".db_test_handle_transaction";
     let (mut rx_network, _tx_core, _tx_consensus, tx_client) = core(path).await;
 
     // Ensure the core transmits the payload to the network.
@@ -60,7 +60,7 @@ async fn handle_transaction() {
 #[tokio::test]
 async fn handle_request() {
     // Run the core.
-    let path = ".store_test_handle_request";
+    let path = ".db_test_handle_request";
     let (mut rx_network, tx_core, _tx_consensus, _tx_client) = core(path).await;
 
     // Send a payload to the core.
@@ -81,7 +81,7 @@ async fn handle_request() {
 #[tokio::test]
 async fn get_payload() {
     // Run the core.
-    let path = ".store_test_get_payload";
+    let path = ".db_test_get_payload";
     let (_rx_network, _tx_core, tx_consensus, tx_client) = core(path).await;
 
     // Send enough transactions to generate a payload.
@@ -94,13 +94,13 @@ async fn get_payload() {
     tx_consensus.send(message).await.unwrap();
     let result = receiver.await.unwrap();
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), payload().digest());
+    assert_eq!(result.unwrap(), payload().digest().to_vec());
 }
 
 #[tokio::test]
 async fn verify_existing_payload() {
     // Run the core.
-    let path = ".store_test_verify_existing_payload";
+    let path = ".db_test_verify_existing_payload";
     let (_rx_network, tx_core, tx_consensus, _tx_client) = core(path).await;
 
     // Send a payload to the core.
@@ -119,7 +119,7 @@ async fn verify_existing_payload() {
 #[tokio::test]
 async fn test_verify_missing_payload() {
     // Run the core.
-    let path = ".store_test_verify_missing_payload";
+    let path = ".db_test_verify_missing_payload";
     let (_rx_network, _tx_core, tx_consensus, _tx_client) = core(path).await;
 
     // Verify a payload.

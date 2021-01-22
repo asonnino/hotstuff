@@ -92,6 +92,7 @@ impl Synchronizer {
         committee: &Committee,
         network_channel: &Sender<NetMessage>,
     ) {
+        debug!("Requesting sync for block {}", digest);
         let addresses = committee.broadcast_addresses(&name);
         let message = CoreMessage::SyncRequest(digest, *name);
         let bytes = bincode::serialize(&message).expect("Failed to serialize core message");
@@ -109,7 +110,6 @@ impl Synchronizer {
         match self.store.read(previous.to_vec()).await? {
             Some(bytes) => Ok(Some(bincode::deserialize(&bytes)?)),
             None => {
-                debug!("Requesting sync for block {:?}", previous);
                 if let Err(e) = self.inner_channel.send(block.clone()).await {
                     panic!("Failed to send request to synchronizer: {}", e);
                 }

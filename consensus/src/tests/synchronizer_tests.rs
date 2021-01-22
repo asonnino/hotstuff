@@ -9,7 +9,7 @@ async fn get_existing_previous_block() {
     let b2 = chain.pop().unwrap();
 
     // Add the block b2 to the store.
-    let path = ".store_test_get_existing_previous_block";
+    let path = ".db_test_get_existing_previous_block";
     let _ = fs::remove_dir_all(path);
     let mut store = Store::new(path).unwrap();
     let key = b2.digest().to_vec();
@@ -40,7 +40,7 @@ async fn get_existing_previous_block() {
 #[tokio::test]
 async fn get_genesis_previous_block() {
     // Make a new synchronizer.
-    let path = ".store_test_get_genesis_previous_block";
+    let path = ".db_test_get_genesis_previous_block";
     let _ = fs::remove_dir_all(path);
     let store = Store::new(path).unwrap();
     let (name, _) = keys().pop().unwrap();
@@ -70,7 +70,7 @@ async fn get_missing_previous_block() {
     let previous_block = chain.pop().unwrap();
 
     // Make a new synchronizer.
-    let path = ".store_test_get_missing_previous_block";
+    let path = ".db_test_get_missing_previous_block";
     let _ = fs::remove_dir_all(path);
     let mut store = Store::new(path).unwrap();
     let (name, _) = keys().pop().unwrap();

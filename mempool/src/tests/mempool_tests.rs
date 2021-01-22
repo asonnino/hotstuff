@@ -27,7 +27,7 @@ async fn end_to_end() {
                 max_payload_size: 1,
             };
             let signature_service = SignatureService::new(secret);
-            let store_path = format!(".store_test_end_to_end_{}", i);
+            let store_path = format!(".db_test_end_to_end_{}", i);
             let _ = fs::remove_dir_all(&store_path);
             let store = Store::new(&store_path).unwrap();
 
@@ -56,8 +56,8 @@ async fn end_to_end() {
             tokio::spawn(async move {
                 let stream = TcpStream::connect(address).await.unwrap();
                 let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
-                let transaction = vec![1_u8];
-                let bytes = Bytes::from(bincode::serialize(&transaction).unwrap());
+                let transaction = vec![1u8];
+                let bytes = Bytes::from(transaction.to_vec());
                 transport.send(bytes.clone()).await.unwrap();
                 transport.send(bytes.clone()).await.unwrap();
             })
