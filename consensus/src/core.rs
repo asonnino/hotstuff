@@ -10,7 +10,7 @@ use async_recursion::async_recursion;
 use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
-use log::{debug, error, info, warn, log_enabled, Level};
+use log::{debug, error, info, log_enabled, warn, Level};
 use mempool::NodeMempool;
 use network::NetMessage;
 use serde::{Deserialize, Serialize};
@@ -139,7 +139,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         )
         .await;
         debug!("Created {:?}", block);
-        if !block.payload.is_empty() && !log_enabled!(Level::Debug){
+        if !block.payload.is_empty() && !log_enabled!(Level::Debug) {
             info!("Created {}", block);
         }
         self.process_block(&block).await?;
@@ -149,8 +149,10 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     }
 
     async fn handle_propose(&mut self, block: &Block) -> ConsensusResult<()> {
-        // Reject old blocks.
-        if block.round <= self.round {
+        let digest = block.digest();
+
+        // Reject old blocks if we already have them.
+        if block.round <= self.round && self.store.read(digest.to_vec()).await?.is_some() {
             return Ok(());
         }
 
@@ -160,20 +162,20 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             Some(ref tc) => block.round == tc.round + 1,
             None => block.round == block.qc.round + 1,
         };
-        ensure!(ok, ConsensusError::MalformedBlock(block.digest()));
+        ensure!(ok, ConsensusError::MalformedBlock(digest));
 
         // Ensure the block proposer is the right leader for the round.
         ensure!(
             block.author == self.leader_elector.get_leader(block.round),
             ConsensusError::WrongLeader {
-                digest: block.digest(),
+                digest,
                 leader: block.author,
                 round: block.round
             }
         );
 
         // Check the block is correctly signed.
-        block.signature.verify(&block.digest(), &block.author)?;
+        block.signature.verify(&digest, &block.author)?;
 
         // Check that the QC embedded in the block is valid.
         if block.qc != QC::genesis() {
@@ -318,6 +320,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         if next_leader == self.name {
             self.handle_vote(vote).await?;
         } else {
+            debug!("Sending TV to {}", next_leader);
             let message = CoreMessage::Vote(vote);
             self.transmit(&message, Some(next_leader)).await?;
         }
@@ -355,7 +358,6 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         loop {
             let result = tokio::select! {
                 Some(message) = self.core_channel.recv() => {
-                    debug!("Received {:?}", message);
                     match message {
                         CoreMessage::Propose(block) => self.handle_propose(&block).await,
                         CoreMessage::Vote(vote) => self.handle_vote(vote).await,

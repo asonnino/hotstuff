@@ -41,7 +41,7 @@ impl NetSender {
             for address in addresses {
                 let spawn = match senders.get(&address) {
                     Some(tx) => tx.send(bytes.clone()).await.is_err(),
-                    None => true
+                    None => true,
                 };
                 if spawn {
                     let tx = Self::spawn_worker(address).await;
@@ -61,7 +61,7 @@ impl NetSender {
                 Ok(stream) => {
                     info!("Outgoing connection established with {}", address);
                     stream
-                },
+                }
                 Err(e) => {
                     warn!("Failed to connect to {}: {}", address, e);
                     return;
