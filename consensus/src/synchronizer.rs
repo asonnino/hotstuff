@@ -126,6 +126,7 @@ impl Synchronizer {
             Some(b) => b,
             None => return Ok(None),
         };
+        /*
         let b1 = self
             .get_previous_block(&b2)
             .await?
@@ -134,6 +135,15 @@ impl Synchronizer {
             .get_previous_block(&b1)
             .await?
             .expect("We should have all ancestors of delivered blocks");
+        */
+        let b1 = match self.get_previous_block(&b2).await? {
+            None => panic!("PARENT NOT IN STORE: WE SHOULD HAVE ALL ANCESTORS OF {:?}", b2),
+            Some(b) => b
+        };
+        let b0 = match self.get_previous_block(&b1).await? {
+            None => panic!("GRAND PARENT NOT IN STORE: WE SHOULD HAVE ALL ANCESTORS OF {:?}", b2),
+            Some(b) => b
+        };
         Ok(Some((b0, b1, b2)))
     }
 }

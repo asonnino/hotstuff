@@ -6,9 +6,7 @@ class CommandMaker:
     @staticmethod
     def cleanup():
         return ('rm -r .db-* ; rm .*.json ; rm -r logs ; '
-                'rm node ; rm client ; '
-                'mkdir -p logs'
-                )
+                'rm node ; rm client ; mkdir -p logs')
 
     @staticmethod
     def compile():
@@ -25,7 +23,7 @@ class CommandMaker:
         assert isinstance(committee, str)
         assert isinstance(parameters, str) or parameters is None
         params = '' if parameters is None else f'--parameters {parameters}'
-        return f'./node -vv run --keys {keys} --committee {committee} --store {store} {params}'
+        return f'./node -vvv run --keys {keys} --committee {committee} --store {store} {params}'
 
     @staticmethod
     def run_client(address, txs, size, rate):

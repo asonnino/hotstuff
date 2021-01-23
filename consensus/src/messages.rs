@@ -64,12 +64,12 @@ impl fmt::Debug for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(
             f,
-            "B({}, {}, {:?}, {}) -> [{}]",
+            "{}: B({}, {}, {:?}, {})",
+            self.digest(),
             self.author,
             self.round,
             self.qc,
             self.payload.len(),
-            self.digest()
         )
     }
 }

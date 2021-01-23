@@ -10,7 +10,7 @@ use async_recursion::async_recursion;
 use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
-use log::{debug, error, info, log_enabled, warn, Level};
+use log::{debug, error, info, warn};
 use mempool::NodeMempool;
 use network::NetMessage;
 use serde::{Deserialize, Serialize};
@@ -227,11 +227,11 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             /* payload */ self.mempool_driver.get().await,
             self.signature_service.clone(),
         )
-        .await;
-        match log_enabled!(Level::Debug) || block.payload.is_empty() {
-            true => debug!("Created {:?}", block),
-            false => info!("Created {}", block),
+        .await;        
+        if !block.payload.is_empty() {
+            info!("Created non-empty {}", block);
         }
+        debug!("Created {:?}", block);
 
         // Process our new block and broadcast it.
         let message = CoreMessage::Propose(block.clone());
@@ -240,7 +240,12 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     }
 
     #[async_recursion]
-    async fn handle_qc(&mut self, block: &Block) -> ConsensusResult<()> {
+    async fn handle_qc(&mut self, block: &Block) -> ConsensusResult<bool> {
+        // Check that the QC embedded in the block is valid.
+        if block.qc != QC::genesis() {
+            block.qc.verify(&self.committee)?;
+        }
+
         // Let's see if we have the last three ancestors of the block, that is:
         //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
         // If we don't, the synchronizer asks for them to other nodes. It will
@@ -248,7 +253,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         // finally make us resume processing this block.
         let (b0, b1, b2) = match self.synchronizer.get_ancestors(block).await? {
             Some(ancestors) => ancestors,
-            None => return Ok(()),
+            None => return Ok(false),
         };
 
         if self.commit_rule(&b0, &b1, &b2, block) {
@@ -261,7 +266,8 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
 
         self.update_preferred_round(b1.round);
         self.update_high_qc(&block.qc);
-        self.advance_round(&block.qc).await
+        self.advance_round(&block.qc).await?;
+        Ok(true)
     }
 
     #[async_recursion]
@@ -285,13 +291,10 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         debug!("Processing {:?}", block);
         let digest = block.digest();
 
-        // Check that the QC embedded in the block is valid.
-        if block.qc != QC::genesis() {
-            block.qc.verify(&self.committee)?;
-        }
-
         // Handle the QC. This may allow us to advance round.
-        self.handle_qc(block).await?;
+        if !self.handle_qc(block).await? {
+            return Ok(());
+        }
 
         // Ensure the block's round is as expected.
         if block.round != self.round {

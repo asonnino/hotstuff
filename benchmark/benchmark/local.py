@@ -5,7 +5,11 @@ from os.path import join, splitext, basename
 
 from benchmark.commands import CommandMaker
 from benchmark.committee import LocalCommittee, Key
+from benchmark.logs import LogParser
 
+
+class BenchError(Exception):
+    pass
 
 class LocalBench:
     BINARY_PATH = '../target/release/'
@@ -30,22 +34,24 @@ class LocalBench:
         self.client_logs = [f'logs/client-{i}.log' for i in range(nodes)]
 
     def _background_run(self, command, log_file):
-        assert isinstance(command, str)
-        assert isinstance(log_file, str)
         name = splitext(basename(log_file))[0]
         cmd = f'{command} 2> {log_file}'
         subprocess.run(['tmux', 'new', '-d', '-s', name, cmd], check=True)
 
+    def _kill_nodes(self):
+        cmd = CommandMaker.kill().split()
+        subprocess.run(cmd, stderr=subprocess.DEVNULL)
+
     def run(self, delay):
         assert isinstance(delay, int) and delay > 0
-        print(f'Running local benchmark (nodes={self.nodes})')
+        print(f'Running local benchmark...')
 
         try:
             # Kill any previous testbed and cleanup all files.
-            cmd = CommandMaker.kill().split()
-            subprocess.run(cmd, stderr=subprocess.DEVNULL)
+            self._kill_nodes()
             cmd = CommandMaker.cleanup()
             subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
+            sleep(0.5)
 
             # Recompile the latest code.
             cmd = CommandMaker.compile().split()
@@ -83,12 +89,14 @@ class LocalBench:
 
             # Wait for all transactions to be processed.
             sleep(delay)
+            self._kill_nodes()
 
-        except Exception:
+            # Parse logs and return the parser.
+            return LogParser.process('./logs')
+
+        except Exception as e:
+            # TODO: Find out exactly which errors may be raised.
+            self._kill_nodes()
             import traceback
             print(traceback.format_exc())
-
-        finally:
-            # Kill all nodes.
-            cmd = CommandMaker.kill().split()
-            subprocess.run(cmd)
+            raise BenchError(f'Failled to run local benchmark: {e}')
