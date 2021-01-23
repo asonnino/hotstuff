@@ -6,9 +6,7 @@ class CommandMaker:
     @staticmethod
     def cleanup():
         return ('rm -r .db-* ; rm .*.json ; rm -r logs ; '
-                'rm node ; rm client ; '
-                'mkdir -p logs'
-                )
+                'rm node ; rm client ; mkdir -p logs')
 
     @staticmethod
     def compile():
