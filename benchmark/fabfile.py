@@ -5,7 +5,7 @@ from benchmark.utils import Print
 # NOTE: Also requires tmux: brew install tmux
 
 @task
-def local(ctx, nodes=4, txs=250000, size=512, rate=40000, delay=20):
+def local(ctx, nodes=4, txs=250000, size=512, rate=0, delay=20):
     try:
         LocalBench(nodes, txs, size, rate).run(delay).print_summary()
     except (BenchError, ParseError) as e:

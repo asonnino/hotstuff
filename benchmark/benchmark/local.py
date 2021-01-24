@@ -78,11 +78,11 @@ class LocalBench:
 
             # Run all nodes.
             for key_file, db, log_file in zip(self.key_files, self.dbs, self.node_logs):
-                cmd = CommandMaker.run_node(key_file, self.committee_file, db)
+                cmd = CommandMaker.run_node(key_file, self.committee_file, db, debug=False)
                 self._background_run(cmd, log_file)
 
             # Wait a bit for the nodes to start and then run all clients.
-            sleep(0.5)
+            sleep(5) # TODO: Wait for at least one timeout.
             Print.info(f'Running benchmark ({delay} sec)...')
             addresses = committee.front_addresses()
             load, rate = ceil(self.txs / self.nodes), ceil(self.rate / self.nodes)
