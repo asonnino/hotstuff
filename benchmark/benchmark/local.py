@@ -11,6 +11,9 @@ from benchmark.utils import Print
 class BenchError(Exception):
     pass
 
+class BenchError(Exception):
+    pass
+
 class LocalBench:
     BINARY_PATH = '../target/release/'
     NODE_CRATE_PATH = '../node'

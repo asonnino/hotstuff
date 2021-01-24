@@ -17,6 +17,13 @@ class LogParser:
 
         self.committee_size = len(nodes)
 
+<<<<<<< HEAD
+=======
+        # Ensure all clients managed to submit their share of txs. 
+        if not self._verify_completion(clients):
+            raise ParseError('Some clients failed to send all their txs')
+
+>>>>>>> 6887c8ce320c543326ff7803707fe94119237817
         # Parse the clients logs.
         try:
             results = [self._parse_clients(x) for x in clients]
@@ -31,6 +38,7 @@ class LogParser:
         except (ValueError, IndexError) as e:
             raise ParseError(f'Failed to parse node log: {e}')
         p.close()
+<<<<<<< HEAD
         proposals, commits = zip(*results)
         self.proposals = {k: v for x in proposals for k, v in x.items()}
         self.commits = {k: v for x in commits for k, v in x.items()}
@@ -57,6 +65,13 @@ class LogParser:
         # Ensure all (non-empty) blocks created are committed.
         if len(self.proposals) != len(self.commits):
             raise ParseError('Not all (non-empty) blocks have been committed')
+=======
+        self.proposals, self.commits = zip(*results)
+
+    def _verify_completion(self, clients):
+        status = [search(r'Finished', x) for x in clients]
+        return sum([x is not None for x in status]) == len(clients)
+>>>>>>> 6887c8ce320c543326ff7803707fe94119237817
 
     def _parse_clients(self, log):
         txs = int(search(r'(Number of transactions:) (\d+)', log).group(2))
@@ -77,7 +92,11 @@ class LogParser:
             times = [self._parse_timestamp(x) for x in times]
             return rounds, times
 
+<<<<<<< HEAD
         lines = findall(r'.* Created non-empty B\d+', log)
+=======
+        lines = findall(r'.* Created B\d+', log)
+>>>>>>> 6887c8ce320c543326ff7803707fe94119237817
         rounds, times = parse(lines)
         proposals = {r: t for r, t in zip(rounds, times)}
 
@@ -91,6 +110,7 @@ class LogParser:
         x = datetime.fromisoformat(string.replace('Z', '+00:00'))
         return datetime.timestamp(x)
 
+<<<<<<< HEAD
     def consensus_throughput(self):
         start, end = min(self.proposals.values()), max(self.commits.values())
         duration = end - start
@@ -100,10 +120,17 @@ class LogParser:
 
     def consensus_latency(self):
         latency = [c - self.proposals[r] for r, c in self.commits.items()]
+=======
+    def latency(self):
+        proposals = {k: v for x in self.proposals for k, v in x.items()}
+        commits = {k: v for x in self.commits for k, v in x.items()}
+        latency = [c - proposals[r] for r, c in commits.items()]
+>>>>>>> 6887c8ce320c543326ff7803707fe94119237817
         avg = mean(latency) if latency else 0
         std = stdev(latency) if len(latency) > 1 else 0
         return avg, std
 
+<<<<<<< HEAD
     def end_to_end_throughput(self):
         start, end = min(self.start), max(self.commits.values())
         duration = end - start
@@ -115,12 +142,16 @@ class LogParser:
         consensus_latency = self.consensus_latency()[0] * 1000
         consensus_tps, consensus_bps = self.consensus_throughput()
         end_to_end_tps, end_to_end_bps = self.end_to_end_throughput()
+=======
+    def print_summary(self):
+>>>>>>> 6887c8ce320c543326ff7803707fe94119237817
         print(
             '\n'
             '-----------------------------------------\n'
             ' RESULTS:\n'
             '-----------------------------------------\n'
             f' Committee size: {self.committee_size} nodes\n'
+<<<<<<< HEAD
             f' Number of transactions: {sum(self.txs):,} txs\n'
             f' Transaction size: {self.size[0]:,} B \n'
             f' Transaction rate: {sum(self.rate):,} tx/s\n'
@@ -131,6 +162,15 @@ class LogParser:
             '\n'
             f' End-to-end TPS: {round(end_to_end_tps):,} tx/s\n'
             f' End-to-end BPS: {round(end_to_end_bps):,} B/s\n'
+=======
+            f' Number of transactions: {self.txs[0]:,} txs\n'
+            f' Transaction size: {self.size[0]:,} B \n'
+            f' Transaction rate: {self.rate[0]:,} tx/s\n'
+            '\n'
+            f' TPS: {0} tx/s\n'
+            f' BPS: {0} B/s\n'
+            f' Block latency: {round(self.latency()[0] * 1000)} ms\n'
+>>>>>>> 6887c8ce320c543326ff7803707fe94119237817
             '-----------------------------------------\n'
         )
 
