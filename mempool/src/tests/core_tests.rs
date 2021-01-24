@@ -71,7 +71,7 @@ async fn handle_request() {
     // Send a sync request.
     let (name, _) = keys().pop().unwrap();
     let digest = payload().digest();
-    let message = CoreMessage::SyncRequest(digest, name);
+    let message = CoreMessage::PayloadRequest(digest, name);
     tx_core.send(message).await.unwrap();
 
     // Ensure we transmit a reply.

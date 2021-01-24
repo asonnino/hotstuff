@@ -28,15 +28,16 @@ impl Aggregator {
     }
 
     pub fn add_vote(&mut self, vote: Vote) -> ConsensusResult<Option<Votes>> {
-        // Record that an authority voted for this round; we accept at most
-        // one vote per authority per round.
+        // Record that an authority voted for this round; we accept at most one
+        // vote per authority per round. Node may send the same timeout vote
+        // multiple times to implement the reliable point-to-point abstraction.
         if !self
             .voters
             .entry(vote.round)
             .or_insert_with(HashSet::new)
             .insert(vote.author)
         {
-            bail!(ConsensusError::AuthorityReuse(vote.author));
+            return Ok(None);
         }
 
         // Add the new vote to our aggregator and see if we have a QC.
@@ -56,7 +57,6 @@ impl Aggregator {
 
 struct QuorumMaker {
     weight: Stake,
-    used: HashSet<PublicKey>,
     votes: Votes,
 }
 
@@ -64,7 +64,6 @@ impl QuorumMaker {
     pub fn new() -> Self {
         Self {
             weight: 0,
-            used: HashSet::new(),
             votes: Vec::new(),
         }
     }
@@ -72,12 +71,6 @@ impl QuorumMaker {
     /// Try to append a signature to a (partial) quorum.
     pub fn append(&mut self, vote: Vote, committee: &Committee) -> ConsensusResult<Option<Votes>> {
         let author = vote.author;
-
-        // Check that each authority only appears once.
-        ensure!(
-            !self.used.contains(&author),
-            ConsensusError::AuthorityReuse(author)
-        );
 
         // Ensure the authority has voting rights.
         let voting_rights = committee.stake(&author);
@@ -87,7 +80,6 @@ impl QuorumMaker {
         vote.signature.verify(&vote.digest(), &author)?;
 
         self.votes.push((author, vote.signature));
-        self.used.insert(author);
         self.weight += voting_rights;
         if self.weight >= committee.quorum_threshold() {
             self.weight = 0; // Ensures QC/TC is only made once.

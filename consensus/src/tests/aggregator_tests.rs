@@ -1,6 +1,5 @@
 use super::*;
 use crate::common::{committee, keys, qc, vote};
-use crate::messages::GenericQC as _;
 use crate::messages::QC;
 use crypto::generate_keypair;
 use rand::rngs::StdRng;
@@ -43,22 +42,6 @@ fn make_quorum() {
             let qc = QC { hash, round, votes };
             assert!(qc.verify(&committee()).is_ok());
         }
-        _ => assert!(false),
-    }
-}
-
-#[test]
-fn authority_reuse() {
-    let mut aggregator = Aggregator::new(committee());
-
-    // Add a vote.
-    let result = aggregator.add_vote(vote());
-    assert!(result.is_ok());
-    assert!(result.unwrap().is_none());
-
-    // Add a vote from the same authority.
-    match aggregator.add_vote(vote()) {
-        Err(ConsensusError::AuthorityReuse(name)) => assert_eq!(name, vote().author),
         _ => assert!(false),
     }
 }

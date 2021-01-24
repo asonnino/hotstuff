@@ -5,7 +5,14 @@ from os.path import join, splitext, basename
 
 from benchmark.commands import CommandMaker
 from benchmark.committee import LocalCommittee, Key
+from benchmark.logs import LogParser, ParseError
+from benchmark.utils import Print
 
+class BenchError(Exception):
+    pass
+
+class BenchError(Exception):
+    pass
 
 class LocalBench:
     BINARY_PATH = '../target/release/'
@@ -30,28 +37,29 @@ class LocalBench:
         self.client_logs = [f'logs/client-{i}.log' for i in range(nodes)]
 
     def _background_run(self, command, log_file):
-        assert isinstance(command, str)
-        assert isinstance(log_file, str)
         name = splitext(basename(log_file))[0]
         cmd = f'{command} 2> {log_file}'
         subprocess.run(['tmux', 'new', '-d', '-s', name, cmd], check=True)
 
+    def _kill_nodes(self):
+        cmd = CommandMaker.kill().split()
+        subprocess.run(cmd, stderr=subprocess.DEVNULL)
+
     def run(self, delay):
         assert isinstance(delay, int) and delay > 0
-        print(f'Running local benchmark (nodes={self.nodes})')
+        Print.important('Starting local benchmark')
 
         try:
             # Kill any previous testbed and cleanup all files.
-            cmd = CommandMaker.kill().split()
-            subprocess.run(cmd, stderr=subprocess.DEVNULL)
+            Print.info('Setting up testbed...')
+            self._kill_nodes()
             cmd = CommandMaker.cleanup()
             subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
+            sleep(0.5)
 
             # Recompile the latest code.
             cmd = CommandMaker.compile().split()
-            subprocess.run(
-                cmd, check=True, cwd=self.NODE_CRATE_PATH, stderr=subprocess.DEVNULL
-            )
+            subprocess.run(cmd, check=True, cwd=self.NODE_CRATE_PATH)
 
             # Create alias for the client and nodes binary.
             cmd = CommandMaker.alias_binaries(self.BINARY_PATH)
@@ -70,25 +78,26 @@ class LocalBench:
 
             # Run all nodes.
             for key_file, db, log_file in zip(self.key_files, self.dbs, self.node_logs):
-                cmd = CommandMaker.run_node(key_file, self.committee_file, db)
+                cmd = CommandMaker.run_node(key_file, self.committee_file, db, debug=False)
                 self._background_run(cmd, log_file)
 
             # Wait a bit for the nodes to start and then run all clients.
-            sleep(0.5)
+            sleep(5) # TODO: Wait for at least one timeout.
+            Print.info(f'Running benchmark ({delay} sec)...')
             addresses = committee.front_addresses()
-            load = ceil(self.txs / self.nodes)
+            load, rate = ceil(self.txs / self.nodes), ceil(self.rate / self.nodes)
             for addr, log_file in zip(addresses, self.client_logs):
-                cmd = CommandMaker.run_client(addr, load, self.size, self.rate)
+                cmd = CommandMaker.run_client(addr, load, self.size, rate)
                 self._background_run(cmd, log_file)
 
             # Wait for all transactions to be processed.
             sleep(delay)
+            self._kill_nodes()
 
-        except Exception:
-            import traceback
-            print(traceback.format_exc())
+            # Parse logs and return the parser.
+            Print.info('Parsing logs...')
+            return LogParser.process('./logs')
 
-        finally:
-            # Kill all nodes.
-            cmd = CommandMaker.kill().split()
-            subprocess.run(cmd)
+        except (subprocess.SubprocessError, ParseError) as e:
+            self._kill_nodes()
+            raise BenchError(str(e))

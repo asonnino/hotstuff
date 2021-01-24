@@ -6,13 +6,11 @@ class CommandMaker:
     @staticmethod
     def cleanup():
         return ('rm -r .db-* ; rm .*.json ; rm -r logs ; '
-                'rm node ; rm client ; '
-                'mkdir -p logs'
-                )
+                'rm node ; rm client ; mkdir -p logs')
 
     @staticmethod
     def compile():
-        return 'cargo build --features benchmark --release'
+        return 'cargo build --quiet --features benchmark --release'
 
     @staticmethod
     def generate_key(filename):
@@ -20,12 +18,14 @@ class CommandMaker:
         return f'./node keys --filename {filename}'
 
     @staticmethod
-    def run_node(keys, committee, store, parameters=None):
+    def run_node(keys, committee, store, parameters=None, debug=False):
         assert isinstance(keys, str)
         assert isinstance(committee, str)
         assert isinstance(parameters, str) or parameters is None
+        assert isinstance(debug, bool)
         params = '' if parameters is None else f'--parameters {parameters}'
-        return f'./node -vvv run --keys {keys} --committee {committee} --store {store} {params}'
+        v = '-vvv' if debug else '-vv'
+        return f'./node {v} run --keys {keys} --committee {committee} --store {store} {params}'
 
     @staticmethod
     def run_client(address, txs, size, rate):

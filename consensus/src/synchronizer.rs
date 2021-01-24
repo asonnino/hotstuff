@@ -47,14 +47,16 @@ impl Synchronizer {
                             let previous = block.previous().clone();
                             let fut = Self::waiter(store_copy.clone(), previous.clone(), block);
                             waiting.push(fut);
-                            Self::transmit(previous, &name, &committee, &network_channel).await;
+                            if !pending.contains(&previous) {
+                                Self::transmit(previous, &name, &committee, &network_channel).await;
+                            }
                         }
                     },
                     Some(result) = waiting.next() => {
                         match result {
                             Ok(block) => {
                                 let _ = pending.remove(&block.digest());
-                                let message = CoreMessage::LoopBack(block);
+                                let message = CoreMessage::Propose(block);
                                 if let Err(e) = core_channel.send(message).await {
                                     panic!("Failed to send message through core channel: {}", e);
                                 }

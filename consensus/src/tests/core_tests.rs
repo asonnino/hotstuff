@@ -60,14 +60,14 @@ fn leader_keys(round: RoundNumber) -> (PublicKey, SecretKey) {
 }
 
 #[tokio::test]
-async fn handle_block() {
+async fn handle_proposal() {
     // Make a block and the vote we expect to receive.
     let block = chain(vec![leader_keys(1)]).pop().unwrap();
     let (public_key, secret_key) = keys().pop().unwrap();
     let vote = Vote::new_from_key(block.digest(), block.round, public_key, &secret_key);
 
     // Run a core instance.
-    let store_path = ".db_test_handle_block";
+    let store_path = ".db_test_handle_proposal";
     let (tx_core, mut rx_network, _rx_commit) = core(public_key, secret_key, store_path).await;
 
     // Send a block to the core.
@@ -90,13 +90,13 @@ async fn handle_block() {
 }
 
 #[tokio::test]
-async fn make_block() {
+async fn generate_proposal() {
     // Get the keys of the leaders of this round and the next.
     let (leader, leader_key) = leader_keys(1);
     let (next_leader, next_leader_key) = leader_keys(2);
 
     // Make a block, votes, and QC.
-    let block = Block::new_from_key(QC::genesis(), None, leader, 1, Vec::new(), &leader_key);
+    let block = Block::new_from_key(QC::genesis(), leader, 1, Vec::new(), &leader_key);
     let hash = block.digest();
     let votes: Vec<_> = keys()
         .iter()
@@ -115,7 +115,7 @@ async fn make_block() {
     };
 
     // Run a core instance.
-    let store_path = ".db_test_make_block";
+    let store_path = ".db_test_generate_proposal";
     let (tx_core, mut rx_network, _rx_commit) =
         core(next_leader, next_leader_key, store_path).await;
 
@@ -132,7 +132,6 @@ async fn make_block() {
                 CoreMessage::Propose(b) => {
                     assert_eq!(b.round, 2);
                     assert_eq!(b.qc, qc);
-                    assert!(b.tc.is_none());
                 }
                 _ => assert!(false),
             }
@@ -170,25 +169,26 @@ async fn commit_block() {
 }
 
 #[tokio::test]
-async fn make_timeout() {
+async fn local_timeout_round() {
     // Make the timeout vote we expect.
     let (public_key, secret_key) = leader_keys(3);
     let timeout = Vote::new_from_key(Digest::default(), 1, public_key, &secret_key);
 
     // Run a core instance.
-    let store_path = ".db_test_make_timeout";
+    let store_path = ".db_test_local_timeout_round";
     let (_tx_core, mut rx_network, _rx_commit) = core(public_key, secret_key, store_path).await;
 
     // Ensure the following operation happen in the right order.
     match rx_network.recv().await {
-        Some(NetMessage(bytes, recipient)) => {
+        Some(NetMessage(bytes, mut recipients)) => {
             match bincode::deserialize(&bytes).unwrap() {
                 CoreMessage::Vote(v) => assert_eq!(v, timeout),
                 _ => assert!(false),
             }
-            let (next_leader, _) = leader_keys(2);
-            let address = committee().address(&next_leader).unwrap();
-            assert_eq!(recipient, vec![address]);
+            let mut addresses = committee().broadcast_addresses(&public_key);
+            addresses.sort();
+            recipients.sort();
+            assert_eq!(recipients, addresses);
         }
         _ => assert!(false),
     }

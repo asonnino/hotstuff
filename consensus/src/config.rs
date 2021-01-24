@@ -16,7 +16,7 @@ pub struct Parameters {
 impl Default for Parameters {
     fn default() -> Self {
         Self {
-            timeout_delay: 10_000,
+            timeout_delay: 5000,
             sync_retry_delay: 10_000,
         }
     }
