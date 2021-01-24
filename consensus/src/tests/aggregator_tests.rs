@@ -47,22 +47,6 @@ fn make_quorum() {
 }
 
 #[test]
-fn authority_reuse() {
-    let mut aggregator = Aggregator::new(committee());
-
-    // Add a vote.
-    let result = aggregator.add_vote(vote());
-    assert!(result.is_ok());
-    assert!(result.unwrap().is_none());
-
-    // Add a vote from the same authority.
-    match aggregator.add_vote(vote()) {
-        Err(ConsensusError::AuthorityReuse(name)) => assert_eq!(name, vote().author),
-        _ => assert!(false),
-    }
-}
-
-#[test]
 fn unknown_authority() {
     let mut aggregator = Aggregator::new(committee());
 

@@ -67,7 +67,7 @@ async fn handle_proposal() {
     let vote = Vote::new_from_key(block.digest(), block.round, public_key, &secret_key);
 
     // Run a core instance.
-    let store_path = ".db_test_handle_block";
+    let store_path = ".db_test_handle_proposal";
     let (tx_core, mut rx_network, _rx_commit) = core(public_key, secret_key, store_path).await;
 
     // Send a block to the core.
@@ -115,7 +115,7 @@ async fn generate_proposal() {
     };
 
     // Run a core instance.
-    let store_path = ".db_test_make_block";
+    let store_path = ".db_test_generate_proposal";
     let (tx_core, mut rx_network, _rx_commit) =
         core(next_leader, next_leader_key, store_path).await;
 
@@ -172,10 +172,10 @@ async fn commit_block() {
 async fn local_timeout_round() {
     // Make the timeout vote we expect.
     let (public_key, secret_key) = leader_keys(3);
-    let timeout = Vote::new_from_key(Digest::default(), 0, public_key, &secret_key);
+    let timeout = Vote::new_from_key(Digest::default(), 1, public_key, &secret_key);
 
     // Run a core instance.
-    let store_path = ".db_test_make_timeout";
+    let store_path = ".db_test_local_timeout_round";
     let (_tx_core, mut rx_network, _rx_commit) = core(public_key, secret_key, store_path).await;
 
     // Ensure the following operation happen in the right order.
