@@ -19,7 +19,7 @@ pub mod core_tests;
 #[derive(Deserialize, Serialize, Debug)]
 pub enum CoreMessage {
     Payload(Payload),
-    SyncRequest(Digest, PublicKey),
+    PayloadRequest(Digest, PublicKey),
 }
 
 pub struct Core {
@@ -148,19 +148,18 @@ impl Core {
     }
 
     async fn get_payload(&mut self) -> MempoolResult<Vec<u8>> {
-        match self.queue.pop_back() {
-            Some(digest) => Ok(digest.to_vec()),
-            None => {
-                let payload = self.payload_maker.make().await;
-                if payload.size() == 0 {
-                    return Ok(Vec::default());
-                }
-                let digest = payload.digest();
-                self.store_payload(&digest, &payload).await?;
-                let message = CoreMessage::Payload(payload);
-                self.transmit(&message, None).await?;
-                Ok(digest.to_vec())
+        if let Some(digest) = self.queue.pop_back() {
+            Ok(digest.to_vec())
+        } else {
+            let payload = self.payload_maker.make().await;
+            if payload.size() == 0 {
+                return Ok(Vec::default());
             }
+            let digest = payload.digest();
+            self.store_payload(&digest, &payload).await?;
+            let message = CoreMessage::Payload(payload);
+            self.transmit(&message, None).await?;
+            Ok(digest.to_vec())
         }
     }
 
@@ -169,7 +168,7 @@ impl Core {
             Some(_) => Ok(true),
             None => {
                 debug!("Requesting sync for payload {:?}", &digest.to_vec()[..8]);
-                let message = CoreMessage::SyncRequest(digest, self.name);
+                let message = CoreMessage::PayloadRequest(digest, self.name);
                 self.transmit(&message, None).await?;
                 Ok(false)
             }
@@ -189,7 +188,7 @@ impl Core {
                 Some(message) = self.core_channel.recv() => {
                     match message {
                         CoreMessage::Payload(payload) => self.handle_payload(payload).await,
-                        CoreMessage::SyncRequest(digest, sender) => self.handle_request(digest, sender).await,
+                        CoreMessage::PayloadRequest(digest, sender) => self.handle_request(digest, sender).await,
                     }
                 },
                 Some(message) = self.consensus_channel.recv() => {

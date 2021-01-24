@@ -227,7 +227,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             /* payload */ self.mempool_driver.get().await,
             self.signature_service.clone(),
         )
-        .await;        
+        .await;
         if !block.payload.is_empty() {
             info!("Created non-empty {}", block);
         }
@@ -293,11 +293,19 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
 
         // Handle the QC. This may allow us to advance round.
         if !self.handle_qc(block).await? {
+            debug!(
+                "Processing of {} suspended: missing ancestors",
+                block.digest()
+            );
             return Ok(());
         }
 
         // Ensure the block's round is as expected.
         if block.round != self.round {
+            debug!(
+                "Processing of {} suspended: missing payload",
+                block.digest()
+            );
             return Ok(());
         }
 

@@ -5,8 +5,8 @@ from os.path import join, splitext, basename
 
 from benchmark.commands import CommandMaker
 from benchmark.committee import LocalCommittee, Key
-from benchmark.logs import LogParser
-
+from benchmark.logs import LogParser, ParseError
+from benchmark.utils import Print
 
 class BenchError(Exception):
     pass
@@ -44,10 +44,11 @@ class LocalBench:
 
     def run(self, delay):
         assert isinstance(delay, int) and delay > 0
-        print(f'Running local benchmark...')
+        Print.important('Starting local benchmark')
 
         try:
             # Kill any previous testbed and cleanup all files.
+            Print.info('Setting up testbed...')
             self._kill_nodes()
             cmd = CommandMaker.cleanup()
             subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
@@ -55,9 +56,7 @@ class LocalBench:
 
             # Recompile the latest code.
             cmd = CommandMaker.compile().split()
-            subprocess.run(
-                cmd, check=True, cwd=self.NODE_CRATE_PATH, stderr=subprocess.DEVNULL
-            )
+            subprocess.run(cmd, check=True, cwd=self.NODE_CRATE_PATH)
 
             # Create alias for the client and nodes binary.
             cmd = CommandMaker.alias_binaries(self.BINARY_PATH)
@@ -81,10 +80,11 @@ class LocalBench:
 
             # Wait a bit for the nodes to start and then run all clients.
             sleep(0.5)
+            Print.info(f'Running benchmark ({delay} sec)...')
             addresses = committee.front_addresses()
-            load = ceil(self.txs / self.nodes)
+            load, rate = ceil(self.txs / self.nodes), ceil(self.rate / self.nodes)
             for addr, log_file in zip(addresses, self.client_logs):
-                cmd = CommandMaker.run_client(addr, load, self.size, self.rate)
+                cmd = CommandMaker.run_client(addr, load, self.size, rate)
                 self._background_run(cmd, log_file)
 
             # Wait for all transactions to be processed.
@@ -92,11 +92,9 @@ class LocalBench:
             self._kill_nodes()
 
             # Parse logs and return the parser.
+            Print.info('Parsing logs...')
             return LogParser.process('./logs')
 
-        except Exception as e:
-            # TODO: Find out exactly which errors may be raised.
+        except (subprocess.SubprocessError, ParseError) as e:
             self._kill_nodes()
-            import traceback
-            print(traceback.format_exc())
-            raise BenchError(f'Failled to run local benchmark: {e}')
+            raise BenchError(str(e))
