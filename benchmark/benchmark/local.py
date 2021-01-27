@@ -44,7 +44,7 @@ class LocalBench:
         cmd = CommandMaker.kill().split()
         subprocess.run(cmd, stderr=subprocess.DEVNULL)
 
-    def run(self, delay):
+    def run(self, delay, debug=False):
         assert isinstance(delay, int) and delay > 0
         Print.important('Starting local benchmark')
 
@@ -77,11 +77,11 @@ class LocalBench:
 
             # Run all nodes.
             for key_file, db, log_file in zip(self.key_files, self.dbs, self.node_logs):
-                cmd = CommandMaker.run_node(key_file, self.committee_file, db, debug=True)
+                cmd = CommandMaker.run_node(key_file, self.committee_file, db, debug=debug)
                 self._background_run(cmd, log_file)
 
             # Wait a bit for the nodes to start and then run all clients.
-            sleep(5) # TODO: Wait for at least one timeout.
+            sleep(10) # TODO: Wait for at least two timeouts, or add high_qc to timeout votes.
             Print.info(f'Running benchmark ({delay} sec)...')
             addresses = committee.front_addresses()
             load, rate = ceil(self.txs / self.nodes), ceil(self.rate / self.nodes)

@@ -16,6 +16,9 @@ class LogParser:
         assert all(isinstance(x, str) for y in inputs for x in y)
         assert all(x for x in inputs)
 
+        # Ensure the benchmark run without errors.
+        self._verify(clients, nodes)
+
         self.committee_size = len(nodes)
 
         # Parse the clients logs.
@@ -35,14 +38,16 @@ class LogParser:
         self.proposals = {k: v for x in proposals for k, v in x.items()}
         self.commits = {k: v for x in commits for k, v in x.items()}
 
-        # Ensure the benchmark run without errors.
-        self._verify(clients, nodes)
+        # Ensure all (non-empty) blocks created are committed.
+        if len(self.proposals) != len(self.commits):
+            missing = len(self.proposals) - len(self.commits)
+            raise ParseError(f'{missing} non-empty blocks have not been committed')
 
     def _verify(self, clients, nodes):
         # Ensure all clients managed to submit their share of txs. 
         status = [search(r'Finished', x) for x in clients]
         if sum(x is not None for x in status) != len(clients):
-            raise ParseError('Some clients failed to send all their txs')
+            raise ParseError('One or more clients failed to send all their txs')
 
         # Ensure no node panicked.
         with Pool() as p:
@@ -55,11 +60,6 @@ class LogParser:
            status = p.starmap(search, zip(repeat(r'Mempool full'), nodes))
         if any(x is not None for x in status):
             raise ParseError('Transactions dropped (mempool buffer full)')
-
-        # Ensure all (non-empty) blocks created are committed.
-        if len(self.proposals) != len(self.commits):
-            missing = len(self.proposals) - len(self.commits)
-            raise ParseError(f'{missing} non-empty blocks have not been committed')
 
     def _parse_clients(self, log):
         txs = int(search(r'(Number of transactions:) (\d+)', log).group(2))
