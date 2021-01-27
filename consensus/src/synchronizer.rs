@@ -40,6 +40,7 @@ impl Synchronizer {
         tokio::spawn(async move {
             let mut waiting = FuturesUnordered::new();
             let mut pending = HashSet::new();
+            let mut requests = HashSet::new();
             loop {
                 tokio::select! {
                     Some(block) = rx_inner.recv() => {
@@ -47,7 +48,7 @@ impl Synchronizer {
                             let previous = block.previous().clone();
                             let fut = Self::waiter(store_copy.clone(), previous.clone(), block);
                             waiting.push(fut);
-                            if !pending.contains(&previous) {
+                            if requests.insert(previous.clone()) {
                                 Self::transmit(previous, &name, &committee, &network_channel).await;
                             }
                         }
@@ -56,7 +57,8 @@ impl Synchronizer {
                         match result {
                             Ok(block) => {
                                 let _ = pending.remove(&block.digest());
-                                let message = CoreMessage::Propose(block);
+                                let _ = requests.remove(&block.previous());
+                                let message = CoreMessage::LoopBack(block);
                                 if let Err(e) = core_channel.send(message).await {
                                     panic!("Failed to send message through core channel: {}", e);
                                 }
@@ -66,7 +68,7 @@ impl Synchronizer {
                     },
                     Some(_) = timer.notifier.recv() => {
                         // This implements the 'perfect point to point link' abstraction.
-                        for digest in &pending {
+                        for digest in &requests {
                             Self::transmit(digest.clone(), &name, &committee, &network_channel).await;
                         }
                         timer

@@ -143,12 +143,9 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
 
         // Ensure we won't vote for contradicting blocks.
         self.increase_last_voted_round(block.round);
+        // TODO: We should update the preferred round here.
         // TODO: Write to storage preferred_round and last_voted_round.
         Some(Vote::new(&block, self.name, self.signature_service.clone()).await)
-    }
-
-    fn commit_rule(&self, b0: &Block, b1: &Block, b2: &Block, block: &Block) -> bool {
-        b0.round + 1 == b1.round && b1.round + 1 == b2.round && b2.round + 1 == block.round
     }
     // -- End Safety Module --
 
@@ -188,7 +185,14 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             if !qc.timeout() {
                 self.update_high_qc(&qc);
             }
-            self.advance_round(&qc).await?
+
+            // Try to advance the round.
+            self.advance_round(&qc).await?;
+
+            // Make a new block if we are the next leader.
+            if self.name == self.leader_elector.get_leader(self.round) {
+                self.generate_proposal().await?;
+            }
         }
         Ok(())
     }
@@ -202,17 +206,11 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         self.round = qc.round + 1;
         info!("Moved to round {}", self.round);
 
-        // Cleanup the vote aggregator and the mempool driver.
+        // Cleanup the vote aggregator.
         self.aggregator.cleanup(&self.round);
-        self.mempool_driver.cleanup(&self.round).await;
 
         // Schedule a new timer for this round.
         self.schedule_timer().await;
-
-        // Make a new block if we are the next leader.
-        if self.name == self.leader_elector.get_leader(self.round) {
-            self.generate_proposal().await?;
-        }
         Ok(())
     }
     // -- End Pacemaker --
@@ -240,25 +238,20 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     }
 
     #[async_recursion]
-    async fn handle_qc(&mut self, block: &Block) -> ConsensusResult<bool> {
-        // Check that the QC embedded in the block is valid.
-        if block.qc != QC::genesis() {
-            block.qc.verify(&self.committee)?;
-        }
+    async fn process_qc(
+        &mut self,
+        block: &Block,
+        ancestors: (Block, Block, Block),
+    ) -> ConsensusResult<()> {
+        let (b0, b1, b2) = ancestors;
 
-        // Let's see if we have the last three ancestors of the block, that is:
-        //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
-        // If we don't, the synchronizer asks for them to other nodes. It will
-        // then ensure we process all three ancestors in the correct order, and
-        // finally make us resume processing this block.
-        let (b0, b1, b2) = match self.synchronizer.get_ancestors(block).await? {
-            Some(ancestors) => ancestors,
-            None => return Ok(false),
-        };
-
-        if self.commit_rule(&b0, &b1, &b2, block) {
+        // Check if we can commit the head of the 3-chain.
+        let mut commit_rule = b0.round + 1 == b1.round;
+        commit_rule &= b1.round + 1 == b2.round;
+        commit_rule &= b2.round + 1 == block.round;
+        if commit_rule {
             info!("Committed {}", b0);
-            self.mempool_driver.garbage_collect(&b0.payload).await;
+            self.mempool_driver.garbage_collect(&b0).await;
             if let Err(e) = self.commit_channel.send(b0.clone()).await {
                 warn!("Failed to send block through the commit channel: {}", e);
             }
@@ -267,12 +260,40 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         self.update_preferred_round(b1.round);
         self.update_high_qc(&block.qc);
         self.advance_round(&block.qc).await?;
-        Ok(true)
+        Ok(())
     }
 
     #[async_recursion]
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
+        debug!("Processing {:?}", block);
+
+        // Let's see if we have the last three ancestors of the block, that is:
+        //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
+        // If we don't, the synchronizer asks for them to other nodes. It will
+        // then ensure we process all three ancestors in the correct order, and
+        // finally make us resume processing this block.
+        let ancestors = match self.synchronizer.get_ancestors(block).await? {
+            Some(ancestors) => ancestors,
+            None => {
+                debug!("Processing of {} suspended: missing parent", block.digest());
+                return Ok(());
+            }
+        };
+
+        // Store the block only if we have already processed all its ancestors.
         self.store_block(block).await?;
+
+        // Process the QC. This may allow us to advance round.
+        self.process_qc(block, ancestors).await?;
+
+        // Ensure the block's round is as expected.
+        // This check is important: it prevents bad leaders from producing blocks
+        // far in the future that may cause overflow on the round number.
+        if block.round != self.round {
+            return Ok(());
+        }
+
+        // See if we can vote for this block.
         if let Some(vote) = self.make_vote(block).await {
             debug!("Created {:?}", vote);
             let next_leader = self.leader_elector.get_leader(self.round + 1);
@@ -288,26 +309,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
 
     #[async_recursion]
     async fn handle_proposal(&mut self, block: &Block) -> ConsensusResult<()> {
-        debug!("Processing {:?}", block);
         let digest = block.digest();
-
-        // Handle the QC. This may allow us to advance round.
-        if !self.handle_qc(block).await? {
-            debug!(
-                "Processing of {} suspended: missing ancestors",
-                block.digest()
-            );
-            return Ok(());
-        }
-
-        // Ensure the block's round is as expected.
-        if block.round != self.round {
-            debug!(
-                "Processing of {} suspended: missing payload",
-                block.digest()
-            );
-            return Ok(());
-        }
 
         // Ensure the block proposer is the right leader for the round.
         ensure!(
@@ -322,9 +324,15 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         // Check the block is correctly signed.
         block.signature.verify(&digest, &block.author)?;
 
+        // Check that the QC embedded in the block is valid.
+        if block.qc != QC::genesis() {
+            block.qc.verify(&self.committee)?;
+        }
+
         // Let's see if we have the block's data. If we don't, the mempool
         // will get it and then make us resume processing this block.
         if !self.mempool_driver.verify(block).await? {
+            debug!("Processing of {} suspended: missing payload", digest);
             return Ok(());
         }
 
@@ -346,8 +354,8 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     }
 
     pub async fn run(&mut self) {
-        // Upon booting, send the very first block (if we are the leader).
-        // Also, schedule a timer in case we don't hear back from it.
+        // Upon booting, generate the very first block (if we are the leader).
+        // Also, schedule a timer in case we don't hear from the leader.
         self.schedule_timer().await;
         if self.name == self.leader_elector.get_leader(self.round) {
             self.generate_proposal()

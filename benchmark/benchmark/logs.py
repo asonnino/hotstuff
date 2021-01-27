@@ -41,7 +41,7 @@ class LogParser:
     def _verify(self, clients, nodes):
         # Ensure all clients managed to submit their share of txs. 
         status = [search(r'Finished', x) for x in clients]
-        if sum([x is not None for x in status]) != len(clients):
+        if sum(x is not None for x in status) != len(clients):
             raise ParseError('Some clients failed to send all their txs')
 
         # Ensure no node panicked.
@@ -56,7 +56,8 @@ class LogParser:
 
         # Ensure all (non-empty) blocks created are committed.
         if len(self.proposals) != len(self.commits):
-            raise ParseError('Not all (non-empty) blocks have been committed')
+            missing = len(self.proposals) - len(self.commits)
+            raise ParseError(f'{missing} non-empty blocks have not been committed')
 
     def _parse_clients(self, log):
         txs = int(search(r'(Number of transactions:) (\d+)', log).group(2))

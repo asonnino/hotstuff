@@ -67,15 +67,6 @@ impl<Mempool: 'static + NodeMempool> MempoolDriver<Mempool> {
         }
     }
 
-    pub async fn cleanup(&mut self, round: &RoundNumber) {
-        for (k, v) in &self.pending {
-            if !v.is_closed() && k < round {
-                let _ = v.send(()).await;
-            }
-        }
-        self.pending.retain(|k, _| k < round);
-    }
-
     pub async fn verify(&mut self, block: &Block) -> ConsensusResult<bool> {
         match self.mempool.verify(&block.payload).await {
             PayloadStatus::Accept => Ok(true),
@@ -96,8 +87,18 @@ impl<Mempool: 'static + NodeMempool> MempoolDriver<Mempool> {
         }
     }
 
-    pub async fn garbage_collect(&mut self, payload: &[u8]) {
-        self.mempool.garbage_collect(payload).await;
+    pub async fn garbage_collect(&mut self, block: &Block) {
+        // Cleanup the driver.
+        let round = block.round;
+        for (k, v) in &self.pending {
+            if !v.is_closed() && k < &round {
+                let _ = v.send(()).await;
+            }
+        }
+        self.pending.retain(|k, _| k < &round);
+
+        // Cleanup the mempool.
+        self.mempool.garbage_collect(&block.payload).await;
     }
 
     pub async fn get(&mut self) -> Vec<u8> {

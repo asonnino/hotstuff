@@ -8,11 +8,10 @@ from benchmark.committee import LocalCommittee, Key
 from benchmark.logs import LogParser, ParseError
 from benchmark.utils import Print
 
-class BenchError(Exception):
-    pass
 
 class BenchError(Exception):
     pass
+
 
 class LocalBench:
     BINARY_PATH = '../target/release/'
@@ -78,7 +77,7 @@ class LocalBench:
 
             # Run all nodes.
             for key_file, db, log_file in zip(self.key_files, self.dbs, self.node_logs):
-                cmd = CommandMaker.run_node(key_file, self.committee_file, db, debug=False)
+                cmd = CommandMaker.run_node(key_file, self.committee_file, db, debug=True)
                 self._background_run(cmd, log_file)
 
             # Wait a bit for the nodes to start and then run all clients.
