@@ -121,7 +121,7 @@ impl Vote {
         }
     }
 
-    fn timeout(&self) -> bool {
+    pub fn timeout(&self) -> bool {
         self.hash == Digest::default()
     }
 }

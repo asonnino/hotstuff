@@ -28,14 +28,18 @@ impl Aggregator {
     }
 
     pub fn add_vote(&mut self, vote: Vote) -> ConsensusResult<Option<Votes>> {
-        // Record that an authority voted for this round; we accept at most one
-        // vote per authority per round. Node may send the same timeout vote
-        // multiple times to implement the reliable point-to-point abstraction.
-        if !self
-            .voters
-            .entry(vote.round)
-            .or_insert_with(HashSet::new)
-            .insert(vote.author)
+        // TODO: ANYONE (not only nodes) may make us run out of memory by sending
+        // many votes with different round numbers (as long as they are bigger than
+        // our current round) or with different digests.
+
+        // Nodes may send the same timeout vote multiple times to implement the
+        // reliable point-to-point abstraction.
+        if vote.timeout()
+            && !self
+                .voters
+                .entry(vote.round)
+                .or_insert_with(HashSet::new)
+                .insert(vote.author)
         {
             return Ok(None);
         }
@@ -58,6 +62,7 @@ impl Aggregator {
 struct QuorumMaker {
     weight: Stake,
     votes: Votes,
+    used: HashSet<PublicKey>,
 }
 
 impl QuorumMaker {
@@ -65,6 +70,7 @@ impl QuorumMaker {
         Self {
             weight: 0,
             votes: Vec::new(),
+            used: HashSet::new(),
         }
     }
 
@@ -75,6 +81,12 @@ impl QuorumMaker {
         // Ensure the authority has voting rights.
         let voting_rights = committee.stake(&author);
         ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(author));
+
+        // Ensure it is the first time this authority votes.
+        ensure!(
+            self.used.insert(author),
+            ConsensusError::AuthorityReuse(author)
+        );
 
         // Check the signature on the vote.
         vote.signature.verify(&vote.digest(), &author)?;
