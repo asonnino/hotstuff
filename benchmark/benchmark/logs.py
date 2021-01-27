@@ -4,6 +4,7 @@ from statistics import mean, stdev
 from multiprocessing import Pool
 from datetime import datetime
 from os.path import join
+from itertools import repeat
 
 class ParseError(Exception):
     pass
@@ -25,12 +26,11 @@ class LogParser:
         self.txs, self.size, self.rate, self.start, self.end = zip(*results)
 
         # Parse the nodes logs.
-        p = Pool()
         try:
-            results = p.map(self._parse_nodes, nodes)
+            with Pool() as p:
+                results = p.map(self._parse_nodes, nodes)
         except (ValueError, IndexError) as e:
             raise ParseError(f'Failed to parse node log: {e}')
-        p.close()
         proposals, commits = zip(*results)
         self.proposals = {k: v for x in proposals for k, v in x.items()}
         self.commits = {k: v for x in commits for k, v in x.items()}
@@ -45,12 +45,14 @@ class LogParser:
             raise ParseError('Some clients failed to send all their txs')
 
         # Ensure no node panicked.
-        status = [search(r'panic', x) for x in nodes]
+        with Pool() as p:
+           status = p.starmap(search, zip(repeat(r'panic'), nodes))
         if any(x is not None for x in status):
             raise ParseError('One or more nodes panicked')
 
         # Ensure no transactions have been dropped.
-        status = [search(r'Mempool full', x) for x in nodes]
+        with Pool() as p:
+           status = p.starmap(search, zip(repeat(r'Mempool full'), nodes))
         if any(x is not None for x in status):
             raise ParseError('Transactions dropped (mempool buffer full)')
 
