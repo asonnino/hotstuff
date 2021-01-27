@@ -19,6 +19,6 @@ class Print:
 
     @staticmethod
     def error(message, cause=None):
-        print(f'\n{Color.BOLD}{Color.FAIL}ERROR{Color.END} {message}\n')
+        print(f'\n{Color.BOLD}{Color.FAIL}ERROR{Color.END}: {message}\n')
         if cause is not None:
-            print(f'Cause: \n{cause}\n')
+            print(f'Caused by: \n{cause}\n')
