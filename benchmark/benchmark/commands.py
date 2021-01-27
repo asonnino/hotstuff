@@ -10,7 +10,7 @@ class CommandMaker:
 
     @staticmethod
     def compile():
-        return 'cargo build --quiet --features benchmark --release'
+        return 'cargo build --quiet --release --features benchmark'
 
     @staticmethod
     def generate_key(filename):
