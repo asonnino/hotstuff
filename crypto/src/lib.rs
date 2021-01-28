@@ -2,7 +2,7 @@ use ed25519_dalek as dalek;
 use ed25519_dalek::ed25519;
 use ed25519_dalek::Signer as _;
 use rand::rngs::OsRng;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use serde::{de, ser, Deserialize, Serialize};
 use std::array::TryFromSliceError;
 use std::convert::{TryFrom, TryInto};
@@ -151,7 +151,7 @@ pub fn generate_production_keypair() -> (PublicKey, SecretKey) {
 
 pub fn generate_keypair<R>(csprng: &mut R) -> (PublicKey, SecretKey)
 where
-    R: CryptoRng + Rng,
+    R: CryptoRng + RngCore,
 {
     let keypair = dalek::Keypair::generate(csprng);
     let public = PublicKey(keypair.public.to_bytes());

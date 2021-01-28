@@ -1,7 +1,7 @@
 use super::*;
 use futures::future::try_join_all;
-use tokio::task::JoinHandle;
 use std::time::Duration;
+use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
 pub fn listener(address: SocketAddr) -> JoinHandle<()> {

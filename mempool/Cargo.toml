@@ -7,12 +7,12 @@ publish = false
 
 [dependencies]
 async-trait = "0.1.42"
-tokio = { version = "0.3.1", features = ["rt", "net", "time", "macros", "sync"] }
-tokio-util = { version = "0.5", features= ["codec"] }
+tokio = { version = "1.1.0", features = ["rt", "net", "time", "macros", "sync"] }
+tokio-util = { version = "0.6.2", features= ["codec"] }
 ed25519-dalek = "1.0.1"
 thiserror = "1.0.21"
 serde = { version = "1.0", features = ["derive"] }
-bytes = "0.6"
+bytes = "1.0.1"
 bincode = "1.3.1"
 log = "0.4.0"
 futures = "0.3.8"
@@ -22,5 +22,4 @@ store = { path = "../store" }
 network = { path = "../network" }
 
 [dev-dependencies]
-tokio-util = { version = "0.5", features= ["codec"] }
 rand = "0.7.3"
