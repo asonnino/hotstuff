@@ -1,8 +1,8 @@
-/*
 use super::*;
-use crate::common::{block, committee, keys, vote};
 use futures::future::try_join_all;
 use tokio::task::JoinHandle;
+use std::time::Duration;
+use tokio::time::sleep;
 
 pub fn listener(address: SocketAddr) -> JoinHandle<()> {
     tokio::spawn(async move {
@@ -19,20 +19,19 @@ pub fn listener(address: SocketAddr) -> JoinHandle<()> {
 #[tokio::test]
 async fn send() {
     // Make the network sender.
-    let mut committee = committee();
-    committee.increment_base_port(5000);
-    let (myself, _) = keys().pop().unwrap();
-    let sender = NetSender::make(myself, committee.clone());
+    let (tx, rx) = channel(1);
+    let mut sender = NetSender::new(rx);
+    tokio::spawn(async move {
+        sender.run().await;
+    });
 
     // Run a TCP server.
-    let (recipient, _) = keys().pop().unwrap();
-    let recipient_address = committee.address(&recipient).unwrap();
-    let handle = listener(recipient_address);
+    let address = "127.0.0.1:5000".parse::<SocketAddr>().unwrap();
+    let handle = listener(address);
 
-    // Send a vote.
-    let message = NetMessage::Vote(vote(), recipient);
-    let result = sender.send(message).await;
-    assert!(result.is_ok());
+    // Send a message.
+    let message = NetMessage(Bytes::from("Ok"), vec![address]);
+    let _ = tx.send(message).await;
 
     // Ensure the server received the message (ie. it did not panic).
     assert!(handle.await.is_ok());
@@ -41,25 +40,27 @@ async fn send() {
 #[tokio::test]
 async fn broadcast() {
     // Make the network sender.
-    let mut committee = committee();
-    committee.increment_base_port(5100);
-    let mut keys = keys();
-    let (myself, _) = keys.pop().unwrap();
-    let sender = NetSender::make(myself, committee.clone());
+    let (tx, rx) = channel(1);
+    let mut sender = NetSender::new(rx);
+    tokio::spawn(async move {
+        sender.run().await;
+    });
 
     // Run 3 TCP servers.
-    let handles: Vec<_> = (0..3)
-        .map(|_| {
-            let (recipient, _) = keys.pop().unwrap();
-            let recipient_address = committee.address(&recipient).unwrap();
-            listener(recipient_address)
+    let (handles, addresses): (Vec<_>, Vec<_>) = (0..3)
+        .map(|x| {
+            let address = format!("127.0.0.1:{}", 5100 + x)
+                .parse::<SocketAddr>()
+                .unwrap();
+            (listener(address), address)
         })
-        .collect();
+        .collect::<Vec<_>>()
+        .into_iter()
+        .unzip();
 
-    // Send a vote.
-    let message = NetMessage::Block(block());
-    let result = sender.send(message).await;
-    assert!(result.is_ok());
+    // Broadcast a message.
+    let message = NetMessage(Bytes::from("Ok"), addresses);
+    let _ = tx.send(message).await;
 
     // Ensure all servers received the broadcast.
     assert!(try_join_all(handles).await.is_ok());
@@ -68,26 +69,24 @@ async fn broadcast() {
 #[tokio::test]
 async fn receive() {
     // Make the network receiver.
-    let mut committee = committee();
-    committee.increment_base_port(5200);
-    let (myself, _) = keys().pop().unwrap();
-    let address = committee.address(&myself).unwrap();
-    let (tx_core, mut rx_core) = channel(1);
-    NetReceiver::make(&address, tx_core).await;
-
-    // Make the address and message to send.
-    let message = CoreMessage::Propose(block());
-    let bytes = Bytes::from(bincode::serialize(&message).unwrap());
+    let address = "127.0.0.1:5200".parse::<SocketAddr>().unwrap();
+    let (tx, mut rx): (Sender<String>, _) = channel(1);
+    let receiver = NetReceiver::new(address.clone(), tx);
+    tokio::spawn(async move {
+        receiver.run().await;
+    });
+    sleep(Duration::from_millis(50)).await;
 
     // Send a message.
-    let stream = TcpStream::connect(address.clone()).await.unwrap();
+    let message = "Ok";
+    let bytes = Bytes::from(bincode::serialize(message).unwrap());
+    let stream = TcpStream::connect(address).await.unwrap();
     let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
     transport.send(bytes.clone()).await.unwrap();
 
-    // Ensure the message gets passed to the core.
-    match rx_core.recv().await {
-        Some(CoreMessage::Propose(b)) => assert_eq!(b, block()),
+    // Ensure the message gets passed to the channel.
+    match rx.recv().await {
+        Some(value) => assert_eq!(value, message),
         _ => assert!(false),
     }
 }
-*/

@@ -11,6 +11,10 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
+#[cfg(test)]
+#[path = "tests/network_tests.rs"]
+pub mod network_tests;
+
 #[derive(Error, Debug)]
 pub enum NetworkError {
     #[error("Network error: {0}")]
