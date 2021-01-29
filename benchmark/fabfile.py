@@ -7,7 +7,7 @@ from benchmark.utils import Print
 
 
 @task
-def local(ctx, nodes=4, txs=250_000, size=512, rate=150_000, duration=5, debug=False):
+def local(ctx, nodes=4, txs=250_000, size=512, rate=150_000, duration=20, debug=False):
     try:
         LocalBench(nodes, txs, size, rate, duration).run(debug).print_summary()
     except (BenchError, ParseError) as e:
