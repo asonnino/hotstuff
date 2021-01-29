@@ -103,7 +103,7 @@ class LogParser:
         duration = end - start
         tps = sum(self.txs) / duration
         bps = tps * self.size[0]
-        return tps, bps
+        return tps, bps, duration
 
     def consensus_latency(self):
         latency = [c - self.proposals[r] for r, c in self.commits.items()]
@@ -116,12 +116,12 @@ class LogParser:
         duration = end - start
         tps = sum(self.txs) / duration
         bps = tps * self.size[0]
-        return tps, bps
+        return tps, bps, duration
 
     def print_summary(self):
         consensus_latency = self.consensus_latency()[0] * 1000
-        consensus_tps, consensus_bps = self.consensus_throughput()
-        end_to_end_tps, end_to_end_bps = self.end_to_end_throughput()
+        consensus_tps, consensus_bps, _ = self.consensus_throughput()
+        end_to_end_tps, end_to_end_bps, duration = self.end_to_end_throughput()
         print(
             '\n'
             '-----------------------------------------\n'
@@ -131,6 +131,7 @@ class LogParser:
             f' Number of transactions: {sum(self.txs):,} txs\n'
             f' Transaction size: {self.size[0]:,} B \n'
             f' Transaction rate: {sum(self.rate):,} tx/s\n'
+            f' Execution time: {round(duration):,} s\n'
             '\n'
             f' Consensus TPS: {round(consensus_tps):,} tx/s\n'
             f' Consensus BPS: {round(consensus_bps):,} B/s\n'
