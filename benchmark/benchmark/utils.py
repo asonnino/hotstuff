@@ -8,6 +8,7 @@ class Color:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
+
 class Print:
     @staticmethod
     def info(message):

@@ -40,7 +40,7 @@ impl Node {
         let (tx_commit, rx_commit) = channel(100);
 
         // Read the committee and secret key from file.
-        let committee: Committee = Committee::read(committee_file)?;
+        let committee = Committee::read(committee_file)?;
         let secret = Secret::read(key_file)?;
         let name = secret.name;
         let secret_key = secret.secret;

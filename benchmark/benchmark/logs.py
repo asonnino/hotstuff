@@ -1,13 +1,15 @@
+from datetime import datetime
 from glob import glob
+from itertools import repeat
+from multiprocessing import Pool
+from os.path import join
 from re import findall, search
 from statistics import mean, stdev
-from multiprocessing import Pool
-from datetime import datetime
-from os.path import join
-from itertools import repeat
+
 
 class ParseError(Exception):
     pass
+
 
 class LogParser:
     def __init__(self, clients, nodes):
@@ -41,23 +43,25 @@ class LogParser:
         # Ensure all (non-empty) blocks created are committed.
         if len(self.proposals) != len(self.commits):
             missing = len(self.proposals) - len(self.commits)
-            raise ParseError(f'{missing} non-empty blocks have not been committed')
+            raise ParseError(
+                f'{missing} non-empty blocks have not been committed')
 
     def _verify(self, clients, nodes):
-        # Ensure all clients managed to submit their share of txs. 
+        # Ensure all clients managed to submit their share of txs.
         status = [search(r'Finished', x) for x in clients]
         if sum(x is not None for x in status) != len(clients):
-            raise ParseError('One or more clients failed to send all their txs')
+            raise ParseError(
+                'One or more clients failed to send all their txs')
 
         # Ensure no node panicked.
         with Pool() as p:
-           status = p.starmap(search, zip(repeat(r'panic'), nodes))
+            status = p.starmap(search, zip(repeat(r'panic'), nodes))
         if any(x is not None for x in status):
             raise ParseError('One or more nodes panicked')
 
         # Ensure no transactions have been dropped.
         with Pool() as p:
-           status = p.starmap(search, zip(repeat(r'Mempool full'), nodes))
+            status = p.starmap(search, zip(repeat(r'Mempool full'), nodes))
         if any(x is not None for x in status):
             raise ParseError('Transactions dropped (mempool buffer full)')
 
@@ -70,11 +74,11 @@ class LogParser:
         start = self._parse_timestamp(tmp)
         tmp = search(r'([-:.T0123456789]*Z) (.*) (Finished)', log).group(1)
         end = self._parse_timestamp(tmp)
-    
+
         return txs, size, rate, start, end
 
     def _parse_nodes(self, log):
-        def parse(lines): 
+        def parse(lines):
             rounds = [int(search(r'(B)(\d+)', x).group(2)) for x in lines]
             times = [search(r'[-:.T0123456789]*Z', x).group(0) for x in lines]
             times = [self._parse_timestamp(x) for x in times]
@@ -84,7 +88,7 @@ class LogParser:
         rounds, times = parse(lines)
         proposals = {r: t for r, t in zip(rounds, times)}
 
-        lines =  findall(r'.* Committed B\d+', log)
+        lines = findall(r'.* Committed B\d+', log)
         rounds, times = parse(lines)
         commits = {r: t for r, t in zip(rounds, times) if r in proposals}
 

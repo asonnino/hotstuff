@@ -3,11 +3,12 @@ use bytes::BufMut as _;
 use bytes::BytesMut;
 use clap::{crate_name, crate_version, App, AppSettings};
 use env_logger::Env;
+use futures::future::join_all;
 use futures::sink::SinkExt as _;
 use log::info;
 use std::net::SocketAddr;
 use tokio::net::TcpStream;
-use tokio::time::{interval, timeout, Duration};
+use tokio::time::{interval, sleep, timeout, Duration};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 #[tokio::main]
@@ -19,6 +20,7 @@ async fn main() -> Result<()> {
         .args_from_usage("--transactions=<INT> 'The number of transactions for the benchmark'")
         .args_from_usage("--size=<INT> 'The size of each transaction in bytes'")
         .args_from_usage("--rate=<INT> 'The rate (txs/s) at which to send the transactions'")
+        .args_from_usage("--nodes=[ADDR]... 'The addresses of all nodes that must be online before starting the benchmark.'")
         .setting(AppSettings::ArgRequiredElseHelp)
         .get_matches();
 
@@ -57,6 +59,17 @@ async fn main() -> Result<()> {
         size,
         rate,
     };
+
+    // Wait for all nodes to be ready.
+    if let Some(nodes) = matches.values_of("nodes") {
+        let addresses = nodes
+            .map(|address| address.parse::<SocketAddr>())
+            .collect::<Result<Vec<_>, _>>()
+            .context("Invalid socket address format")?;
+        client.wait(addresses).await;
+    }
+
+    // Start the benchmark.
     client.send().await.context("Failed to submit transactions")
 }
 
@@ -126,5 +139,16 @@ impl Client {
                 .context("Failed to send transaction")?;
         }
         Ok(())
+    }
+
+    async fn wait(&self, addresses: Vec<SocketAddr>) {
+        join_all(addresses.into_iter().map(|address| {
+            tokio::spawn(async move {
+                while TcpStream::connect(address.clone()).await.is_err() {
+                    sleep(Duration::from_millis(50)).await;
+                }
+            })
+        }))
+        .await;
     }
 }
