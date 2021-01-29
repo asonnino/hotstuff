@@ -4,7 +4,7 @@ from os.path import basename, join, splitext
 from time import sleep
 
 from benchmark.commands import CommandMaker
-from benchmark.committee import Key, LocalCommittee
+from benchmark.config import Key, LocalCommittee, Parameters
 from benchmark.logs import LogParser, ParseError
 from benchmark.utils import Print
 
@@ -17,7 +17,7 @@ class LocalBench:
     BINARY_PATH = '../target/release/'
     NODE_CRATE_PATH = '../node'
 
-    def __init__(self, nodes, txs, size, rate):
+    def __init__(self, nodes, txs, size, rate, duration):
         assert isinstance(nodes, int) and nodes > 0
         assert isinstance(txs, int) and txs >= 0
         assert isinstance(size, int) and size > 0
@@ -27,9 +27,11 @@ class LocalBench:
         self.txs = txs
         self.size = size
         self.rate = rate
+        self.duration = duration
 
         self.base_port = 7000
         self.committee_file = '.committee.json'
+        self.parameters_file = '.parameters.json'
         self.key_files = [f'.node-{i}.json' for i in range(nodes)]
         self.node_logs = [f'logs/node-{i}.log' for i in range(nodes)]
         self.dbs = [f'.db-{i}' for i in range(nodes)]
@@ -44,9 +46,9 @@ class LocalBench:
         cmd = CommandMaker.kill().split()
         subprocess.run(cmd, stderr=subprocess.DEVNULL)
 
-    def run(self, delay, debug=False):
-        assert isinstance(delay, int) and delay > 0
-        Print.important('Starting local benchmark')
+    def run(self, debug=False):
+        assert isinstance(debug, bool)
+        Print.heading('Starting local benchmark')
 
         try:
             # Kill any previous testbed and cleanup all files.
@@ -54,7 +56,7 @@ class LocalBench:
             self._kill_nodes()
             cmd = CommandMaker.cleanup()
             subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
-            sleep(0.5)
+            sleep(0.5) # Removing the store may take time.
 
             # Recompile the latest code.
             cmd = CommandMaker.compile().split()
@@ -75,25 +77,38 @@ class LocalBench:
             committee = LocalCommittee(names, self.base_port)
             committee.print(self.committee_file)
 
-            # Run all nodes.
-            for key_file, db, log_file in zip(self.key_files, self.dbs, self.node_logs):
-                cmd = CommandMaker.run_node(
-                    key_file, self.committee_file, db, debug=debug)
-                self._background_run(cmd, log_file)
+            parameters = Parameters.default()
+            parameters.print(self.parameters_file)
 
-            # Wait a bit for the nodes to start and then run all clients.
-            # TODO: Wait for at least two timeouts, or add high_qc to timeout votes.
-            sleep(10)
-            Print.info(f'Running benchmark ({delay} sec)...')
+            # Run the clients (they will wait for the nodes to be ready).
             addresses = committee.front_addresses()
             load = ceil(self.txs / self.nodes)
             rate = ceil(self.rate / self.nodes)
+            timeout = parameters.timeout_delay
             for addr, log_file in zip(addresses, self.client_logs):
-                cmd = CommandMaker.run_client(addr, load, self.size, rate)
+                cmd = CommandMaker.run_client(
+                    addr,
+                    load,
+                    self.size,
+                    rate,
+                    timeout
+                )
+                self._background_run(cmd, log_file)
+
+            # Run the nodes.
+            for key_file, db, log_file in zip(self.key_files, self.dbs, self.node_logs):
+                cmd = CommandMaker.run_node(
+                    key_file,
+                    self.committee_file,
+                    db,
+                    self.parameters_file,
+                    debug=debug
+                )
                 self._background_run(cmd, log_file)
 
             # Wait for all transactions to be processed.
-            sleep(delay)
+            Print.info(f'Running benchmark ({self.duration} sec)...')
+            sleep(self.duration)
             self._kill_nodes()
 
             # Parse logs and return the parser.

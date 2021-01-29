@@ -18,25 +18,26 @@ class CommandMaker:
         return f'./node keys --filename {filename}'
 
     @staticmethod
-    def run_node(keys, committee, store, parameters=None, debug=False):
+    def run_node(keys, committee, store, parameters, debug=False):
         assert isinstance(keys, str)
         assert isinstance(committee, str)
-        assert isinstance(parameters, str) or parameters is None
+        assert isinstance(parameters, str)
         assert isinstance(debug, bool)
-        params = '' if parameters is None else f'--parameters {parameters}'
         v = '-vvv' if debug else '-vv'
-        return f'./node {v} run --keys {keys} --committee {committee} --store {store} {params}'
+        return (f'./node {v} run --keys {keys} --committee {committee} '
+                f'--store {store} --parameters {parameters}')
 
     @staticmethod
-    def run_client(address, txs, size, rate, nodes=[]):
+    def run_client(address, txs, size, rate, timeout, nodes=[]):
         assert isinstance(address, str)
         assert isinstance(txs, int)
         assert isinstance(size, int) and size > 0
         assert isinstance(rate, int) and rate >= 0
-        assert isinstance(nodes, list)
+        assert isinstance(nodes, list) 
         assert all(isinstance(x, str) for x in nodes)
-        cmd = f'./client {address} --transactions {txs} --size {size} --rate {rate}'
-        return f'{cmd} --nodes {" ".join(nodes)}' if nodes else cmd
+        nodes = f'--nodes {" ".join(nodes)}' if nodes else ''
+        return (f'./client {address} --transactions {txs} --size {size} '
+                f'--rate {rate} --timeout {timeout} {nodes}')
 
     @staticmethod
     def kill():

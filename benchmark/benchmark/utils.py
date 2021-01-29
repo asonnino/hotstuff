@@ -15,7 +15,7 @@ class Print:
         print(message)
 
     @staticmethod
-    def important(message):
+    def heading(message):
         print(f'{Color.OK_GREEN}{message}{Color.END}')
 
     @staticmethod

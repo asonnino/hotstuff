@@ -16,11 +16,12 @@ async fn main() -> Result<()> {
     let matches = App::new(crate_name!())
         .version(crate_version!())
         .about("Benchmark client for HotStuff nodes.")
-        .args_from_usage("<ADDR> 'The network address of the node where to send txs.'")
+        .args_from_usage("<ADDR> 'The network address of the node where to send txs'")
+        .args_from_usage("--timeout=<INT> 'The nodes timeout value'")
         .args_from_usage("--transactions=<INT> 'The number of transactions for the benchmark'")
         .args_from_usage("--size=<INT> 'The size of each transaction in bytes'")
         .args_from_usage("--rate=<INT> 'The rate (txs/s) at which to send the transactions'")
-        .args_from_usage("--nodes=[ADDR]... 'The addresses of all nodes that must be online before starting the benchmark.'")
+        .args_from_usage("--nodes=[ADDR]... 'Network addresses that must be reachable before starting the benchmark.'")
         .setting(AppSettings::ArgRequiredElseHelp)
         .get_matches();
 
@@ -28,7 +29,7 @@ async fn main() -> Result<()> {
         .format_timestamp_millis()
         .init();
 
-    let address = matches
+    let target = matches
         .value_of("ADDR")
         .unwrap()
         .parse::<SocketAddr>()
@@ -48,36 +49,46 @@ async fn main() -> Result<()> {
         .unwrap()
         .parse::<usize>()
         .context("The rate of transactions must be a non-negative integer")?;
+    let timeout = matches
+        .value_of("timeout")
+        .unwrap()
+        .parse::<u64>()
+        .context("The timeout value must be a non-negative integer")?;
+    let nodes = matches
+        .values_of("nodes")
+        .unwrap_or_default()
+        .into_iter()
+        .map(|x| x.parse::<SocketAddr>())
+        .collect::<Result<Vec<_>, _>>()
+        .context("Invalid socket address format")?;
 
-    info!("Node address: {}", address);
+    info!("Node address: {}", target);
     info!("Number of transactions: {}", transactions);
     info!("Transactions size: {} B", size);
     info!("Transactions rate: {} tx/s", rate);
     let client = Client {
-        address,
+        target,
         transactions,
         size,
         rate,
+        timeout,
+        nodes,
     };
 
-    // Wait for all nodes to be ready.
-    if let Some(nodes) = matches.values_of("nodes") {
-        let addresses = nodes
-            .map(|address| address.parse::<SocketAddr>())
-            .collect::<Result<Vec<_>, _>>()
-            .context("Invalid socket address format")?;
-        client.wait(addresses).await;
-    }
+    // Wait for all nodes to be online and synchronized.
+    client.wait().await;
 
     // Start the benchmark.
     client.send().await.context("Failed to submit transactions")
 }
 
 struct Client {
-    address: SocketAddr,
+    target: SocketAddr,
     transactions: usize,
     size: usize,
     rate: usize,
+    timeout: u64,
+    nodes: Vec<SocketAddr>,
 }
 
 impl Client {
@@ -96,12 +107,12 @@ impl Client {
         };
 
         // Connect to the mempool.
-        let stream = TcpStream::connect(self.address)
+        let stream = TcpStream::connect(self.target)
             .await
-            .context(format!("failed to connect to {}", self.address))?;
-        let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
+            .context(format!("failed to connect to {}", self.target))?;
 
         // Submit all transactions.
+        let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
         let interval = interval(Duration::from_millis(1000));
         tokio::pin!(interval);
         info!("Start sending transactions");
@@ -141,14 +152,20 @@ impl Client {
         Ok(())
     }
 
-    async fn wait(&self, addresses: Vec<SocketAddr>) {
-        join_all(addresses.into_iter().map(|address| {
+    pub async fn wait(&self) {
+        // First wait for all nodes to be online.
+        info!("Waiting for all nodes to be online...");
+        join_all(self.nodes.iter().cloned().map(|address| {
             tokio::spawn(async move {
-                while TcpStream::connect(address.clone()).await.is_err() {
-                    sleep(Duration::from_millis(50)).await;
+                while TcpStream::connect(address).await.is_err() {
+                    sleep(Duration::from_millis(10)).await;
                 }
             })
         }))
         .await;
+
+        // Then wait for the nodes to be synchronized.
+        info!("Waiting for all nodes to be synchronized...");
+        sleep(Duration::from_millis(2 * self.timeout)).await;
     }
 }
