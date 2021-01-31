@@ -9,7 +9,7 @@ from benchmark.logs import LogParser, ParseError
 from benchmark.utils import Print
 
 
-class BenchError(Exception):
+class LocalBenchError(Exception):
     pass
 
 
@@ -117,4 +117,4 @@ class LocalBench:
 
         except (subprocess.SubprocessError, ParseError) as e:
             self._kill_nodes()
-            raise BenchError(str(e))
+            raise LocalBenchError(str(e))
