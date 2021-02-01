@@ -13,53 +13,88 @@ from aws.remote import Bench, BenchError
 def local(ctx, nodes=4, txs=250_000, size=512, rate=100_000, duration=20, debug=False):
     try:
         LocalBench(nodes, txs, size, rate, duration).run(debug).print_summary()
-    except (LocalBenchError, ParseError) as e:
-        Print.error('Failed to run benchmark', cause=e)
+    except BenchError as e:
+        Print.error(e)
 
 
 @task
-def setup(ctx, nodes=4):
+def create(ctx, nodes=4):
     try:        
-        #InstanceManager.make().create_instances(nodes)
-        # TODO: Wait for instances to set up.
-        Bench(ctx).install()
-    except (SettingsError, AWSError, BenchError) as e:
-        Print.error('Failed to create testbed', cause=e)
+        InstanceManager.make().create_instances(nodes)
+    except BenchError as e:
+        Print.error(e)
 
 
 @task
 def destroy(ctx):
     try:
         InstanceManager.make().terminate_instances()
-    except (SettingsError, AWSError) as e:
-        Print.error('Failed to destroy testbed', cause=e)
+    except BenchError as e:
+        Print.error(e)
 
 
 @task
 def start(ctx):
     try:
         InstanceManager.make().start_instances()
-    except (SettingsError, AWSError) as e:
-        Print.error('Failed to start instances', cause=e)
+    except BenchError as e:
+        Print.error(e)
 
 
 @task
 def stop(ctx):
     try:
         InstanceManager.make().stop_instances()
-    except (SettingsError, AWSError) as e:
-        Print.error('Failed to stop instances', cause=e)
+    except BenchError as e:
+        Print.error(e)
 
 
 @task
 def info(ctx):
     try:
         InstanceManager.make().print_info()
-    except (SettingsError, AWSError) as e:
-        Print.error('Failed to gather machines information', cause=e)
+    except BenchError as e:
+        Print.error(e)
+
+
+@task
+def install(ctx):
+    try:        
+        Bench(ctx).install()
+    except BenchError as e:
+        Print.error(e)
 
 
 @task
 def bench(ctx):
-    # TODO
-    #Bench(ctx).run()
+    bench_parameters = {
+        'nodes': 4,
+        'txs': 250_000,
+        'size': 512,
+        'rate': 100_000,
+        'duration': 20,
+        'runs': 1,
+        'debug': False
+    }
+    node_parameters = {
+        'consensus': {
+            'timeout_delay': 5000,
+            'sync_retry_delay': 10_000
+        },
+        'mempool': {
+            'queue_capacity': 10_000,
+            'max_payload_size': 100_000
+        }
+    }
+    try:     
+        Bench(ctx).run(bench_parameters, node_parameters)
+    except BenchError as e:
+        Print.error(e)
+
+
+@task
+def kill(ctx):
+    try:     
+        Bench(ctx).kill()
+    except BenchError as e:
+        Print.error(e)

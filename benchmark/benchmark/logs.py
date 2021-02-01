@@ -50,14 +50,13 @@ class LogParser:
         # Ensure all clients managed to submit their share of txs.
         status = [search(r'Finished', x) for x in clients]
         if sum(x is not None for x in status) != len(clients):
-            raise ParseError(
-                'One or more clients failed to send all their txs')
+            raise ParseError('Client(s) failed to send all their txs')
 
         # Ensure no node panicked.
         with Pool() as p:
             status = p.starmap(search, zip(repeat(r'panic'), nodes))
         if any(x is not None for x in status):
-            raise ParseError('One or more nodes panicked')
+            raise ParseError('Node(s) panicked')
 
         # Ensure no transactions have been dropped.
         with Pool() as p:

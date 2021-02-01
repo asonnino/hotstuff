@@ -1,8 +1,8 @@
 import boto3
 from botocore.exceptions import ClientError
 
-from benchmark.utils import Print
-from aws.settings import Settings
+from benchmark.utils import Print, BenchError
+from aws.settings import Settings, SettingsError
 
 
 class AWSError(Exception):
@@ -24,7 +24,10 @@ class InstanceManager:
 
     @classmethod
     def make(cls, settings_file='settings.json'):
-        return cls(Settings.load(settings_file))
+        try:
+            return cls(Settings.load(settings_file))
+        except SettingsError as e:
+            raise BenchError('Failed to load settings', e)
 
     def _create_security_group(self):
         self.client.create_security_group(
@@ -96,7 +99,7 @@ class InstanceManager:
         except ClientError as e:
             error = AWSError(e)
             if error.code != 'InvalidGroup.Duplicate':
-                raise error
+                raise BenchError('Failed to create security group', error)
 
         try:
             self.client.run_instances(
@@ -125,7 +128,7 @@ class InstanceManager:
             )
             Print.info(f'Successfully created {instances} new instances')
         except ClientError as e:
-            raise AWSError(e)
+            raise BenchError('Failed to create AWS instances', AWSError(e))
 
     def _get(self, status):
         assert isinstance(status, list)
@@ -158,8 +161,7 @@ class InstanceManager:
                 self.client.terminate_instances(InstanceIds=ids)
             Print.heading(f'Testbed of {len(ids)} instances successfully destroyed')
         except ClientError as e:
-            raise AWSError(e)
-        
+            raise BenchError('Failed to terminate instances', AWSError(e))
         
     def start_instances(self):
         try:
@@ -168,7 +170,7 @@ class InstanceManager:
                 self.client.start_instances(InstanceIds=ids)
             Print.heading(f'Starting {len(ids)} instances')
         except ClientError as e:
-            raise AWSError(e)
+            raise BenchError('Failed to start instances', AWSError(e))
         
 
     def stop_instances(self):
@@ -178,13 +180,13 @@ class InstanceManager:
                 self.client.stop_instances(InstanceIds=ids)
             Print.heading(f'Stopping {len(ids)} instances')
         except ClientError as e:
-            raise AWSError(e)
+            raise BenchError(AWSError(e))
         
     def print_info(self):
         try:
             _, ips = self._get(['pending', 'running'])
         except ClientError as e:
-            raise AWSError(e)
+            raise BenchError('Failed to print instances info', AWSError(e))
 
         key = self.settings.key_path
         text = ''
@@ -207,4 +209,4 @@ class InstanceManager:
             _, ips = self._get(['pending', 'running'])
             return ips
         except ClientError as e:
-            raise AWSError(e)
+            raise BenchError('Failed to gather instances ip addresses', AWSError(e))

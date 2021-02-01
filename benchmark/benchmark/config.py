@@ -1,6 +1,10 @@
 from json import dump, load
 
 
+class ConfigError(Exception):
+    pass
+
+
 class Key:
     def __init__(self, name, secret):
         self.name = name
@@ -55,6 +59,8 @@ class Committee:
 
 class LocalCommittee(Committee):
     def __init__(self, names, port):
+        assert isinstance(names, list) and all(isinstance(x, str) for x in names)
+        assert isinstance(port, int)
         size = len(names)
         consensus = [f'127.0.0.1:{port + i}' for i in range(size)]
         front = [f'127.0.0.1:{port + i + size}' for i in range(size)]
@@ -63,23 +69,22 @@ class LocalCommittee(Committee):
 
 
 class Parameters:
-    def __init__(self, timeout_delay, sync_retry_delay, queue_capacity, max_payload_size):
-        assert isinstance(timeout_delay, int) and timeout_delay > 0
-        assert isinstance(sync_retry_delay, int) and sync_retry_delay > 0
-        assert isinstance(queue_capacity, int) and queue_capacity > 0
-        assert isinstance(max_payload_size, int) and max_payload_size > 0
+    def __init__(self, json):
+        assert isinstance(json, dict)
+        inputs = []
+        try:
+            inputs += [json['consensus']['timeout_delay']]
+            inputs += [json['consensus']['sync_retry_delay']]
+            inputs += [json['mempool']['queue_capacity']]
+            inputs += [json['mempool']['max_payload_size']]
+        except KeyError as e:
+            raise ConfigError(f'Malformed parameters: missing key {e}')
 
-        self.timeout_delay = timeout_delay
-        self.json = {
-            'consensus': {
-                'timeout_delay': timeout_delay,
-                'sync_retry_delay': sync_retry_delay
-            },
-            'mempool': {
-                'queue_capacity': queue_capacity,
-                'max_payload_size': max_payload_size
-            }
-        }
+        if not all((isinstance(x, int) and x > 0) for x in inputs):
+            raise ConfigError('Invalid parameters type')
+
+        self.timeout_delay = json['consensus']['timeout_delay'] 
+        self.json = json
 
     def print(self, filename):
         assert isinstance(filename, str)
@@ -88,4 +93,13 @@ class Parameters:
 
     @classmethod
     def default(cls):
-        return cls(5000, 10_000, 10_000, 100_000)
+        return cls({
+            'consensus': {
+                'timeout_delay': 5000,
+                'sync_retry_delay': 10_000
+            },
+            'mempool': {
+                'queue_capacity': 10_000,
+                'max_payload_size': 100_000
+            }
+        })

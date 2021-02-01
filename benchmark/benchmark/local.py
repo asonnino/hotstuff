@@ -6,11 +6,7 @@ from time import sleep
 from benchmark.commands import CommandMaker
 from benchmark.config import Key, LocalCommittee, Parameters
 from benchmark.logs import LogParser, ParseError
-from benchmark.utils import Print
-
-
-class LocalBenchError(Exception):
-    pass
+from benchmark.utils import Print, BenchError
 
 
 class LocalBench:
@@ -116,5 +112,6 @@ class LocalBench:
             return LogParser.process('./logs')
 
         except (subprocess.SubprocessError, ParseError) as e:
+            # TODO: Catch errors in _kill_nodes
             self._kill_nodes()
-            raise LocalBenchError(str(e))
+            raise BenchError('Failed to run benchmark', e)
