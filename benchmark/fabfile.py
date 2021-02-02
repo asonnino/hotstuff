@@ -1,6 +1,6 @@
 from fabric import task
 
-from benchmark.local import LocalBench, LocalBenchError
+from benchmark.local import LocalBench
 from benchmark.logs import ParseError
 from benchmark.utils import Print
 from aws.settings import SettingsError
@@ -10,9 +10,26 @@ from aws.remote import Bench, BenchError
 
 
 @task
-def local(ctx, nodes=4, txs=250_000, size=512, rate=100_000, duration=20, debug=False):
+def local(ctx, debug=False):
+    bench_parameters = {
+        'nodes': 4,
+        'txs': 250_000,
+        'size': 512,
+        'rate': 100_000,
+        'duration': 20,
+    }
+    node_parameters = {
+        'consensus': {
+            'timeout_delay': 5000,
+            'sync_retry_delay': 10_000
+        },
+        'mempool': {
+            'queue_capacity': 10_000,
+            'max_payload_size': 100_000
+        }
+    }
     try:
-        LocalBench(nodes, txs, size, rate, duration).run(debug).print_summary()
+        LocalBench(bench_parameters, node_parameters).run(debug=debug).print_summary()
     except BenchError as e:
         Print.error(e)
 
@@ -66,15 +83,14 @@ def install(ctx):
 
 
 @task
-def bench(ctx):
+def remote(ctx, debug=False):
     bench_parameters = {
         'nodes': 4,
         'txs': 250_000,
         'size': 512,
-        'rate': 100_000,
-        'duration': 20,
-        'runs': 1,
-        'debug': False
+        'rate': 50_000,
+        'duration': 60,
+        'runs': 2,
     }
     node_parameters = {
         'consensus': {
@@ -87,7 +103,7 @@ def bench(ctx):
         }
     }
     try:     
-        Bench(ctx).run(bench_parameters, node_parameters)
+        Bench(ctx).run(bench_parameters, node_parameters, debug=debug)
     except BenchError as e:
         Print.error(e)
 

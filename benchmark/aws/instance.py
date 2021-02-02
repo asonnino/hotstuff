@@ -17,6 +17,8 @@ class InstanceManager:
     def __init__(self, settings):
         assert isinstance(settings, Settings)
         self.settings = settings
+        # TODO: Do not hard code AWS region.
+        # TODO: Support for WAN bench.
         self.client = boto3.client('ec2', region_name='us-east-2')
 
         self.security_group_name = 'hotstuff'

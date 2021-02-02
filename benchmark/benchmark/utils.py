@@ -19,14 +19,19 @@ class Color:
 
 class Print:
     @staticmethod
+    def heading(message):
+        assert isinstance(message, str)
+        print(f'{Color.OK_GREEN}{message}{Color.END}')
+
+    @staticmethod
     def info(message):
         assert isinstance(message, str)
         print(message)
 
     @staticmethod
-    def heading(message):
+    def warn(message):
         assert isinstance(message, str)
-        print(f'{Color.OK_GREEN}{message}{Color.END}')
+        print(f'\n{Color.BOLD}{Color.WARNING}WARN{Color.END}: {message}\n')
 
     @staticmethod
     def error(e):

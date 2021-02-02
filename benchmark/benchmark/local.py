@@ -4,34 +4,23 @@ from os.path import basename, join, splitext
 from time import sleep
 
 from benchmark.commands import CommandMaker
-from benchmark.config import Key, LocalCommittee, Parameters
+from benchmark.config import Key, LocalCommittee, NodeParameters, BenchParameters, ConfigError
 from benchmark.logs import LogParser, ParseError
-from benchmark.utils import Print, BenchError
+from benchmark.utils import Print, BenchError, PathMaker
 
 
 class LocalBench:
-    BINARY_PATH = '../target/release/'
-    NODE_CRATE_PATH = '../node'
+    BASE_PORT = 7000
 
-    def __init__(self, nodes, txs, size, rate, duration):
-        assert isinstance(nodes, int) and nodes > 0
-        assert isinstance(txs, int) and txs >= 0
-        assert isinstance(size, int) and size > 0
-        assert isinstance(rate, int) and rate >= 0
+    def __init__(self, bench_parameters_dict, node_parameters_dict):
+        try:
+            self.bench_parameters = BenchParameters(bench_parameters_dict)
+            self.node_parameters = NodeParameters(node_parameters_dict)
+        except ConfigError as e:
+            raise BenchError('Invalid nodes or bench parameters', e)
 
-        self.nodes = nodes
-        self.txs = txs
-        self.size = size
-        self.rate = rate
-        self.duration = duration
-
-        self.base_port = 7000
-        self.committee_file = '.committee.json'
-        self.parameters_file = '.parameters.json'
-        self.key_files = [f'.node-{i}.json' for i in range(nodes)]
-        self.node_logs = [f'logs/node-{i}.log' for i in range(nodes)]
-        self.dbs = [f'.db-{i}' for i in range(nodes)]
-        self.client_logs = [f'logs/client-{i}.log' for i in range(nodes)]
+    def __getattr__(self, attr):
+        return getattr(self.bench_parameters, attr)
 
     def _background_run(self, command, log_file):
         name = splitext(basename(log_file))[0]
@@ -39,65 +28,74 @@ class LocalBench:
         subprocess.run(['tmux', 'new', '-d', '-s', name, cmd], check=True)
 
     def _kill_nodes(self):
-        cmd = CommandMaker.kill().split()
-        subprocess.run(cmd, stderr=subprocess.DEVNULL)
+        try:
+            cmd = CommandMaker.kill().split()
+            subprocess.run(cmd, stderr=subprocess.DEVNULL)
+        except subprocess.SubprocessError as e:
+            raise BenchError('Failed to kill testbed', e)
 
     def run(self, debug=False):
         assert isinstance(debug, bool)
         Print.heading('Starting local benchmark')
 
+        # Kill any previous testbed.
+        self._kill_nodes()
+
         try:
-            # Kill any previous testbed and cleanup all files.
             Print.info('Setting up testbed...')
-            self._kill_nodes()
+
+            # Cleanup all files.
             cmd = CommandMaker.cleanup()
             subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
             sleep(0.5) # Removing the store may take time.
 
             # Recompile the latest code.
             cmd = CommandMaker.compile().split()
-            subprocess.run(cmd, check=True, cwd=self.NODE_CRATE_PATH)
+            subprocess.run(cmd, check=True, cwd=PathMaker.node_crate_path())
 
             # Create alias for the client and nodes binary.
-            cmd = CommandMaker.alias_binaries(self.BINARY_PATH)
+            cmd = CommandMaker.alias_binaries(PathMaker.binary_path())
             subprocess.run([cmd], shell=True)
 
             # Generate configuration files.
             keys = []
-            for filename in self.key_files:
+            key_files = [PathMaker.key_file(i) for i in range(self.nodes)]
+            for filename in key_files:
                 cmd = CommandMaker.generate_key(filename).split()
                 subprocess.run(cmd, check=True)
                 keys += [Key.from_file(filename)]
 
             names = [x.name for x in keys]
-            committee = LocalCommittee(names, self.base_port)
-            committee.print(self.committee_file)
+            committee = LocalCommittee(names, self.BASE_PORT)
+            committee.print(PathMaker.committee_file())
 
-            parameters = Parameters.default()
-            parameters.print(self.parameters_file)
+            self.node_parameters.print(PathMaker.parameters_file())
 
             # Run the clients (they will wait for the nodes to be ready).
             addresses = committee.front_addresses()
-            load = ceil(self.txs / self.nodes)
-            rate = ceil(self.rate / self.nodes)
-            timeout = parameters.timeout_delay
-            for addr, log_file in zip(addresses, self.client_logs):
+            txs_share = ceil(self.txs / self.nodes)
+            rate_share = ceil(self.rate / self.nodes)
+            timeout = self.node_parameters.timeout_delay
+            client_logs = [PathMaker.client_log_file(i) for i in range(self.nodes)]
+            for addr, log_file in zip(addresses, client_logs):
                 cmd = CommandMaker.run_client(
                     addr,
-                    load,
+                    txs_share,
                     self.size,
-                    rate,
+                    rate_share,
                     timeout
                 )
                 self._background_run(cmd, log_file)
 
             # Run the nodes.
-            for key_file, db, log_file in zip(self.key_files, self.dbs, self.node_logs):
+            dbs = [PathMaker.db_path(i) for i in range(self.nodes)]
+            node_logs = [PathMaker.node_log_file(i) for i in range(self.nodes)]
+            for key_file, db, log_file in zip(key_files, dbs, node_logs):
                 cmd = CommandMaker.run_node(
                     key_file,
-                    self.committee_file,
+                    PathMaker.committee_file(),
                     db,
-                    self.parameters_file,
+                    PathMaker.parameters_file(),
                     debug=debug
                 )
                 self._background_run(cmd, log_file)
@@ -112,6 +110,5 @@ class LocalBench:
             return LogParser.process('./logs')
 
         except (subprocess.SubprocessError, ParseError) as e:
-            # TODO: Catch errors in _kill_nodes
             self._kill_nodes()
             raise BenchError('Failed to run benchmark', e)

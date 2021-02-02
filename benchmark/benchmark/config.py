@@ -68,9 +68,8 @@ class LocalCommittee(Committee):
         super().__init__(names, consensus, front, mempool)
 
 
-class Parameters:
+class NodeParameters:
     def __init__(self, json):
-        assert isinstance(json, dict)
         inputs = []
         try:
             inputs += [json['consensus']['timeout_delay']]
@@ -91,15 +90,15 @@ class Parameters:
         with open(filename, 'w') as f:
             dump(self.json, f, indent=4, sort_keys=True)
 
-    @classmethod
-    def default(cls):
-        return cls({
-            'consensus': {
-                'timeout_delay': 5000,
-                'sync_retry_delay': 10_000
-            },
-            'mempool': {
-                'queue_capacity': 10_000,
-                'max_payload_size': 100_000
-            }
-        })
+
+class BenchParameters:
+    def __init__(self, json):
+        try:
+            self.nodes = int(json['nodes'])
+            self.txs = int(json['txs'])
+            self.rate = int(json['rate'])
+            self.size = int(json['size'])
+            self.duration = int(json['duration'])
+            self.runs = int(json['runs']) if 'runs' in json else 1
+        except (KeyError, ValueError) as e:
+            raise ConfigError(f'Malformed bench parameters: missing key {e}')

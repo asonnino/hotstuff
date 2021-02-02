@@ -5,8 +5,7 @@ class CommandMaker:
 
     @staticmethod
     def cleanup():
-        return ('rm -r .db-* ; rm .*.json ; rm -r logs ; '
-                'rm node ; rm client ; mkdir -p logs')
+        return 'rm -r .db-* ; rm .*.json ; rm -r logs ; mkdir -p logs'
 
     @staticmethod
     def compile():
@@ -47,4 +46,4 @@ class CommandMaker:
     def alias_binaries(origin):
         assert isinstance(origin, str)
         node, client = join(origin, 'node'), join(origin, 'client')
-        return f'ln -s {node} . ; ln -s {client} .'
+        return f'rm node ; rm client ; ln -s {node} . ; ln -s {client} .'
