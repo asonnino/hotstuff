@@ -31,7 +31,7 @@ class Print:
     @staticmethod
     def warn(message):
         assert isinstance(message, str)
-        print(f'\n{Color.BOLD}{Color.WARNING}WARN{Color.END}: {message}\n')
+        print(f'{Color.BOLD}{Color.WARNING}WARN{Color.END}: {message}\n')
 
     @staticmethod
     def error(e):

@@ -86,10 +86,10 @@ def install(ctx):
 def remote(ctx, debug=False):
     bench_parameters = {
         'nodes': 4,
-        'txs': 250_000,
+        'txs': 1_000_000,
         'size': 512,
         'rate': 50_000,
-        'duration': 60,
+        'duration': 120,
         'runs': 2,
     }
     node_parameters = {

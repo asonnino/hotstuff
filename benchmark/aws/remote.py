@@ -226,19 +226,15 @@ class Bench:
             raise BenchError('Failed to configure nodes', FabricError(e))
 
         # Run the benchmark.
-        try:
-            for i in range(bench_parameters.runs):
-                Print.heading(f'[{i+1}/{bench_parameters.runs}] Running benchmark ({bench_parameters.duration} sec)...')
+        runs = bench_parameters.runs
+        for i in range(runs):
+            Print.heading(f'[{i+1}/{runs}] Running benchmark ({bench_parameters.duration} sec)...')
+            try:
                 self._run_single(hosts, committee, bench_parameters, node_parameters, debug)
                 parser = self._logs(hosts)
                 # TODO: save the parser and handle multiple runs.
                 parser.print_summary()
-
-        except (subprocess.SubprocessError, GroupException) as e:
-            self.kill(hosts=hosts)
-            raise BenchError('Failed to run benchmark', FabricError(e))
-
-        except ParseError as e:
-            raise BenchError('Failed to parse logs', e)
-
-
+            except (subprocess.SubprocessError, GroupException, ParseError) as e:
+                self.kill(hosts=hosts)
+                Print.error(BenchError('Benchmark failed', e))
+                continue
