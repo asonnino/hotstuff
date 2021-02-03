@@ -18,7 +18,7 @@ class FabricError(Exception):
     ''' Wrapper for Fabric exception with a meaningfull error message. '''
     def __init__(self, error):
         assert isinstance(error, GroupException)
-        message = list(error.result.values())[0]
+        message = list(error.result.values())[-1]
         super().__init__(message)
 
 
@@ -37,37 +37,38 @@ class Bench:
     def install(self):
         Print.info('Installing rust and cloning the repo...')
         cmd = [
-            'sudo apt update',
-            'sudo apt -y upgrade',
-            'sudo apt -y autoremove',
+            'sudo apt-get update',
+            'sudo apt-get -y upgrade',
+            'sudo apt-get -y autoremove',
 
-            # The following dependencies prevent the error: [error: linker `cc` not found]
-            'sudo apt -y install build-essential',
-            'sudo apt -y install cmake',
+            # The following dependencies prevent the error: [error: linker `cc` not found].
+            'sudo apt-get -y install build-essential',
+            'sudo apt-get -y install cmake',
 
-            # Install rust (non-interactive)
+            # Install rust (non-interactive).
             'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y',
             'source $HOME/.cargo/env',
             'rustup default stable',
 
             # This is missing from the RockDB installer (needed for RockDB).
-            'sudo apt install -y clang',
+            'sudo apt-get install -y clang',
 
             # Clone the repo.
-            f'git clone {self.settings.repo_url} || (cd {self.settings.repo_name} ; git pull)'
+            f'(git clone {self.settings.repo_url} || (cd {self.settings.repo_name} ; git pull))'
         ]
-        hosts = self.manager.hosts()
+        hosts = self.manager.hosts(flat=True)
         try:
             g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect_kwargs)
             g.run(' && '.join(cmd), hide=True)
             Print.heading(f'Testbed of {len(hosts)} nodes successfully initialized')
         except GroupException as e:
+            print(e)
             raise BenchError('Failed to install repo on testbed', FabricError(e))
 
     def kill(self, hosts=[], delete_logs=False):
         assert isinstance(hosts, list)
         assert isinstance(delete_logs, bool)
-        hosts = hosts if hosts else self.manager.hosts()
+        hosts = hosts if hosts else self.manager.hosts(flat=True)
         delete_logs = 'rm -r logs ; mkdir -p logs' if delete_logs else 'true'
         cmd = [delete_logs, f'({CommandMaker.kill()} || true)']
         try:
@@ -77,10 +78,16 @@ class Bench:
             raise BenchError('Failed to kill nodes', FabricError(e))
 
     def _select_hosts(self, nodes):
-        # TODO: Ensure there are enough hosts.
-        # TODO: Select the hosts to be in different data centers,
-        # and as far apart as possible (geographically).
-        return self.manager.hosts()[:nodes]
+        # Ensure there are enough hosts.
+        hosts = self.manager.hosts()
+        if sum(len(x) for x in hosts.values()) < nodes:
+            return []
+        
+        # Select the hosts to be in different data centers, and as far apart 
+        # as possible (geographically).
+        ordered = zip(*hosts.values())
+        ordered = [x for y in ordered for x in y]
+        return ordered[:nodes]
 
     def _background_run(self, host, command, log_file):
         name = splitext(basename(log_file))[0]
@@ -217,7 +224,7 @@ class Bench:
         # Select which hosts to use.
         hosts = self._select_hosts(bench_parameters.nodes)
         if not hosts:
-            Print.warn('There are no available nodes')
+            Print.warn('There are not enough instances available')
             return
 
         # Update nodes.

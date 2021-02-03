@@ -1,4 +1,5 @@
 from fabric import task
+from time import sleep
 
 from benchmark.local import LocalBench
 from benchmark.logs import ParseError
@@ -11,14 +12,14 @@ from aws.remote import Bench, BenchError
 
 @task
 def local(ctx, debug=False):
-    bench_parameters = {
+    bench_params = {
         'nodes': 4,
         'txs': 250_000,
         'size': 512,
         'rate': 100_000,
         'duration': 20,
     }
-    node_parameters = {
+    node_params = {
         'consensus': {
             'timeout_delay': 5000,
             'sync_retry_delay': 10_000
@@ -29,15 +30,17 @@ def local(ctx, debug=False):
         }
     }
     try:
-        LocalBench(bench_parameters, node_parameters).run(debug=debug).print_summary()
+        LocalBench(bench_params, node_params).run(debug=debug).print_summary()
     except BenchError as e:
         Print.error(e)
 
 
 @task
-def create(ctx, nodes=4):
-    try:        
+def setup(ctx, nodes=4):
+    try:
         InstanceManager.make().create_instances(nodes)
+        sleep(1) # Allows to break and re-create an SSH connection.
+        Bench(ctx).install()
     except BenchError as e:
         Print.error(e)
 
@@ -75,42 +78,34 @@ def info(ctx):
 
 
 @task
-def install(ctx):
-    try:        
-        Bench(ctx).install()
-    except BenchError as e:
-        Print.error(e)
-
-
-@task
 def remote(ctx, debug=False):
-    bench_parameters = {
+    bench_params = {
         'nodes': 4,
-        'txs': 10_000_000,
+        'txs': 1_000_000,
         'size': 512,
-        'rate': 100_000,
-        'duration': 120,
+        'rate': 0,
+        'duration': 350,
         'runs': 1,
     }
-    node_parameters = {
+    node_params = {
         'consensus': {
             'timeout_delay': 5000,
             'sync_retry_delay': 10_000
         },
         'mempool': {
-            'queue_capacity': 1_000_000,
-            'max_payload_size': 10_000
+            'queue_capacity': 10_000_000,
+            'max_payload_size': 1_000
         }
     }
-    try:     
-        Bench(ctx).run(bench_parameters, node_parameters, debug=debug)
+    try:
+        Bench(ctx).run(bench_params, node_params, debug=debug)
     except BenchError as e:
         Print.error(e)
 
 
 @task
 def kill(ctx):
-    try:     
+    try:
         Bench(ctx).kill()
     except BenchError as e:
         Print.error(e)
