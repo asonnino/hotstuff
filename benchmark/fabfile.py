@@ -85,12 +85,12 @@ def install(ctx):
 @task
 def remote(ctx, debug=False):
     bench_parameters = {
-        'nodes': 4,
-        'txs': 1_000_000,
+        'nodes': 8,
+        'txs': 10_000_000,
         'size': 512,
-        'rate': 50_000,
+        'rate': 100_000,
         'duration': 120,
-        'runs': 2,
+        'runs': 1,
     }
     node_parameters = {
         'consensus': {
@@ -98,8 +98,8 @@ def remote(ctx, debug=False):
             'sync_retry_delay': 10_000
         },
         'mempool': {
-            'queue_capacity': 10_000,
-            'max_payload_size': 100_000
+            'queue_capacity': 1_000_000,
+            'max_payload_size': 10_000
         }
     }
     try:     

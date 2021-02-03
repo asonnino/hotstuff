@@ -6,6 +6,8 @@ from os.path import join
 from re import findall, search
 from statistics import mean, stdev
 
+from .utils import Print
+
 
 class ParseError(Exception):
     pass
@@ -42,9 +44,8 @@ class LogParser:
 
         # Ensure all (non-empty) blocks created are committed.
         if len(self.proposals) != len(self.commits):
-            missing = len(self.proposals) - len(self.commits)
-            raise ParseError(
-                f'{missing} non-empty blocks have not been committed')
+            miss = len(self.proposals) - len(self.commits)
+            Print.warn(f'{miss} non-empty blocks have not been committed')
 
     def _verify(self, clients, nodes):
         # Ensure all clients managed to submit their share of txs.
@@ -52,17 +53,16 @@ class LogParser:
         if sum(x is not None for x in status) != len(clients):
             raise ParseError('Client(s) failed to send all their txs')
 
-        # Ensure no node panicked.
         with Pool() as p:
+            # Ensure no node panicked.
             status = p.starmap(search, zip(repeat(r'panic'), nodes))
-        if any(x is not None for x in status):
-            raise ParseError('Node(s) panicked')
+            if any(x is not None for x in status):
+                raise ParseError('Node(s) panicked')
 
-        # Ensure no transactions have been dropped.
-        with Pool() as p:
-            status = p.starmap(search, zip(repeat(r'Mempool full'), nodes))
-        if any(x is not None for x in status):
-            raise ParseError('Transactions dropped (mempool buffer full)')
+            # Ensure no transactions have been dropped.
+            status = p.starmap(search, zip(repeat(r'dropping transaction'), nodes))
+            if any(x is not None for x in status):
+                raise ParseError('Transactions dropped (mempool buffer full)')
 
     def _parse_clients(self, log):
         txs = int(search(r'(Number of transactions:) (\d+)', log).group(2))

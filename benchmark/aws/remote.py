@@ -8,7 +8,7 @@ from math import ceil
 import subprocess
 
 from benchmark.config import Committee, Key, NodeParameters, BenchParameters, ConfigError
-from benchmark.utils import BenchError, Print, PathMaker
+from benchmark.utils import BenchError, Print, PathMaker, progress_bar
 from benchmark.commands import CommandMaker
 from benchmark.logs import LogParser, ParseError
 from aws.instance import InstanceManager
@@ -140,8 +140,8 @@ class Bench:
         g.run(cmd, hide=True)
 
         # Upload configuration files.
-        for i, host in enumerate(hosts):
-            print(f' [{i+1}/{len(hosts)}] Uploading config files...', end='\r')
+        progress = progress_bar(hosts, prefix = 'Uploading config files:')
+        for i, host in enumerate(progress):
             c = Connection(host, user='ubuntu', connect_kwargs=self.connect_kwargs)
             c.put(PathMaker.committee_file(), '.')
             c.put(PathMaker.key_file(i), '.')
@@ -186,13 +186,15 @@ class Bench:
             self._background_run(host, cmd, log_file)
 
         # Wait for all transactions to be processed.
-        sleep(bench_parameters.duration)
+        duration = ceil(bench_parameters.duration / 10)
+        for _ in progress_bar(range(10), prefix=f'Running benchmark ({bench_parameters.duration} sec):'):
+            sleep(duration)
         self.kill(hosts=hosts, delete_logs=False)
 
     def _logs(self, hosts):
         # Download log files.
-        for i, host in enumerate(hosts):
-            print(f' [{i+1}/{len(hosts)}] Downloading logs...', end='\r')
+        progress = progress_bar(hosts, prefix = 'Downloading logs:')
+        for i, host in enumerate(progress):
             c = Connection(host, user='ubuntu', connect_kwargs=self.connect_kwargs)
             c.get(PathMaker.node_log_file(i), local=PathMaker.node_log_file(i))
             c.get(PathMaker.client_log_file(i), local=PathMaker.client_log_file(i))
@@ -228,7 +230,7 @@ class Bench:
         # Run the benchmark.
         runs = bench_parameters.runs
         for i in range(runs):
-            Print.heading(f'[{i+1}/{runs}] Running benchmark ({bench_parameters.duration} sec)...')
+            Print.heading(f'Starting benchmark {i+1}/{runs}')
             try:
                 self._run_single(hosts, committee, bench_parameters, node_parameters, debug)
                 parser = self._logs(hosts)

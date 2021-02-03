@@ -14,15 +14,15 @@ class AWSError(Exception):
 
 
 class InstanceManager:
+    INSTANCE_NAME = 'hotstuff-node'
+    SECURITY_GROUP_NAME = 'hotstuff'
+
     def __init__(self, settings):
         assert isinstance(settings, Settings)
         self.settings = settings
-        # TODO: Do not hard code AWS region.
         # TODO: Support for WAN bench.
-        self.client = boto3.client('ec2', region_name='us-east-2')
-
-        self.security_group_name = 'hotstuff'
-        self.instance_name = 'hotstuff-node'
+        region = settings.aws_regions[0]
+        self.client = boto3.client('ec2', region_name=region)
 
     @classmethod
     def make(cls, settings_file='settings.json'):
@@ -34,11 +34,11 @@ class InstanceManager:
     def _create_security_group(self):
         self.client.create_security_group(
             Description='HotStuff node',
-            GroupName=self.security_group_name,
+            GroupName=self.SECURITY_GROUP_NAME,
         )
 
         self.client.authorize_security_group_ingress(
-            GroupName=self.security_group_name,
+            GroupName=self.SECURITY_GROUP_NAME,
             IpPermissions=[
                 {
                     'IpProtocol': 'tcp',
@@ -105,17 +105,17 @@ class InstanceManager:
 
         try:
             self.client.run_instances(
-                ImageId='ami-0a91cd140a1fc148a', # Ubuntu 20.04
-                InstanceType='t3.medium',
+                ImageId='ami-0885b1f6bd170450c', # Ubuntu 20.04
+                InstanceType=self.settings.instance_type,
                 KeyName='aws',
                 MaxCount=instances,
                 MinCount=instances,
-                SecurityGroups=[self.security_group_name],
+                SecurityGroups=[self.SECURITY_GROUP_NAME],
                 TagSpecifications=[{
                     'ResourceType': 'instance',
                     'Tags': [{
                         'Key': 'Name',
-                        'Value': self.instance_name
+                        'Value': self.INSTANCE_NAME
                     }]
                 }],
                 EbsOptimized=True,
@@ -141,7 +141,7 @@ class InstanceManager:
             Filters=[
                 {
                     'Name': 'tag:Name',
-                    'Values': [self.instance_name]
+                    'Values': [self.INSTANCE_NAME]
                 },
                 {
                     'Name': 'instance-state-name',
