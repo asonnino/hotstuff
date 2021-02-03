@@ -24,22 +24,22 @@ class PathMaker:
         return '.parameters.json'
 
     @staticmethod
-    def key_file(i): 
+    def key_file(i):
         assert isinstance(i, int) and i >= 0
         return f'.node-{i}.json'
 
     @staticmethod
-    def db_path(i): 
+    def db_path(i):
         assert isinstance(i, int) and i >= 0
         return f'.db-{i}'
 
     @staticmethod
-    def node_log_file(i): 
+    def node_log_file(i):
         assert isinstance(i, int) and i >= 0
         return f'logs/node-{i}.log'
 
     @staticmethod
-    def client_log_file(i): 
+    def client_log_file(i):
         assert isinstance(i, int) and i >= 0
         return f'logs/client-{i}.log'
 
@@ -84,7 +84,7 @@ class Print:
         print(f'Caused by: \n{"".join(causes)}\n')
 
 
-def progress_bar(iterable, prefix = '', suffix = '', decimals = 1, length = 30, fill = '█', printEnd = "\r"):
+def progress_bar(iterable, prefix='', suffix='', decimals=1, length=30, fill='█', printEnd='\r'):
     """
     Call in a loop to create terminal progress bar
     @params:
@@ -98,11 +98,12 @@ def progress_bar(iterable, prefix = '', suffix = '', decimals = 1, length = 30, 
         printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
     """
     total = len(iterable)
-    def printProgressBar (iteration):
-        percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    def printProgressBar(iteration):
+        formatter = '{0:.'+str(decimals)+'f}'
+        percent = formatter.format(100 * (iteration / float(total)))
         filledLength = int(length * iteration // total)
         bar = fill * filledLength + '-' * (length - filledLength)
-        print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+        print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=printEnd)
 
     printProgressBar(0)
     for i, item in enumerate(iterable):

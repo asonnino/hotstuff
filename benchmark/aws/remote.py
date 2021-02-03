@@ -150,6 +150,8 @@ class Bench:
         return committee
 
     def _run_single(self, hosts, committee, bench_parameters, node_parameters, debug=False):
+        Print.info('Starting clients and nodes...')
+
         # Kill any potentially unfinished run and delete logs.
         self.kill(hosts=hosts, delete_logs=True)
         subprocess.run(['rm -r logs ; mkdir -p logs'], shell=True, stderr=subprocess.DEVNULL)
@@ -214,6 +216,9 @@ class Bench:
 
         # Select which hosts to use.
         hosts = self._select_hosts(bench_parameters.nodes)
+        if not hosts:
+            Print.warn('There are no available nodes')
+            return
 
         # Update nodes.
         try:
