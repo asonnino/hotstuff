@@ -69,7 +69,7 @@ class Bench:
         assert isinstance(hosts, list)
         assert isinstance(delete_logs, bool)
         hosts = hosts if hosts else self.manager.hosts(flat=True)
-        delete_logs = 'rm -r logs ; mkdir -p logs' if delete_logs else 'true'
+        delete_logs = CommandMaker.clean_logs() if delete_logs else 'true'
         cmd = [delete_logs, f'({CommandMaker.kill()} || true)']
         try:
             g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect_kwargs)
@@ -161,7 +161,6 @@ class Bench:
 
         # Kill any potentially unfinished run and delete logs.
         self.kill(hosts=hosts, delete_logs=True)
-        subprocess.run(['rm -r logs ; mkdir -p logs'], shell=True, stderr=subprocess.DEVNULL)
         
         # Run the clients (they will wait for the nodes to be ready).
         addresses = committee.front_addresses()
@@ -201,6 +200,10 @@ class Bench:
         self.kill(hosts=hosts, delete_logs=False)
 
     def _logs(self, hosts):
+        # Delete local logs (if any).
+        cmd = CommandMaker.clean_logs()
+        subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
+
         # Download log files.
         progress = progress_bar(hosts, prefix = 'Downloading logs:')
         for i, host in enumerate(progress):
@@ -246,8 +249,8 @@ class Bench:
             try:
                 self._run_single(hosts, committee, bench_parameters, node_parameters, debug)
                 parser = self._logs(hosts)
-                # TODO: save the parser and handle multiple runs.
                 parser.print_summary()
+                # TODO: save the parser and handle multiple runs.
             except (subprocess.SubprocessError, GroupException, ParseError) as e:
                 self.kill(hosts=hosts)
                 Print.error(BenchError('Benchmark failed', e))

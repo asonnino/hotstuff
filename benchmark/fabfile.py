@@ -11,7 +11,7 @@ from aws.remote import Bench, BenchError
 
 
 @task
-def local(ctx, debug=False):
+def local(ct):
     bench_params = {
         'nodes': 4,
         'txs': 250_000,
@@ -30,7 +30,7 @@ def local(ctx, debug=False):
         }
     }
     try:
-        LocalBench(bench_params, node_params).run(debug=debug).print_summary()
+        LocalBench(bench_params, node_params).run(debug=False).print_summary()
     except BenchError as e:
         Print.error(e)
 
@@ -84,7 +84,7 @@ def install(ctx):
 
 
 @task
-def remote(ctx, debug=False):
+def remote(ctx):
     bench_params = {
         'nodes': 4,
         'txs': 250_000,
@@ -105,7 +105,7 @@ def remote(ctx, debug=False):
         }
     }
     try:
-        Bench(ctx).run(bench_params, node_params, debug=debug)
+        Bench(ctx).run(bench_params, node_params, debug=False)
     except BenchError as e:
         Print.error(e)
 
