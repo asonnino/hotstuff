@@ -157,7 +157,7 @@ class Bench:
         return committee
 
     def _run_single(self, hosts, committee, bench_parameters, node_parameters, debug=False):
-        Print.info('Starting clients and nodes...')
+        Print.info('Booting testbed...')
 
         # Kill any potentially unfinished run and delete logs.
         self.kill(hosts=hosts, delete_logs=True)

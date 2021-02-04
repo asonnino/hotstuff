@@ -6,7 +6,7 @@ from os.path import join
 from re import findall, search
 from statistics import mean, stdev
 
-from .utils import Print
+from benchmark.utils import Print
 
 
 class ParseError(Exception):
@@ -42,9 +42,15 @@ class LogParser:
         self.proposals = {k: v for x in proposals for k, v in x.items()}
         self.commits = {k: v for x in commits for k, v in x.items()}
 
-        # Ensure all (non-empty) blocks created are committed.
-        if len(self.proposals) != len(self.commits):
-            miss = len(self.proposals) - len(self.commits)
+        # Check whether clients missed their target rate.
+        status = [search(r'rate too high', x) for x in clients]
+        miss = sum(x is not None for x in status)
+        if miss != 0:    
+            Print.warn(f'Clients missed their target rate {miss} time(s)')
+
+        # Check whether all (non-empty) blocks created are committed.
+        miss = len(self.proposals) - len(self.commits)
+        if miss != 0:   
             Print.warn(f'{miss} non-empty blocks have not been committed')
 
     def _verify(self, clients, nodes):
