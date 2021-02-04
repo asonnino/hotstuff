@@ -43,15 +43,15 @@ class LogParser:
         self.commits = {k: v for x in commits for k, v in x.items()}
 
         # Check whether clients missed their target rate.
-        status = [search(r'rate too high', x) for x in clients]
-        miss = sum(x is not None for x in status)
+        status = [findall(r'rate too high', x) for x in clients]
+        miss = sum(len(x) for x in status)
         if miss != 0:    
             Print.warn(f'Clients missed their target rate {miss} time(s)')
 
         # Check whether all (non-empty) blocks created are committed.
         miss = len(self.proposals) - len(self.commits)
         if miss != 0:   
-            Print.warn(f'{miss} non-empty blocks have not been committed')
+            Print.warn(f'Nodes did not commit {miss} non-empty block(s)')
 
     def _verify(self, clients, nodes):
         # Ensure all clients managed to submit their share of txs.

@@ -7,9 +7,8 @@ use futures::future::join_all;
 use futures::sink::SinkExt as _;
 use log::{info, warn};
 use std::net::SocketAddr;
-use std::time::Instant;
 use tokio::net::TcpStream;
-use tokio::time::{interval, sleep, Duration};
+use tokio::time::{interval, sleep, Duration, Instant};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 #[tokio::main]
@@ -119,15 +118,19 @@ impl Client {
 
         // Submit all transactions.
         let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
-        let interval = interval(Duration::from_millis(1000 / precision as u64));
-        tokio::pin!(interval);
+        //let interval = interval(Duration::from_millis(1000 / precision as u64));
+        //tokio::pin!(interval);
+        let delay = 1000 / precision as u64;
         info!("Start sending transactions");
         for x in 0..batches {
-            interval.as_mut().tick().await;
+            //interval.as_mut().tick().await;
             let now = Instant::now();
             self.send_burst(&mut transport, burst, x as u64).await?;
-            if now.elapsed().as_millis() > 1000 / precision as u128 {
+            let duration = now.elapsed().as_millis() as u64;
+            if self.rate != 0 && duration > delay {
                 warn!("Transaction rate too high for this client");
+            } else {
+                sleep(Duration::from_millis(delay - duration)).await;
             }
         }
         info!("Finished sending transactions");
