@@ -83,8 +83,7 @@ class Bench:
         if sum(len(x) for x in hosts.values()) < nodes:
             return []
         
-        # Select the hosts to be in different data centers, and as far apart 
-        # as possible (geographically).
+        # Select the hosts in different data centers.
         ordered = zip(*hosts.values())
         ordered = [x for y in ordered for x in y]
         return ordered[:nodes]

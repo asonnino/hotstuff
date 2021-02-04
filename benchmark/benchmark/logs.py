@@ -49,9 +49,8 @@ class LogParser:
             Print.warn(f'Clients missed their target rate {miss} time(s)')
 
         # Check whether all (non-empty) blocks created are committed.
-        miss = len(self.proposals) - len(self.commits)
-        if miss != 0:   
-            Print.warn(f'Nodes did not commit {miss} non-empty block(s)')
+        if len(self.proposals) != len(self.commits):
+            raise ParseError('Nodes did not commit all non-empty block(s)')
 
     def _verify(self, clients, nodes):
         # Ensure all clients managed to submit their share of txs.
