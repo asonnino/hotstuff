@@ -36,11 +36,9 @@ def local(ctx, debug=False):
 
 
 @task
-def setup(ctx, nodes=4):
+def create(ctx, nodes=4):
     try:
         InstanceManager.make().create_instances(nodes)
-        sleep(1) # Allows to break and re-create an SSH connection.
-        Bench(ctx).install()
     except BenchError as e:
         Print.error(e)
 
@@ -73,6 +71,14 @@ def stop(ctx):
 def info(ctx):
     try:
         InstanceManager.make().print_info()
+    except BenchError as e:
+        Print.error(e)
+
+
+@task
+def install(ctx):
+    try:
+        Bench(ctx).install()
     except BenchError as e:
         Print.error(e)
 

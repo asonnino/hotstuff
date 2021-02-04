@@ -188,8 +188,7 @@ class InstanceManager:
             # Wait for the instances to boot.
             Print.info('Waiting for all instances to boot...')
             self._wait(['pending'])
-            sleep(15)  # Wait for the OS to boot.
-            Print.heading(f'Successfully created {instances} new instances')
+            Print.heading(f'Successfully created {size} new instances')
         except ClientError as e:
             raise BenchError('Failed to create AWS instances', AWSError(e))
 

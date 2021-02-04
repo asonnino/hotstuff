@@ -5,10 +5,11 @@ use clap::{crate_name, crate_version, App, AppSettings};
 use env_logger::Env;
 use futures::future::join_all;
 use futures::sink::SinkExt as _;
-use log::info;
+use log::{warn, info};
 use std::net::SocketAddr;
+use std::time::Instant;
 use tokio::net::TcpStream;
-use tokio::time::{interval, sleep, timeout, Duration};
+use tokio::time::{interval, sleep, Duration};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 #[tokio::main]
@@ -118,15 +119,10 @@ impl Client {
         info!("Start sending transactions");
         for x in 0..batches {
             interval.as_mut().tick().await;
-            if self.rate == 0 {
-                self.send_burst(&mut transport, burst, x as u64).await?;
-            } else {
-                timeout(
-                    Duration::from_millis(1000),
-                    self.send_burst(&mut transport, burst, x as u64),
-                )
-                .await
-                .context("transaction rate too high for this client")??;
+            let now = Instant::now();
+            self.send_burst(&mut transport, burst, x as u64).await?;
+            if now.elapsed().as_secs() > 1 {
+                warn!("transaction rate too high for this client");
             }
         }
         info!("Finished sending transactions");
