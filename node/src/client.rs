@@ -5,7 +5,7 @@ use clap::{crate_name, crate_version, App, AppSettings};
 use env_logger::Env;
 use futures::future::join_all;
 use futures::sink::SinkExt as _;
-use log::{warn, info};
+use log::{info, warn};
 use std::net::SocketAddr;
 use std::time::Instant;
 use tokio::net::TcpStream;
@@ -122,7 +122,7 @@ impl Client {
             let now = Instant::now();
             self.send_burst(&mut transport, burst, x as u64).await?;
             if now.elapsed().as_secs() > 1 {
-                warn!("transaction rate too high for this client");
+                warn!("Transaction rate too high for this client");
             }
         }
         info!("Finished sending transactions");

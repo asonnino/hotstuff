@@ -16,7 +16,7 @@ def local(ctx, debug=False):
         'nodes': 4,
         'txs': 250_000,
         'size': 512,
-        'rate': 100_000,
+        'rate': 150_000,
         'duration': 20,
     }
     node_params = {
@@ -89,7 +89,7 @@ def remote(ctx, debug=False):
         'nodes': 4,
         'txs': 1_000_000,
         'size': 512,
-        'rate': 0,
+        'rate': 100_000,
         'duration': 350,
         'runs': 1,
     }
