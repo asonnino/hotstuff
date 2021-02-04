@@ -87,10 +87,10 @@ def install(ctx):
 def remote(ctx):
     bench_params = {
         'nodes': 4,
-        'txs': 5_000_000,
+        'txs': 20_000_000,
         'size': 512,
-        'rate': 150_000,
-        'duration': 600,
+        'rate': 300_000,
+        'duration': 1100,
         'runs': 1,
     }
     node_params = {
@@ -100,8 +100,7 @@ def remote(ctx):
         },
         'mempool': {
             'queue_capacity': 100_000_000,
-            # NOTE: Tokio LengthDelimitedCodec's max size defaults to 8MB.
-            'max_payload_size': 3_000_000
+            'max_payload_size': 2_000_000
         }
     }
     try:
