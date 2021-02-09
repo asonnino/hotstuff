@@ -135,7 +135,7 @@ def plot(ctx):
     files = glob('results/plot/*.txt')
     try:
         ploter = Ploter(files)
-        ploter.plot_tps('Committee size', ploter.plot_tps)
+        ploter.plot_tps('Committee size', ploter.txs)
         ploter.plot_latency('Committee size', ploter.txs)
     except PlotError as e:
         Print.error(BenchError('Failed to plot performance', e))
