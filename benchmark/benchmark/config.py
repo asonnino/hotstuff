@@ -56,6 +56,24 @@ class Committee:
         authorities = self.json['mempool']['authorities']
         return [x['front_address'] for x in authorities.values()]
 
+    def size(self):
+        return len(self.json['consensus']['authorities'])
+
+    @classmethod
+    def load(cls, filename):
+        assert isinstance(filename, str)
+        with open(filename, 'r') as f:
+            data = load(f)
+
+        consensus_authorities = data['consensus']['authorities'].values()
+        mempool_authorities = data['mempool']['authorities'].values()
+
+        names = [x['name'] for x in consensus_authorities]
+        consensus_addr = [x['address'] for x in consensus_authorities]
+        front_addr = [x['front_address'] for x in mempool_authorities]
+        mempool_addr = [x['mempool_address'] for x in mempool_authorities]
+        return cls(names, consensus_addr, front_addr, mempool_addr)
+
 
 class LocalCommittee(Committee):
     def __init__(self, names, port):
@@ -94,7 +112,12 @@ class NodeParameters:
 class BenchParameters:
     def __init__(self, json):
         try:
-            self.nodes = int(json['nodes'])
+            nodes = json['nodes'] 
+            nodes = nodes if isinstance(nodes, list) else [nodes]
+            if not nodes:
+                raise ConfigError('Missing number of nodes')
+
+            self.nodes = [int(x) for x in nodes]
             self.txs = int(json['txs'])
             self.rate = int(json['rate'])
             self.size = int(json['size'])

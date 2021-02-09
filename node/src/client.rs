@@ -5,10 +5,10 @@ use clap::{crate_name, crate_version, App, AppSettings};
 use env_logger::Env;
 use futures::future::join_all;
 use futures::sink::SinkExt as _;
-use log::info;
+use log::{info, warn};
 use std::net::SocketAddr;
 use tokio::net::TcpStream;
-use tokio::time::{interval, sleep, timeout, Duration};
+use tokio::time::{interval, sleep, Duration, Instant};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 #[tokio::main]
@@ -93,6 +93,9 @@ struct Client {
 
 impl Client {
     pub async fn send(&self) -> Result<()> {
+        let precision = 20; // Sample precision.
+        let burst_duration = 1000 / precision;
+
         // The transaction size must be at least 16 bytes to ensure all txs are different.
         if self.size < 16 {
             return Err(anyhow::Error::msg(
@@ -103,7 +106,10 @@ impl Client {
         // Adapt for the case where the transaction rate is zero.
         let (batches, burst) = match self.rate {
             0 => (1, self.transactions),
-            _ => (self.transactions / self.rate + 1, self.rate),
+            _ => (
+                precision * self.transactions / self.rate + 1,
+                self.rate / precision,
+            ),
         };
 
         // Connect to the mempool.
@@ -113,20 +119,15 @@ impl Client {
 
         // Submit all transactions.
         let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
-        let interval = interval(Duration::from_millis(1000));
+        let interval = interval(Duration::from_millis(burst_duration as u64));
         tokio::pin!(interval);
         info!("Start sending transactions");
         for x in 0..batches {
             interval.as_mut().tick().await;
-            if self.rate == 0 {
-                self.send_burst(&mut transport, burst, x as u64).await?;
-            } else {
-                timeout(
-                    Duration::from_millis(1000),
-                    self.send_burst(&mut transport, burst, x as u64),
-                )
-                .await
-                .context("transaction rate too high for this client")??;
+            let now = Instant::now();
+            self.send_burst(&mut transport, burst, x as u64).await?;
+            if self.rate != 0 && now.elapsed().as_millis() > burst_duration as u128 {
+                warn!("Transaction rate too high for this client");
             }
         }
         info!("Finished sending transactions");

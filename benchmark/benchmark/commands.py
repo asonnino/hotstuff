@@ -5,7 +5,11 @@ class CommandMaker:
 
     @staticmethod
     def cleanup():
-        return 'rm -r .db-* ; rm .*.json ; rm -r logs ; mkdir -p logs'
+        return 'rm -r .db-* ; rm .*.json'
+
+    @staticmethod
+    def clean_logs():
+        return 'rm -r logs ; mkdir -p logs'
 
     @staticmethod
     def compile():
