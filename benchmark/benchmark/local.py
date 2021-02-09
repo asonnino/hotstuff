@@ -43,6 +43,7 @@ class LocalBench:
 
         try:
             Print.info('Setting up testbed...')
+            nodes = self.nodes[0]
 
             # Cleanup all files.
             cmd = f'{CommandMaker.clean_logs()} ; {CommandMaker.cleanup()}'
@@ -59,7 +60,7 @@ class LocalBench:
 
             # Generate configuration files.
             keys = []
-            key_files = [PathMaker.key_file(i) for i in range(self.nodes)]
+            key_files = [PathMaker.key_file(i) for i in range(nodes)]
             for filename in key_files:
                 cmd = CommandMaker.generate_key(filename).split()
                 subprocess.run(cmd, check=True)
@@ -73,10 +74,10 @@ class LocalBench:
 
             # Run the clients (they will wait for the nodes to be ready).
             addresses = committee.front_addresses()
-            txs_share = ceil(self.txs / self.nodes)
-            rate_share = ceil(self.rate / self.nodes)
+            txs_share = ceil(self.txs / nodes)
+            rate_share = ceil(self.rate / nodes)
             timeout = self.node_parameters.timeout_delay
-            client_logs = [PathMaker.client_log_file(i) for i in range(self.nodes)]
+            client_logs = [PathMaker.client_log_file(i) for i in range(nodes)]
             for addr, log_file in zip(addresses, client_logs):
                 cmd = CommandMaker.run_client(
                     addr,
@@ -88,8 +89,8 @@ class LocalBench:
                 self._background_run(cmd, log_file)
 
             # Run the nodes.
-            dbs = [PathMaker.db_path(i) for i in range(self.nodes)]
-            node_logs = [PathMaker.node_log_file(i) for i in range(self.nodes)]
+            dbs = [PathMaker.db_path(i) for i in range(nodes)]
+            node_logs = [PathMaker.node_log_file(i) for i in range(nodes)]
             for key_file, db, log_file in zip(key_files, dbs, node_logs):
                 cmd = CommandMaker.run_node(
                     key_file,
