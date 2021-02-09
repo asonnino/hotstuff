@@ -78,7 +78,9 @@ class Bench:
         except GroupException as e:
             raise BenchError('Failed to kill nodes', FabricError(e))
 
-    def _select_hosts(self, nodes):
+    def _select_hosts(self, bench_parameters):
+        nodes = max(bench_parameters.nodes)
+
         # Ensure there are enough hosts.
         hosts = self.manager.hosts()
         if sum(len(x) for x in hosts.values()) < nodes:
@@ -229,7 +231,7 @@ class Bench:
             raise BenchError('Invalid nodes or bench parameters', e)
 
         # Select which hosts to use.
-        selected_hosts = self._select_hosts(max(bench_parameters.nodes))
+        selected_hosts = self._select_hosts(bench_parameters)
         if not selected_hosts:
             Print.warn('There are not enough instances available')
             return

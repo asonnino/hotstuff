@@ -1,12 +1,15 @@
 from fabric import task
 from time import sleep
+from glob import glob
 
 from benchmark.local import LocalBench
-from benchmark.logs import ParseError
+from benchmark.logs import ParseError, LogAggregator
 from benchmark.utils import Print
+from benchmark.plot import Ploter
 from aws.settings import SettingsError
 from aws.instance import InstanceManager, AWSError
 from aws.remote import Bench, BenchError
+
 # NOTE: Also requires tmux: brew install tmux
 
 
@@ -30,7 +33,8 @@ def local(ct):
         }
     }
     try:
-        LocalBench(bench_params, node_params).run(debug=False).display()
+        ret = LocalBench(bench_params, node_params).run(debug=False).result()
+        print(ret)
     except BenchError as e:
         Print.error(e)
 
@@ -86,10 +90,10 @@ def install(ctx):
 @task
 def remote(ctx):
     bench_params = {
-        'nodes': [4, 5],
-        'txs': 10_000_000,
+        'nodes': [],
+        'txs': 1_000_000,
         'size': 512,
-        'rate': 1_000_000,
+        'rate': 100_000,
         'duration': 500,
         'runs': 2,
     }
@@ -115,3 +119,17 @@ def kill(ctx):
         Bench(ctx).kill()
     except BenchError as e:
         Print.error(e)
+
+
+@task
+def aggregate(ctx):
+    aggregator = LogAggregator(glob('benchmark.*.txt'))
+    aggregator.print('benchmark.txt')
+    print(aggregator.result())
+
+
+@task
+def plot(ctx):
+    ploter = Ploter(glob('results/plot/*.txt'))
+    ploter.plot_tps('Committee size', ploter.txs)
+    ploter.plot_latency('Committee size', ploter.txs)
