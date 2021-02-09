@@ -30,7 +30,7 @@ def local(ct):
         }
     }
     try:
-        LocalBench(bench_params, node_params).run(debug=False).print_summary()
+        LocalBench(bench_params, node_params).run(debug=False).display()
     except BenchError as e:
         Print.error(e)
 
@@ -86,12 +86,12 @@ def install(ctx):
 @task
 def remote(ctx):
     bench_params = {
-        'nodes': 4,
-        'txs': 20_000_000,
+        'nodes': [4, 5],
+        'txs': 10_000_000,
         'size': 512,
-        'rate': 300_000,
-        'duration': 1100,
-        'runs': 1,
+        'rate': 1_000_000,
+        'duration': 500,
+        'runs': 2,
     }
     node_params = {
         'consensus': {

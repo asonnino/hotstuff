@@ -94,6 +94,7 @@ struct Client {
 impl Client {
     pub async fn send(&self) -> Result<()> {
         let precision = 20; // Sample precision.
+        let burst_duration = 1000 / precision;
 
         // The transaction size must be at least 16 bytes to ensure all txs are different.
         if self.size < 16 {
@@ -118,14 +119,14 @@ impl Client {
 
         // Submit all transactions.
         let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
-        let interval = interval(Duration::from_millis(1000 / precision as u64));
+        let interval = interval(Duration::from_millis(burst_duration as u64));
         tokio::pin!(interval);
         info!("Start sending transactions");
         for x in 0..batches {
             interval.as_mut().tick().await;
             let now = Instant::now();
             self.send_burst(&mut transport, burst, x as u64).await?;
-            if self.rate != 0 && now.elapsed().as_millis() > 1000 / precision as u128 {
+            if self.rate != 0 && now.elapsed().as_millis() > burst_duration as u128 {
                 warn!("Transaction rate too high for this client");
             }
         }

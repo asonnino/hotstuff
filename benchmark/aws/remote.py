@@ -141,7 +141,7 @@ class Bench:
         node_parameters.print(PathMaker.parameters_file())
 
         # Cleanup all nodes.
-        cmd = ' && '.join([CommandMaker.kill(), CommandMaker.cleanup()])
+        cmd = f'{CommandMaker.cleanup()} || true'
         g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect_kwargs)
         g.run(cmd, hide=True)
 
@@ -155,16 +155,17 @@ class Bench:
 
         return committee
 
-    def _run_single(self, hosts, committee, bench_parameters, node_parameters, debug=False):
+    def _run_single(self, hosts, bench_parameters, node_parameters, debug=False):
         Print.info('Booting testbed...')
 
         # Kill any potentially unfinished run and delete logs.
         self.kill(hosts=hosts, delete_logs=True)
         
         # Run the clients (they will wait for the nodes to be ready).
+        committee = Committee.load(PathMaker.committee_file())
         addresses = committee.front_addresses()
-        txs_share = ceil(bench_parameters.txs / bench_parameters.nodes)
-        rate_share = ceil(bench_parameters.rate / bench_parameters.nodes)
+        txs_share = ceil(bench_parameters.txs / committee.size())
+        rate_share = ceil(bench_parameters.rate / committee.size())
         timeout = node_parameters.timeout_delay
         client_logs = [PathMaker.client_log_file(i) for i in range(len(hosts))]
         for host, addr, log_file in zip(hosts, addresses, client_logs):
@@ -224,33 +225,38 @@ class Bench:
             raise BenchError('Invalid nodes or bench parameters', e)
 
         # Select which hosts to use.
-        hosts = self._select_hosts(bench_parameters.nodes)
-        if not hosts:
+        selected_hosts = self._select_hosts(max(bench_parameters.nodes))
+        if not selected_hosts:
             Print.warn('There are not enough instances available')
             return
 
         # Update nodes.
         try:
-            self._update(hosts)
+            self._update(selected_hosts)
         except GroupException as e:
             raise BenchError('Failed to update nodes', FabricError(e))
 
-        # Upload all configuration files.
-        try:
-            committee = self._config(hosts, node_parameters)
-        except (subprocess.SubprocessError, GroupException) as e:
-            raise BenchError('Failed to configure nodes', FabricError(e))
+        for n in bench_parameters.nodes:
+            Print.heading(f'\nStarting benchmark with {n} nodes')
+            hosts = selected_hosts[:n]
 
-        # Run the benchmark.
-        runs = bench_parameters.runs
-        for i in range(runs):
-            Print.heading(f'Starting benchmark {i+1}/{runs}')
+            # Upload all configuration files.
             try:
-                self._run_single(hosts, committee, bench_parameters, node_parameters, debug)
-                parser = self._logs(hosts)
-                parser.print_summary()
-                # TODO: save the parser and handle multiple runs.
-            except (subprocess.SubprocessError, GroupException, ParseError) as e:
-                self.kill(hosts=hosts)
-                Print.error(BenchError('Benchmark failed', e))
+                self._config(hosts, node_parameters)
+            except (subprocess.SubprocessError, GroupException) as e:
+                error = FabricError(e)
+                Print.error(BenchError('Failed to configure nodes', error))
                 continue
+
+            # Run the benchmark.
+            for i in range(bench_parameters.runs):
+                Print.heading(f'Run {i+1}/{bench_parameters.runs}')
+                try:
+                    self._run_single(
+                        hosts, bench_parameters, node_parameters, debug
+                    )
+                    self._logs(hosts).print(f'benchmark.{n}.txt')
+                except (subprocess.SubprocessError, GroupException, ParseError) as e:
+                    self.kill(hosts=hosts)
+                    Print.error(BenchError('Benchmark failed', e))
+                    continue

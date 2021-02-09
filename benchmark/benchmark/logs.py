@@ -46,7 +46,7 @@ class LogParser:
         status = [findall(r'rate too high', x) for x in clients]
         miss = sum(len(x) for x in status)
         if miss != 0:    
-            Print.warn(f'Clients missed their target rate {miss} time(s)')
+            Print.warn(f'Clients missed their target rate {miss:,} time(s)')
 
         # Check whether all (non-empty) blocks created are committed.
         if len(self.proposals) != len(self.commits):
@@ -122,7 +122,7 @@ class LogParser:
         bps = tps * self.size[0]
         return tps, bps, duration
 
-    def print_summary(self):
+    def display(self):
         consensus_latency = self.consensus_latency()[0] * 1000
         consensus_tps, consensus_bps, _ = self.consensus_throughput()
         end_to_end_tps, end_to_end_bps, duration = self.end_to_end_throughput()
@@ -146,6 +146,11 @@ class LogParser:
             '-----------------------------------------\n'
         )
 
+    def print(self, filename):
+        assert isinstance(filename, str)
+        with open(filename, 'a') as f:
+            f.write(self.display())
+
     @classmethod
     def process(cls, directory):
         assert isinstance(directory, str)
@@ -160,8 +165,3 @@ class LogParser:
                 nodes += [f.read()]
 
         return cls(clients, nodes)
-
-
-if __name__ == '__main__':
-    import sys
-    LogParser.process(sys.argv[1]).print_summary()
