@@ -7,15 +7,24 @@ from statistics import mean
 import sys
 
 
+class PlotError(Exception):
+    pass
+
+
 class Ploter:
     def __init__(self, filenames):
-        assert isinstance(filenames, list) and filenames
-        assert all(isinstance(x, str) for x in filenames)
+        ok = isinstance(filenames, list) and filenames \
+            and all(isinstance(x, str) for x in filenames)
+        if not ok:
+            raise PlotError('Invalid input arguments')
 
         self.results = []
-        for filename in filenames:
-            with open(filename, 'r') as f:
-                self.results += [f.read().replace(',', '')]
+        try:
+            for filename in filenames:
+                with open(filename, 'r') as f:
+                    self.results += [f.read().replace(',', '')]
+        except OSError as e:
+            raise PlotError(f'Failed to load log files: {e}')
 
     def _tps(self, data):
         avg = [int(x) for x in findall(r'Average TPS: (\d+)', data)]

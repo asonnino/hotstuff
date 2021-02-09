@@ -5,7 +5,7 @@ from glob import glob
 from benchmark.local import LocalBench
 from benchmark.logs import ParseError, LogAggregator
 from benchmark.utils import Print
-from benchmark.plot import Ploter
+from benchmark.plot import Ploter, PlotError
 from aws.settings import SettingsError
 from aws.instance import InstanceManager, AWSError
 from aws.remote import Bench, BenchError
@@ -90,11 +90,11 @@ def install(ctx):
 @task
 def remote(ctx):
     bench_params = {
-        'nodes': [],
-        'txs': 1_000_000,
+        'nodes': [x for x in range(4, 21)],
+        'txs': 20_000_000,
         'size': 512,
-        'rate': 100_000,
-        'duration': 500,
+        'rate': 1_200_000,
+        'duration': 1500,
         'runs': 2,
     }
     node_params = {
@@ -123,13 +123,20 @@ def kill(ctx):
 
 @task
 def aggregate(ctx):
-    aggregator = LogAggregator(glob('benchmark.*.txt'))
-    aggregator.print('benchmark.txt')
-    print(aggregator.result())
+    files = glob('benchmark.*.txt')
+    try:
+        LogAggregator(files).print('benchmark.txt')
+    except ParseError as e:
+        Print.error(BenchError('Failed to aggregate logs', e))
 
 
 @task
 def plot(ctx):
-    ploter = Ploter(glob('results/plot/*.txt'))
-    ploter.plot_tps('Committee size', ploter.txs)
-    ploter.plot_latency('Committee size', ploter.txs)
+    files = glob('results/plot/*.txt')
+    try:
+        ploter = Ploter(files)
+        ploter.plot_tps('Committee size', ploter.plot_tps)
+        ploter.plot_latency('Committee size', ploter.txs)
+    except PlotError as e:
+        Print.error(BenchError('Failed to plot performance', e))
+    

@@ -45,7 +45,7 @@ class LogParser:
         # Check whether clients missed their target rate.
         status = [findall(r'rate too high', x) for x in clients]
         miss = sum(len(x) for x in status)
-        if miss != 0:    
+        if miss != 0:
             Print.warn(f'Clients missed their target rate {miss:,} time(s)')
 
         # Check whether all (non-empty) blocks created are committed.
@@ -65,7 +65,9 @@ class LogParser:
                 raise ParseError('Node(s) panicked')
 
             # Ensure no transactions have been dropped.
-            status = p.starmap(search, zip(repeat(r'dropping transaction'), nodes))
+            status = p.starmap(search, zip(
+                repeat(r'dropping transaction'), nodes)
+            )
             if any(x is not None for x in status):
                 raise ParseError('Transactions dropped (mempool buffer full)')
 
@@ -169,15 +171,20 @@ class LogParser:
 
 class LogAggregator:
     def __init__(self, filenames):
-        assert isinstance(filenames, list) and filenames
-        assert all(isinstance(x, str) for x in filenames)
+        ok = isinstance(filenames, list) and filenames \
+            and all(isinstance(x, str) for x in filenames)
+        if not ok:
+            raise ParseError('Invalid input arguments')
 
         # Load result files.
         self.raw_results = {}
-        for filename in filenames:
-            x = int(search(r'\d+', filename).group(0))
-            with open(filename, 'r') as f:
-                self.raw_results[x] = f.read()
+        try:
+            for filename in filenames:
+                x = int(search(r'\d+', filename).group(0))
+                with open(filename, 'r') as f:
+                    self.raw_results[x] = f.read()
+        except (OSError, ValueError) as e:
+            raise ParseError(f'Failed to load logs: {e}')
 
         # Aggregate results.
         self.aggregated_results = []
@@ -221,5 +228,8 @@ class LogAggregator:
 
     def print(self, filename):
         assert isinstance(filename, str)
-        with open(filename, 'w') as f:
-            f.write(self.result())
+        try:
+            with open(filename, 'w') as f:
+                f.write(self.result())
+        except OSError as e:
+            raise ParseError(f'Failed to print aggregated results: {e}')
