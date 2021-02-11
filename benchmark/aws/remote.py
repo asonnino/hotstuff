@@ -98,7 +98,9 @@ class Bench:
         c.run(cmd, hide=True)
 
     def _update(self, hosts):
-        Print.info(f'Updating {len(hosts)} nodes...')
+        Print.info(
+            f'Updating {len(hosts)} nodes (branch "{self.settings.branch}")...'
+        )
         cmd = [
             f'(cd {self.settings.repo_name} && git fetch)',
             f'(cd {self.settings.repo_name} && git checkout {self.settings.branch})',
