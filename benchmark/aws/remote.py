@@ -101,8 +101,8 @@ class Bench:
         Print.info(f'Updating {len(hosts)} nodes...')
         cmd = [
             f'(cd {self.settings.repo_name} && git fetch)',
-            f'(cd {self.settings.repo_name} && git pull)',
             f'(cd {self.settings.repo_name} && git checkout {self.settings.branch})',
+            f'(cd {self.settings.repo_name} && git pull)',
             'source $HOME/.cargo/env',
             f'(cd {self.settings.repo_name}/node && {CommandMaker.compile()})',
             CommandMaker.alias_binaries(
@@ -110,7 +110,7 @@ class Bench:
             )
         ]
         g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect)
-        g.run(' && '.join(cmd), hide=True)
+        g.run(' && '.join(cmd))
 
     def _config(self, hosts, node_parameters):
         Print.info('Generating configuration files...')
