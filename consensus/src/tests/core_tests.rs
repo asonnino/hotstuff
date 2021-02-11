@@ -172,7 +172,7 @@ async fn commit_block() {
 async fn local_timeout_round() {
     // Make the timeout vote we expect.
     let (public_key, secret_key) = leader_keys(3);
-    let timeout = Vote::new_from_key(Digest::default(), 1, public_key, &secret_key);
+    let timeout = Timeout::new_from_key(QC::genesis(), 1, public_key, &secret_key);
 
     // Run a core instance.
     let store_path = ".db_test_local_timeout_round";
@@ -182,7 +182,7 @@ async fn local_timeout_round() {
     match rx_network.recv().await {
         Some(NetMessage(bytes, mut recipients)) => {
             match bincode::deserialize(&bytes).unwrap() {
-                CoreMessage::Vote(v) => assert_eq!(v, timeout),
+                CoreMessage::Timeout(t) => assert_eq!(t, timeout),
                 _ => assert!(false),
             }
             let mut addresses = committee().broadcast_addresses(&public_key);
