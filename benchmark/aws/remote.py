@@ -110,7 +110,7 @@ class Bench:
             )
         ]
         g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect)
-        g.run(' && '.join(cmd))
+        g.run(' && '.join(cmd), hide=True)
 
     def _config(self, hosts, node_parameters):
         Print.info('Generating configuration files...')
