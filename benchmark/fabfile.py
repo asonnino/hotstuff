@@ -1,13 +1,11 @@
 from fabric import task
-from time import sleep
 from glob import glob
 
 from benchmark.local import LocalBench
 from benchmark.logs import ParseError, LogAggregator
 from benchmark.utils import Print
 from benchmark.plot import Ploter, PlotError
-from aws.settings import SettingsError
-from aws.instance import InstanceManager, AWSError
+from aws.instance import InstanceManager
 from aws.remote import Bench, BenchError
 
 # NOTE: Also requires tmux: brew install tmux
@@ -139,4 +137,3 @@ def plot(ctx):
         ploter.plot_latency('Committee size', ploter.txs)
     except PlotError as e:
         Print.error(BenchError('Failed to plot performance', e))
-    
