@@ -3,7 +3,9 @@ use crate::config::{Committee, Parameters, Secret};
 use consensus::{Block, Consensus, ConsensusError};
 use crypto::SignatureService;
 use log::info;
+use mempool::Payload;
 use mempool::{MempoolError, SimpleMempool};
+use std::collections::HashSet;
 use store::{Store, StoreError};
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver};
@@ -28,6 +30,7 @@ pub enum NodeError {
 
 pub struct Node {
     pub commit: Receiver<Block>,
+    store: Store,
 }
 
 impl Node {
@@ -37,7 +40,7 @@ impl Node {
         store_path: &str,
         parameters: Option<&str>,
     ) -> Result<Self, NodeError> {
-        let (tx_commit, rx_commit) = channel(100);
+        let (tx_commit, rx_commit) = channel(1000);
 
         // Read the committee and secret key from file.
         let committee = Committee::read(committee_file)?;
@@ -72,17 +75,52 @@ impl Node {
             committee.consensus,
             parameters.consensus,
             signature_service,
-            store,
+            store.clone(),
             mempool,
             /* commit_channel */ tx_commit,
         )
         .await?;
 
         info!("Node {} successfully booted", name);
-        Ok(Self { commit: rx_commit })
+        Ok(Self {
+            commit: rx_commit,
+            store,
+        })
     }
 
     pub fn print_key_file(filename: &str) -> Result<(), NodeError> {
         Secret::new().write(filename)
+    }
+
+    #[cfg(feature = "benchmark")]
+    pub async fn analyze_block(&mut self) {
+        while let Some(block) = self.commit.recv().await {
+            let id = format!("{}", block);
+
+            // Skip empty blocks.
+            if block.payload.is_empty() {
+                continue;
+            }
+
+            // Load the payload from storage.
+            let bytes = self
+                .store
+                .read(block.payload)
+                .await
+                .expect("Failed to read committed block from store")
+                .unwrap_or_else(|| panic!("Payload missing from store"));
+
+            // Deserialize the payload.
+            let payload: Payload =
+                bincode::deserialize(&bytes).expect("Failed to deserialize payload");
+
+            // Check if it contains a special transaction.
+            for transaction in payload.transactions {
+                let set: HashSet<_> = transaction.iter().cloned().collect();
+                if set.len() == 1 && set.contains(&5u8) {
+                    info!("{} contains a special transaction", id);
+                }
+            }
+        }
     }
 }

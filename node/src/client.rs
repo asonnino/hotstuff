@@ -93,8 +93,8 @@ struct Client {
 
 impl Client {
     pub async fn send(&self) -> Result<()> {
-        let precision = 20; // Sample precision.
-        let burst_duration = 1000 / precision;
+        const PRECISION: usize = 20; // Sample precision.
+        const BURST_DURATION: usize = 1000 / PRECISION;
 
         // The transaction size must be at least 16 bytes to ensure all txs are different.
         if self.size < 16 {
@@ -107,8 +107,8 @@ impl Client {
         let (batches, burst) = match self.rate {
             0 => (1, self.transactions),
             _ => (
-                precision * self.transactions / self.rate + 1,
-                self.rate / precision,
+                PRECISION * self.transactions / self.rate + 1,
+                self.rate / PRECISION,
             ),
         };
 
@@ -119,16 +119,17 @@ impl Client {
 
         // Submit all transactions.
         let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
-        let interval = interval(Duration::from_millis(burst_duration as u64));
+        let interval = interval(Duration::from_millis(BURST_DURATION as u64));
         tokio::pin!(interval);
         info!("Start sending transactions");
         for x in 0..batches {
             interval.as_mut().tick().await;
             let now = Instant::now();
             self.send_burst(&mut transport, burst, x as u64).await?;
-            if self.rate != 0 && now.elapsed().as_millis() > burst_duration as u128 {
+            if self.rate != 0 && now.elapsed().as_millis() > BURST_DURATION as u128 {
                 warn!("Transaction rate too high for this client");
             }
+            self.send_magic_transaction(&mut transport).await?;
         }
         info!("Finished sending transactions");
         Ok(())
@@ -151,6 +152,19 @@ impl Client {
                 .context("Failed to send transaction")?;
         }
         Ok(())
+    }
+
+    async fn send_magic_transaction(
+        &self,
+        transport: &mut Framed<TcpStream, LengthDelimitedCodec>,
+    ) -> Result<()> {
+        info!("Sending special transaction");
+        let mut tx = BytesMut::with_capacity(self.size);
+        tx.resize(self.size, 5u8);
+        transport
+            .send(tx.freeze())
+            .await
+            .context("Failed to send transaction")
     }
 
     pub async fn wait(&self) {

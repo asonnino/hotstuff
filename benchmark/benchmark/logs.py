@@ -27,10 +27,12 @@ class LogParser:
 
         # Parse the clients logs.
         try:
-            results = [self._parse_clients(x) for x in clients]
+            with Pool() as p:
+                results = p.map(self._parse_clients, clients)
         except (ValueError, IndexError) as e:
             raise ParseError(f'Failed to parse client log: {e}')
-        self.txs, self.size, self.rate, self.start, self.end = zip(*results)
+        self.txs, self.size, self.rate, self.start, self.end, self.misses, \
+            self.send_special = zip(*results)
 
         # Parse the nodes logs.
         try:
@@ -38,15 +40,14 @@ class LogParser:
                 results = p.map(self._parse_nodes, nodes)
         except (ValueError, IndexError) as e:
             raise ParseError(f'Failed to parse node log: {e}')
-        proposals, commits = zip(*results)
+        proposals, commits, self.commit_special = zip(*results)
         self.proposals = {k: v for x in proposals for k, v in x.items()}
         self.commits = {k: v for x in commits for k, v in x.items()}
 
         # Check whether clients missed their target rate.
-        status = [findall(r'rate too high', x) for x in clients]
-        miss = sum(len(x) for x in status)
-        if miss != 0:
-            Print.warn(f'Clients missed their target rate {miss:,} time(s)')
+        misses = sum(self.misses)
+        if misses != 0:
+            Print.warn(f'Clients missed their target rate {misses:,} time(s)')
 
         # Check whether all (non-empty) blocks created are committed.
         if len(self.proposals) != len(self.commits):
@@ -59,7 +60,7 @@ class LogParser:
             raise ParseError('Client(s) failed to send all their txs')
 
         with Pool() as p:
-            # Ensure no node panicked.
+            # Ensure none of the nodes panicked.
             status = p.starmap(search, zip(repeat(r'panic'), nodes))
             if any(x is not None for x in status):
                 raise ParseError('Node(s) panicked')
@@ -72,35 +73,35 @@ class LogParser:
                 raise ParseError('Transactions dropped (mempool buffer full)')
 
     def _parse_clients(self, log):
-        txs = int(search(r'(Number of transactions:) (\d+)', log).group(2))
-        size = int(search(r'(Transactions size:) (\d+)', log).group(2))
-        rate = int(search(r'(Transactions rate:) (\d+)', log).group(2))
+        txs = int(search(r'Number of transactions: (\d+)', log).group(1))
+        size = int(search(r'Transactions size: (\d+)', log).group(1))
+        rate = int(search(r'Transactions rate: (\d+)', log).group(1))
 
-        tmp = search(r'([-:.T0123456789]*Z) (.*) (Start)', log).group(1)
-        start = self._parse_timestamp(tmp)
-        tmp = search(r'([-:.T0123456789]*Z) (.*) (Finished)', log).group(1)
-        end = self._parse_timestamp(tmp)
+        tmp = search(r'([-:.T0123456789]*Z) .* Start ', log).group(1)
+        start = self._to_posix(tmp)
+        tmp = search(r'([-:.T0123456789]*Z) .* Finished', log).group(1)
+        end = self._to_posix(tmp)
 
-        return txs, size, rate, start, end
+        misses = len(findall(r'rate too high', log))
+
+        tmp = findall(r'([-:.T0123456789]*Z) .* special transaction', log)
+        send_special = [self._to_posix(x) for x in tmp]
+
+        return txs, size, rate, start, end, misses, send_special
 
     def _parse_nodes(self, log):
-        def parse(lines):
-            rounds = [int(search(r'(B)(\d+)', x).group(2)) for x in lines]
-            times = [search(r'[-:.T0123456789]*Z', x).group(0) for x in lines]
-            times = [self._parse_timestamp(x) for x in times]
-            return rounds, times
+        tmp = findall(r'([-:.T0123456789]*Z) .* Created non-empty B(\d+)', log)
+        proposals = {r: self._to_posix(t) for t, r in tmp}
 
-        lines = findall(r'.* Created non-empty B\d+', log)
-        rounds, times = parse(lines)
-        proposals = {r: t for r, t in zip(rounds, times)}
+        tmp = findall(r'([-:.T0123456789]*Z) .* Committed B(\d+)', log)
+        commits = {r: self._to_posix(t) for t, r in tmp if r in proposals}
 
-        lines = findall(r'.* Committed B\d+', log)
-        rounds, times = parse(lines)
-        commits = {r: t for r, t in zip(rounds, times) if r in proposals}
+        tmp = findall(r'([-:.T0123456789]*Z) .* B(\d+) .* special', log)
+        special = [self._to_posix(t) for t, r in tmp if r in proposals]
 
-        return proposals, commits
+        return proposals, commits, special
 
-    def _parse_timestamp(self, string):
+    def _to_posix(self, string):
         x = datetime.fromisoformat(string.replace('Z', '+00:00'))
         return datetime.timestamp(x)
 
@@ -113,9 +114,7 @@ class LogParser:
 
     def consensus_latency(self):
         latency = [c - self.proposals[r] for r, c in self.commits.items()]
-        avg = mean(latency) if latency else 0
-        std = stdev(latency) if len(latency) > 1 else 0
-        return avg, std
+        return mean(latency) if latency else 0
 
     def end_to_end_throughput(self):
         start, end = min(self.start), max(self.commits.values())
@@ -124,10 +123,17 @@ class LogParser:
         bps = tps * self.size[0]
         return tps, bps, duration
 
+    def end_to_end_latency(self):
+        latency = []
+        for send, commit in zip(self.send_special, self.commit_special):
+            latency += [c - s for s, c in zip(send, commit)]
+        return mean(latency) if latency else 0
+
     def result(self):
-        consensus_latency = self.consensus_latency()[0] * 1000
+        consensus_latency = self.consensus_latency() * 1000
         consensus_tps, consensus_bps, _ = self.consensus_throughput()
         end_to_end_tps, end_to_end_bps, duration = self.end_to_end_throughput()
+        end_to_end_latency = self.end_to_end_latency() * 1000
         return (
             '\n'
             '-----------------------------------------\n'
@@ -145,6 +151,7 @@ class LogParser:
             '\n'
             f' End-to-end TPS: {round(end_to_end_tps):,} tx/s\n'
             f' End-to-end BPS: {round(end_to_end_bps):,} B/s\n'
+            f' End-to-end latency: {round(end_to_end_latency):,} ms\n'
             '-----------------------------------------\n'
         )
 
@@ -206,7 +213,7 @@ class LogAggregator:
         mean_tps = mean(tps)
         std_tps = stdev(tps) if len(tps) > 1 else 0
 
-        latency = [int(x) for x in findall(r'Consensus latency: (\d+)', data)]
+        latency = [int(x) for x in findall(r'End-to-end latency: (\d+)', data)]
         mean_latency = mean(latency)
         std_latency = stdev(latency) if len(latency) > 1 else 0
 

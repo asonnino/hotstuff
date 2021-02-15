@@ -132,8 +132,8 @@ impl Core {
         payload.signature.verify(&digest, &author)?;
 
         // Store payload.
-        // NOTE: A bad node may make us store a lot of crap. There is no limit
-        // to how many payload they can send us, and we will store them all.
+        // TODO [issue #18]: A bad node may make us store a lot of junk. There is no
+        // limit to how many payload they can send us, and we will store them all.
         self.store_payload(&digest, &payload).await?;
         Ok(())
     }

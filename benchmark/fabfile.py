@@ -15,10 +15,10 @@ from aws.remote import Bench, BenchError
 def local(ct):
     bench_params = {
         'nodes': 4,
-        'txs': 250_000,
+        'txs': 10_000,
         'size': 512,
-        'rate': 150_000,
-        'duration': 20,
+        'rate': 1_000,
+        'duration': 30,
     }
     node_params = {
         'consensus': {
