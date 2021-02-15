@@ -1,9 +1,5 @@
 use super::*;
 use crate::common::{committee, keys, qc, vote};
-use crate::messages::QC;
-use crypto::generate_keypair;
-use rand::rngs::StdRng;
-use rand::SeedableRng as _;
 
 #[test]
 fn add_vote() {
@@ -14,7 +10,7 @@ fn add_vote() {
 }
 
 #[test]
-fn make_quorum() {
+fn make_qc() {
     let mut aggregator = Aggregator::new(committee());
     let mut keys = keys();
     let qc = qc();
@@ -38,27 +34,7 @@ fn make_quorum() {
     let (public_key, secret_key) = keys.pop().unwrap();
     let vote = Vote::new_from_key(hash.clone(), round, public_key, &secret_key);
     match aggregator.add_vote(vote) {
-        Ok(Some(votes)) => {
-            let qc = QC { hash, round, votes };
-            assert!(qc.verify(&committee()).is_ok());
-        }
-        _ => assert!(false),
-    }
-}
-
-#[test]
-fn unknown_authority() {
-    let mut aggregator = Aggregator::new(committee());
-
-    // Add a vote from an unknown authority.
-    let mut rng = StdRng::from_seed([1; 32]);
-    let (unknown, _) = generate_keypair(&mut rng);
-    let vote = Vote {
-        author: unknown,
-        ..vote()
-    };
-    match aggregator.add_vote(vote) {
-        Err(ConsensusError::UnknownAuthority(name)) => assert_eq!(name, unknown),
+        Ok(Some(qc)) => assert!(qc.verify(&committee()).is_ok()),
         _ => assert!(false),
     }
 }
@@ -70,11 +46,11 @@ fn cleanup() {
     // Add a vote and ensure it is in the aggregator memory.
     let result = aggregator.add_vote(vote());
     assert!(result.is_ok());
-    assert_eq!(aggregator.aggregators.len(), 1);
-    assert!(aggregator.voters.is_empty());
+    assert_eq!(aggregator.votes_aggregators.len(), 1);
+    assert!(aggregator.timeouts_aggregators.is_empty());
 
     // Clean up the aggregator.
     aggregator.cleanup(&2);
-    assert!(aggregator.aggregators.is_empty());
-    assert!(aggregator.voters.is_empty());
+    assert!(aggregator.votes_aggregators.is_empty());
+    assert!(aggregator.timeouts_aggregators.is_empty());
 }

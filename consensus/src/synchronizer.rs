@@ -125,19 +125,15 @@ impl Synchronizer {
     pub async fn get_ancestors(
         &mut self,
         block: &Block,
-    ) -> ConsensusResult<Option<(Block, Block, Block)>> {
-        let b2 = match self.get_previous_block(block).await? {
+    ) -> ConsensusResult<Option<(Block, Block)>> {
+        let b1 = match self.get_previous_block(block).await? {
             Some(b) => b,
             None => return Ok(None),
         };
-        let b1 = self
-            .get_previous_block(&b2)
-            .await?
-            .expect("We should have all ancestors of delivered blocks");
         let b0 = self
             .get_previous_block(&b1)
             .await?
             .expect("We should have all ancestors of delivered blocks");
-        Ok(Some((b0, b1, b2)))
+        Ok(Some((b0, b1)))
     }
 }
