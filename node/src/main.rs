@@ -68,7 +68,9 @@ async fn main() {
                 Ok(mut node) => {
                     tokio::spawn(async move {
                         node.analyze_block().await;
-                    });
+                    })
+                    .await
+                    .expect("Failed to analyze committed blocks");
                 }
                 Err(e) => error!("{}", e),
             }
