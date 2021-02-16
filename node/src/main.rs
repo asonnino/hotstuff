@@ -65,11 +65,7 @@ async fn main() {
             let parameters_file = subm.value_of("parameters");
             let store_path = subm.value_of("store").unwrap();
             match Node::new(committee_file, key_file, store_path, parameters_file).await {
-                Ok(mut node) if cfg!(feature = "benchmark") => node.analyze_block().await,
-                Ok(mut node) => {
-                    // Sink the commit channel.
-                    while node.commit.recv().await.is_some() {}
-                }
+                Ok(mut node) => node.analyze_block().await,
                 Err(e) => error!("{}", e),
             }
         }

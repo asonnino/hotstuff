@@ -5,7 +5,6 @@ use crypto::SignatureService;
 use log::info;
 use mempool::Payload;
 use mempool::{MempoolError, SimpleMempool};
-use std::collections::HashSet;
 use store::{Store, StoreError};
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver};
@@ -92,7 +91,6 @@ impl Node {
         Secret::new().write(filename)
     }
 
-    #[cfg(feature = "benchmark")]
     pub async fn analyze_block(&mut self) {
         while let Some(block) = self.commit.recv().await {
             let id = format!("{}", block);
@@ -114,13 +112,16 @@ impl Node {
             let payload: Payload =
                 bincode::deserialize(&bytes).expect("Failed to deserialize payload");
 
-            // Check if it contains a special transaction.
-            for transaction in payload.transactions {
-                let set: HashSet<_> = transaction.iter().cloned().collect();
-                if set.len() == 1 && set.contains(&5u8) {
+            #[cfg(feature = "benchmark")]
+            for tx in payload.transactions {
+                // Check if it contains a special transaction.
+                if tx.windows(2).all(|x| x[0] == x[1]) && tx.contains(&5u8) {
                     info!("{} contains a special transaction", id);
                 }
             }
+
+            #[cfg(not(feature = "benchmark"))]
+            info!("{} committed with {} txs", id, payload.transactions.len());
         }
     }
 }
