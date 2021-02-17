@@ -16,6 +16,7 @@ from aws.instance import InstanceManager
 
 class FabricError(Exception):
     ''' Wrapper for Fabric exception with a meaningfull error message. '''
+
     def __init__(self, error):
         assert isinstance(error, GroupException)
         message = list(error.result.values())[-1]
@@ -30,7 +31,7 @@ class Bench:
             ctx.connect_kwargs.pkey = RSAKey.from_private_key_file(
                 self.manager.settings.key_path
             )
-            self.connect_kwargs = ctx.connect_kwargs
+            self.connect = ctx.connect_kwargs
         except (IOError, PasswordRequiredException, SSHException) as e:
             raise BenchError('Failed to load SSH key', e)
 
@@ -58,12 +59,12 @@ class Bench:
         ]
         hosts = self.manager.hosts(flat=True)
         try:
-            g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect_kwargs)
+            g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect)
             g.run(' && '.join(cmd), hide=True)
-            Print.heading(f'Testbed of {len(hosts)} nodes successfully initialized')
+            Print.heading(f'Initialized testbed of {len(hosts)} nodes')
         except GroupException as e:
-            print(e)
-            raise BenchError('Failed to install repo on testbed', FabricError(e))
+            error = FabricError(e)
+            raise BenchError('Failed to install repo on testbed', error)
 
     def kill(self, hosts=[], delete_logs=False):
         assert isinstance(hosts, list)
@@ -72,17 +73,19 @@ class Bench:
         delete_logs = CommandMaker.clean_logs() if delete_logs else 'true'
         cmd = [delete_logs, f'({CommandMaker.kill()} || true)']
         try:
-            g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect_kwargs)
+            g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect)
             g.run(' && '.join(cmd), hide=True)
         except GroupException as e:
             raise BenchError('Failed to kill nodes', FabricError(e))
 
-    def _select_hosts(self, nodes):
+    def _select_hosts(self, bench_parameters):
+        nodes = max(bench_parameters.nodes)
+
         # Ensure there are enough hosts.
         hosts = self.manager.hosts()
         if sum(len(x) for x in hosts.values()) < nodes:
             return []
-        
+
         # Select the hosts in different data centers.
         ordered = zip(*hosts.values())
         ordered = [x for y in ordered for x in y]
@@ -91,20 +94,24 @@ class Bench:
     def _background_run(self, host, command, log_file):
         name = splitext(basename(log_file))[0]
         cmd = f'tmux new -d -s "{name}" "{command} |& tee {log_file}"'
-        c = Connection(host, user='ubuntu', connect_kwargs=self.connect_kwargs)
+        c = Connection(host, user='ubuntu', connect_kwargs=self.connect)
         c.run(cmd, hide=True)
 
     def _update(self, hosts):
-        Print.info(f'Updating {len(hosts)} nodes...')
+        Print.info(
+            f'Updating {len(hosts)} nodes (branch "{self.settings.branch}")...'
+        )
         cmd = [
             f'(cd {self.settings.repo_name} && git fetch)',
-            f'(cd {self.settings.repo_name} && git pull)',
             f'(cd {self.settings.repo_name} && git checkout {self.settings.branch})',
+            f'(cd {self.settings.repo_name} && git pull)',
             'source $HOME/.cargo/env',
             f'(cd {self.settings.repo_name}/node && {CommandMaker.compile()})',
-            CommandMaker.alias_binaries(f'./{self.settings.repo_name}/target/release/')
+            CommandMaker.alias_binaries(
+                f'./{self.settings.repo_name}/target/release/'
+            )
         ]
-        g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect_kwargs)
+        g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect)
         g.run(' && '.join(cmd), hide=True)
 
     def _config(self, hosts, node_parameters):
@@ -113,7 +120,7 @@ class Bench:
         # Cleanup all local configuration files.
         cmd = CommandMaker.cleanup()
         subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
-        sleep(0.5) # Removing the store may take time.
+        sleep(0.5)  # Removing the store may take time.
 
         # Recompile the latest code.
         cmd = CommandMaker.compile().split()
@@ -141,30 +148,31 @@ class Bench:
         node_parameters.print(PathMaker.parameters_file())
 
         # Cleanup all nodes.
-        cmd = ' && '.join([CommandMaker.kill(), CommandMaker.cleanup()])
-        g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect_kwargs)
+        cmd = f'{CommandMaker.cleanup()} || true'
+        g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect)
         g.run(cmd, hide=True)
 
         # Upload configuration files.
-        progress = progress_bar(hosts, prefix = 'Uploading config files:')
+        progress = progress_bar(hosts, prefix='Uploading config files:')
         for i, host in enumerate(progress):
-            c = Connection(host, user='ubuntu', connect_kwargs=self.connect_kwargs)
+            c = Connection(host, user='ubuntu', connect_kwargs=self.connect)
             c.put(PathMaker.committee_file(), '.')
             c.put(PathMaker.key_file(i), '.')
             c.put(PathMaker.parameters_file(), '.')
 
         return committee
 
-    def _run_single(self, hosts, committee, bench_parameters, node_parameters, debug=False):
+    def _run_single(self, hosts, bench_parameters, node_parameters, debug=False):
         Print.info('Booting testbed...')
 
         # Kill any potentially unfinished run and delete logs.
         self.kill(hosts=hosts, delete_logs=True)
-        
+
         # Run the clients (they will wait for the nodes to be ready).
+        committee = Committee.load(PathMaker.committee_file())
         addresses = committee.front_addresses()
-        txs_share = ceil(bench_parameters.txs / bench_parameters.nodes)
-        rate_share = ceil(bench_parameters.rate / bench_parameters.nodes)
+        txs_share = ceil(bench_parameters.txs / committee.size())
+        rate_share = ceil(bench_parameters.rate / committee.size())
         timeout = node_parameters.timeout_delay
         client_logs = [PathMaker.client_log_file(i) for i in range(len(hosts))]
         for host, addr, log_file in zip(hosts, addresses, client_logs):
@@ -193,9 +201,9 @@ class Bench:
             self._background_run(host, cmd, log_file)
 
         # Wait for all transactions to be processed.
-        duration = ceil(bench_parameters.duration / 10)
-        for _ in progress_bar(range(10), prefix=f'Running benchmark ({bench_parameters.duration} sec):'):
-            sleep(duration)
+        duration = bench_parameters.duration
+        for _ in progress_bar(range(100), prefix=f'Running benchmark ({duration} sec):'):
+            sleep(ceil(duration / 100))
         self.kill(hosts=hosts, delete_logs=False)
 
     def _logs(self, hosts):
@@ -204,11 +212,12 @@ class Bench:
         subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
 
         # Download log files.
-        progress = progress_bar(hosts, prefix = 'Downloading logs:')
+        progress = progress_bar(hosts, prefix='Downloading logs:')
         for i, host in enumerate(progress):
-            c = Connection(host, user='ubuntu', connect_kwargs=self.connect_kwargs)
+            c = Connection(host, user='ubuntu', connect_kwargs=self.connect)
             c.get(PathMaker.node_log_file(i), local=PathMaker.node_log_file(i))
-            c.get(PathMaker.client_log_file(i), local=PathMaker.client_log_file(i))
+            c.get(PathMaker.client_log_file(i),
+                  local=PathMaker.client_log_file(i))
 
         # Parse logs and return the parser.
         Print.info('Parsing logs and computing performance...')
@@ -224,33 +233,39 @@ class Bench:
             raise BenchError('Invalid nodes or bench parameters', e)
 
         # Select which hosts to use.
-        hosts = self._select_hosts(bench_parameters.nodes)
-        if not hosts:
+        selected_hosts = self._select_hosts(bench_parameters)
+        if not selected_hosts:
             Print.warn('There are not enough instances available')
             return
 
         # Update nodes.
         try:
-            self._update(hosts)
+            self._update(selected_hosts)
         except GroupException as e:
             raise BenchError('Failed to update nodes', FabricError(e))
 
-        # Upload all configuration files.
-        try:
-            committee = self._config(hosts, node_parameters)
-        except (subprocess.SubprocessError, GroupException) as e:
-            raise BenchError('Failed to configure nodes', FabricError(e))
+        # Run benchmarks.
+        for n in bench_parameters.nodes:
+            Print.heading(f'\nStarting benchmark with {n} nodes')
+            hosts = selected_hosts[:n]
 
-        # Run the benchmark.
-        runs = bench_parameters.runs
-        for i in range(runs):
-            Print.heading(f'Starting benchmark {i+1}/{runs}')
+            # Upload all configuration files.
             try:
-                self._run_single(hosts, committee, bench_parameters, node_parameters, debug)
-                parser = self._logs(hosts)
-                parser.print_summary()
-                # TODO: save the parser and handle multiple runs.
-            except (subprocess.SubprocessError, GroupException, ParseError) as e:
-                self.kill(hosts=hosts)
-                Print.error(BenchError('Benchmark failed', e))
+                self._config(hosts, node_parameters)
+            except (subprocess.SubprocessError, GroupException) as e:
+                error = FabricError(e)
+                Print.error(BenchError('Failed to configure nodes', error))
                 continue
+
+            # Run the benchmark.
+            for i in range(bench_parameters.runs):
+                Print.heading(f'Run {i+1}/{bench_parameters.runs}')
+                try:
+                    self._run_single(
+                        hosts, bench_parameters, node_parameters, debug
+                    )
+                    self._logs(hosts).print(f'benchmark.{n}.txt')
+                except (subprocess.SubprocessError, GroupException, ParseError) as e:
+                    self.kill(hosts=hosts)
+                    Print.error(BenchError('Benchmark failed', e))
+                    continue

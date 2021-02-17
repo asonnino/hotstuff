@@ -1,12 +1,13 @@
 from fabric import task
-from time import sleep
+from glob import glob
 
 from benchmark.local import LocalBench
-from benchmark.logs import ParseError
+from benchmark.logs import ParseError, LogAggregator
 from benchmark.utils import Print
-from aws.settings import SettingsError
-from aws.instance import InstanceManager, AWSError
+from benchmark.plot import Ploter, PlotError
+from aws.instance import InstanceManager
 from aws.remote import Bench, BenchError
+
 # NOTE: Also requires tmux: brew install tmux
 
 
@@ -30,7 +31,8 @@ def local(ct):
         }
     }
     try:
-        LocalBench(bench_params, node_params).run(debug=True).print_summary()
+        ret = LocalBench(bench_params, node_params).run(debug=True).result()
+        print(ret)
     except BenchError as e:
         Print.error(e)
 
@@ -86,12 +88,12 @@ def install(ctx):
 @task
 def remote(ctx):
     bench_params = {
-        'nodes': 4,
-        'txs': 20_000_000,
+        'nodes': [4],
+        'txs': 1_000_000,
         'size': 512,
-        'rate': 300_000,
-        'duration': 1100,
-        'runs': 1,
+        'rate': 10_000,
+        'duration': 1000,
+        'runs': 2,
     }
     node_params = {
         'consensus': {
@@ -115,3 +117,23 @@ def kill(ctx):
         Bench(ctx).kill()
     except BenchError as e:
         Print.error(e)
+
+
+@task
+def aggregate(ctx):
+    files = glob('benchmark.*.txt')
+    try:
+        LogAggregator(files).print('benchmark.txt')
+    except ParseError as e:
+        Print.error(BenchError('Failed to aggregate logs', e))
+
+
+@task
+def plot(ctx):
+    files = glob('results/plot/*.txt')
+    try:
+        ploter = Ploter(files)
+        ploter.plot_tps('Committee size', ploter.txs)
+        ploter.plot_latency('Committee size', ploter.txs)
+    except PlotError as e:
+        Print.error(BenchError('Failed to plot performance', e))

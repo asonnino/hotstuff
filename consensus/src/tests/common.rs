@@ -1,6 +1,6 @@
 use crate::config::Committee;
 use crate::core::RoundNumber;
-use crate::messages::{Block, Vote, QC};
+use crate::messages::{Block, Timeout, Vote, QC};
 use async_trait::async_trait;
 use crypto::Hash as _;
 use crypto::{generate_keypair, Digest, PublicKey, SecretKey, Signature};
@@ -50,6 +50,7 @@ impl Block {
     ) -> Self {
         let block = Block {
             qc,
+            tc: None,
             author,
             round,
             payload,
@@ -85,6 +86,33 @@ impl Vote {
 }
 
 impl PartialEq for Vote {
+    fn eq(&self, other: &Self) -> bool {
+        self.digest() == other.digest()
+    }
+}
+
+impl Timeout {
+    pub fn new_from_key(
+        high_qc: QC,
+        round: RoundNumber,
+        author: PublicKey,
+        secret: &SecretKey,
+    ) -> Self {
+        let timeout = Self {
+            high_qc,
+            round,
+            author,
+            signature: Signature::default(),
+        };
+        let signature = Signature::new(&timeout.digest(), &secret);
+        Self {
+            signature,
+            ..timeout
+        }
+    }
+}
+
+impl PartialEq for Timeout {
     fn eq(&self, other: &Self) -> bool {
         self.digest() == other.digest()
     }

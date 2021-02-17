@@ -3,7 +3,7 @@ use crate::config::{Committee, Parameters};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
 use crate::mempool::MempoolDriver;
-use crate::messages::{Block, Vote, QC};
+use crate::messages::{Block, Timeout, Vote, QC, TC};
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
 use async_recursion::async_recursion;
@@ -28,6 +28,8 @@ pub type RoundNumber = u64;
 pub enum CoreMessage {
     Propose(Block),
     Vote(Vote),
+    Timeout(Timeout),
+    TC(TC),
     LoopBack(Block),
     SyncRequest(Digest, PublicKey),
 }
@@ -46,7 +48,6 @@ pub struct Core<Mempool> {
     commit_channel: Sender<Block>,
     round: RoundNumber,
     last_voted_round: RoundNumber,
-    preferred_round: RoundNumber,
     high_qc: QC,
     timer: Timer<RoundNumber>,
     aggregator: Aggregator,
@@ -82,7 +83,6 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             core_channel,
             round: 1,
             last_voted_round: 0,
-            preferred_round: 0,
             high_qc: QC::genesis(),
             timer: Timer::new(),
             aggregator,
@@ -129,21 +129,19 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         self.last_voted_round = max(self.last_voted_round, target);
     }
 
-    fn update_preferred_round(&mut self, target: RoundNumber) {
-        self.preferred_round = max(self.preferred_round, target);
-    }
-
     async fn make_vote(&mut self, block: &Block) -> Option<Vote> {
         // Check if we can vote for this block.
         let safety_rule_1 = block.round > self.last_voted_round;
-        let safety_rule_2 = block.qc.round >= self.preferred_round;
+        let mut safety_rule_2 = block.qc.round >= self.high_qc.round;
+        if let Some(ref tc) = block.tc {
+            safety_rule_2 |= block.qc.round >= *tc.high_qc_rounds().iter().max().expect("Empty TC");
+        }
         if !(safety_rule_1 && safety_rule_2) {
             return None;
         }
 
         // Ensure we won't vote for contradicting blocks.
         self.increase_last_voted_round(block.round);
-        // TODO: We should update the preferred round here.
         // TODO: Write to storage preferred_round and last_voted_round.
         Some(Vote::new(&block, self.name, self.signature_service.clone()).await)
     }
@@ -159,12 +157,18 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     async fn local_timeout_round(&mut self) -> ConsensusResult<()> {
         warn!("Timeout reached for round {}", self.round);
         self.increase_last_voted_round(self.round);
-        let vote = Vote::new_timeout(self.round, self.name, self.signature_service.clone()).await;
-        debug!("Created {:?}", vote);
+        let timeout = Timeout::new(
+            self.high_qc.clone(),
+            self.round,
+            self.name,
+            self.signature_service.clone(),
+        )
+        .await;
+        debug!("Created {:?}", timeout);
         self.schedule_timer().await;
-        let message = CoreMessage::Vote(vote.clone());
+        let message = CoreMessage::Timeout(timeout.clone());
         self.transmit(&message, None).await?;
-        self.handle_vote(&vote).await
+        self.handle_timeout(&timeout).await
     }
 
     #[async_recursion]
@@ -174,36 +178,62 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             return Ok(());
         }
 
-        // Add the new vote to our aggregator and see if we have a quorum.
-        if let Some(quorum) = self.aggregator.add_vote(vote.clone())? {
-            let qc = QC {
-                hash: vote.hash.clone(),
-                round: vote.round,
-                votes: quorum,
-            };
-            debug!("Assembled {:?}", qc);
-            if !qc.timeout() {
-                self.update_high_qc(&qc);
-            }
+        // Ensure the vote is well formed.
+        vote.verify(&self.committee)?;
 
-            // Try to advance the round.
-            self.advance_round(&qc).await?;
+        // Add the new vote to our aggregator and see if we have a quorum.
+        if let Some(qc) = self.aggregator.add_vote(vote.clone())? {
+            debug!("Assembled {:?}", qc);
+
+            // Process the QC.
+            self.process_qc(&qc).await;
 
             // Make a new block if we are the next leader.
             if self.name == self.leader_elector.get_leader(self.round) {
-                self.generate_proposal().await?;
+                self.generate_proposal(None).await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_timeout(&mut self, timeout: &Timeout) -> ConsensusResult<()> {
+        debug!("Processing {:?}", timeout);
+        if timeout.round < self.round {
+            return Ok(());
+        }
+
+        // Ensure the timeout is well formed.
+        timeout.verify(&self.committee)?;
+
+        // Process the QC embedded in the timeout.
+        self.process_qc(&timeout.high_qc).await;
+
+        // Add the new vote to our aggregator and see if we have a quorum.
+        if let Some(tc) = self.aggregator.add_timeout(timeout.clone())? {
+            debug!("Assembled {:?}", tc);
+
+            // Try to advance the round.
+            self.advance_round(tc.round).await;
+
+            // Broadcast the TC.
+            let message = CoreMessage::TC(tc.clone());
+            self.transmit(&message, None).await?;
+
+            // Make a new block if we are the next leader.
+            if self.name == self.leader_elector.get_leader(self.round) {
+                self.generate_proposal(Some(tc)).await?;
             }
         }
         Ok(())
     }
 
     #[async_recursion]
-    async fn advance_round(&mut self, qc: &QC) -> ConsensusResult<()> {
-        if qc.round < self.round {
-            return Ok(());
+    async fn advance_round(&mut self, round: RoundNumber) {
+        if round < self.round {
+            return;
         }
         self.timer.cancel(self.round).await;
-        self.round = qc.round + 1;
+        self.round = round + 1;
         info!("Moved to round {}", self.round);
 
         // Cleanup the vote aggregator.
@@ -211,15 +241,15 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
 
         // Schedule a new timer for this round.
         self.schedule_timer().await;
-        Ok(())
     }
     // -- End Pacemaker --
 
     #[async_recursion]
-    async fn generate_proposal(&mut self) -> ConsensusResult<()> {
+    async fn generate_proposal(&mut self, tc: Option<TC>) -> ConsensusResult<()> {
         // Make a new block.
         let block = Block::new(
             self.high_qc.clone(),
+            tc,
             self.name,
             self.round,
             /* payload */ self.mempool_driver.get().await,
@@ -234,33 +264,12 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         // Process our new block and broadcast it.
         let message = CoreMessage::Propose(block.clone());
         self.transmit(&message, None).await?;
-        self.handle_proposal(&block).await
+        self.process_block(&block).await
     }
 
-    #[async_recursion]
-    async fn process_qc(
-        &mut self,
-        block: &Block,
-        ancestors: (Block, Block, Block),
-    ) -> ConsensusResult<()> {
-        let (b0, b1, b2) = ancestors;
-
-        // Check if we can commit the head of the 3-chain.
-        let mut commit_rule = b0.round + 1 == b1.round;
-        commit_rule &= b1.round + 1 == b2.round;
-        commit_rule &= b2.round + 1 == block.round;
-        if commit_rule {
-            info!("Committed {}", b0);
-            self.mempool_driver.garbage_collect(&b0).await;
-            if let Err(e) = self.commit_channel.send(b0.clone()).await {
-                warn!("Failed to send block through the commit channel: {}", e);
-            }
-        }
-
-        self.update_preferred_round(b1.round);
-        self.update_high_qc(&block.qc);
-        self.advance_round(&block.qc).await?;
-        Ok(())
+    async fn process_qc(&mut self, qc: &QC) {
+        self.advance_round(qc.round).await;
+        self.update_high_qc(qc);
     }
 
     #[async_recursion]
@@ -272,7 +281,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         // If we don't, the synchronizer asks for them to other nodes. It will
         // then ensure we process all three ancestors in the correct order, and
         // finally make us resume processing this block.
-        let ancestors = match self.synchronizer.get_ancestors(block).await? {
+        let (b0, b1) = match self.synchronizer.get_ancestors(block).await? {
             Some(ancestors) => ancestors,
             None => {
                 debug!("Processing of {} suspended: missing parent", block.digest());
@@ -283,8 +292,17 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         // Store the block only if we have already processed all its ancestors.
         self.store_block(block).await?;
 
-        // Process the QC. This may allow us to advance round.
-        self.process_qc(block, ancestors).await?;
+        // Check if we can commit the head of the 2-chain.
+        // Note that we commit blocks only if we have all its ancestors.
+        let mut commit_rule = b0.round + 1 == b1.round;
+        commit_rule &= b1.round + 1 == block.round;
+        if commit_rule {
+            info!("Committed {}", b0);
+            self.mempool_driver.garbage_collect(&b0).await;
+            if let Err(e) = self.commit_channel.send(b0.clone()).await {
+                warn!("Failed to send block through the commit channel: {}", e);
+            }
+        }
 
         // Ensure the block's round is as expected.
         // This check is important: it prevents bad leaders from producing blocks
@@ -307,7 +325,6 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         Ok(())
     }
 
-    #[async_recursion]
     async fn handle_proposal(&mut self, block: &Block) -> ConsensusResult<()> {
         let digest = block.digest();
 
@@ -321,12 +338,15 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             }
         );
 
-        // Check the block is correctly signed.
-        block.signature.verify(&digest, &block.author)?;
+        // Check the block is correctly formed.
+        block.verify(&self.committee)?;
 
-        // Check that the QC embedded in the block is valid.
-        if block.qc != QC::genesis() {
-            block.qc.verify(&self.committee)?;
+        // Process the QC. This may allow us to advance round.
+        self.process_qc(&block.qc).await;
+
+        // Process the TC (if any). This may also allow us to advance round.
+        if let Some(ref tc) = block.tc {
+            self.advance_round(tc.round).await;
         }
 
         // Let's see if we have the block's data. If we don't, the mempool
@@ -353,12 +373,20 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         Ok(())
     }
 
+    async fn handle_tc(&mut self, tc: TC) -> ConsensusResult<()> {
+        self.advance_round(tc.round).await;
+        if self.name == self.leader_elector.get_leader(self.round) {
+            self.generate_proposal(Some(tc)).await?;
+        }
+        Ok(())
+    }
+
     pub async fn run(&mut self) {
         // Upon booting, generate the very first block (if we are the leader).
         // Also, schedule a timer in case we don't hear from the leader.
         self.schedule_timer().await;
         if self.name == self.leader_elector.get_leader(self.round) {
-            self.generate_proposal()
+            self.generate_proposal(None)
                 .await
                 .expect("Failed to send the first block");
         }
@@ -371,6 +399,8 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
                     match message {
                         CoreMessage::Propose(block) => self.handle_proposal(&block).await,
                         CoreMessage::Vote(vote) => self.handle_vote(&vote).await,
+                        CoreMessage::Timeout(timeout) => self.handle_timeout(&timeout).await,
+                        CoreMessage::TC(tc) => self.handle_tc(tc).await,
                         CoreMessage::LoopBack(block) => self.process_block(&block).await,
                         CoreMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await
                     }

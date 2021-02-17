@@ -45,8 +45,8 @@ class LogParser:
         # Check whether clients missed their target rate.
         status = [findall(r'rate too high', x) for x in clients]
         miss = sum(len(x) for x in status)
-        if miss != 0:    
-            Print.warn(f'Clients missed their target rate {miss} time(s)')
+        if miss != 0:
+            Print.warn(f'Clients missed their target rate {miss:,} time(s)')
 
         # Check whether all (non-empty) blocks created are committed.
         if len(self.proposals) != len(self.commits):
@@ -65,7 +65,9 @@ class LogParser:
                 raise ParseError('Node(s) panicked')
 
             # Ensure no transactions have been dropped.
-            status = p.starmap(search, zip(repeat(r'dropping transaction'), nodes))
+            status = p.starmap(search, zip(
+                repeat(r'dropping transaction'), nodes)
+            )
             if any(x is not None for x in status):
                 raise ParseError('Transactions dropped (mempool buffer full)')
 
@@ -122,11 +124,11 @@ class LogParser:
         bps = tps * self.size[0]
         return tps, bps, duration
 
-    def print_summary(self):
+    def result(self):
         consensus_latency = self.consensus_latency()[0] * 1000
         consensus_tps, consensus_bps, _ = self.consensus_throughput()
         end_to_end_tps, end_to_end_bps, duration = self.end_to_end_throughput()
-        print(
+        return (
             '\n'
             '-----------------------------------------\n'
             ' RESULTS:\n'
@@ -146,6 +148,11 @@ class LogParser:
             '-----------------------------------------\n'
         )
 
+    def print(self, filename):
+        assert isinstance(filename, str)
+        with open(filename, 'a') as f:
+            f.write(self.result())
+
     @classmethod
     def process(cls, directory):
         assert isinstance(directory, str)
@@ -162,6 +169,67 @@ class LogParser:
         return cls(clients, nodes)
 
 
-if __name__ == '__main__':
-    import sys
-    LogParser.process(sys.argv[1]).print_summary()
+class LogAggregator:
+    def __init__(self, filenames):
+        ok = isinstance(filenames, list) and filenames \
+            and all(isinstance(x, str) for x in filenames)
+        if not ok:
+            raise ParseError('Invalid input arguments')
+
+        # Load result files.
+        self.raw_results = {}
+        try:
+            for filename in filenames:
+                x = int(search(r'\d+', filename).group(0))
+                with open(filename, 'r') as f:
+                    self.raw_results[x] = f.read()
+        except (OSError, ValueError) as e:
+            raise ParseError(f'Failed to load logs: {e}')
+
+        # Aggregate results.
+        self.aggregated_results = []
+        for x, data in sorted(self.raw_results.items()):
+            ret = self._aggregate(data)
+            mean_tps, std_tps, mean_latency, std_latency = ret
+            self.aggregated_results += [(
+                f' Variable value: X={x}\n'
+                f'  + Average TPS: {round(mean_tps):,} tx/s\n'
+                f'  + Std TPS: {round(std_tps):,} tx/s\n'
+                f'  + Average latency: {round(mean_latency):,} ms\n'
+                f'  + Std latency: {round(std_latency):,} ms\n'
+            )]
+
+    def _aggregate(self, data):
+        data = data.replace(',', '')
+
+        tps = [int(x) for x in findall(r'End-to-end TPS: (\d+)', data)]
+        mean_tps = mean(tps)
+        std_tps = stdev(tps) if len(tps) > 1 else 0
+
+        latency = [int(x) for x in findall(r'Consensus latency: (\d+)', data)]
+        mean_latency = mean(latency)
+        std_latency = stdev(latency) if len(latency) > 1 else 0
+
+        return mean_tps, std_tps, mean_latency, std_latency
+
+    def result(self):
+        aggregated_results = '\n'.join(self.aggregated_results)
+        raw_results = ''.join(self.raw_results.values())
+        return (
+            '\n'
+            '-----------------------------------------\n'
+            ' AGGREGATED RESULTS:\n'
+            '-----------------------------------------\n'
+            f'{aggregated_results}'
+            '-----------------------------------------\n'
+            '\n\n\n RAW DATA:\n\n\n'
+            f'{raw_results}'
+        )
+
+    def print(self, filename):
+        assert isinstance(filename, str)
+        try:
+            with open(filename, 'w') as f:
+                f.write(self.result())
+        except OSError as e:
+            raise ParseError(f'Failed to print aggregated results: {e}')
