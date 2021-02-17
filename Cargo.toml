@@ -1,2 +1,5 @@
 [workspace]
-members = ["store", "crypto", "network", "mempool", "consensus", "node"]
+members = ["store", "crypto", "network", "mempool", "consensus", "node", "profile"]
+
+[profile.release]
+debug = true

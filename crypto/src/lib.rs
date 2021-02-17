@@ -10,6 +10,9 @@ use std::fmt;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::sync::oneshot;
 
+use profile::pspawn;
+use profile::*;
+
 #[cfg(test)]
 #[path = "tests/crypto_tests.rs"]
 pub mod crypto_tests;
@@ -211,7 +214,7 @@ pub struct SignatureService {
 impl SignatureService {
     pub fn new(secret: SecretKey) -> Self {
         let (tx, mut rx): (Sender<(_, oneshot::Sender<_>)>, _) = channel(100);
-        tokio::spawn(async move {
+        pspawn!("Signature-Service", {
             while let Some((digest, sender)) = rx.recv().await {
                 let signature = Signature::new(&digest, &secret);
                 let _ = sender.send(signature);

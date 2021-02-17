@@ -14,6 +14,9 @@ use std::collections::HashSet;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
+use profile::pspawn;
+use profile::*;
+
 #[cfg(test)]
 #[path = "tests/synchronizer_tests.rs"]
 pub mod synchronizer_tests;
@@ -37,7 +40,7 @@ impl Synchronizer {
         timer.schedule(sync_retry_delay, true).await;
 
         let store_copy = store.clone();
-        tokio::spawn(async move {
+        pspawn!("Synchronizer", {
             let mut waiting = FuturesUnordered::new();
             let mut pending = HashSet::new();
             let mut requests = HashSet::new();

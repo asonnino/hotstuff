@@ -1,0 +1,5 @@
+[build]
+rustflags = [
+  "-C",
+  "force-frame-pointers=y",
+]

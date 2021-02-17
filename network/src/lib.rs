@@ -11,6 +11,9 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
+use profile::pspawn;
+use profile::*;
+
 #[cfg(test)]
 #[path = "tests/network_tests.rs"]
 pub mod network_tests;
@@ -60,7 +63,7 @@ impl NetSender {
     async fn spawn_worker(address: SocketAddr) -> Sender<Bytes> {
         // Each worker handle a TCP connection with on address.
         let (tx, mut rx) = channel(1000);
-        tokio::spawn(async move {
+        pspawn!(format!("Net-Sender-{:?}", address), {
             let stream = match TcpStream::connect(address).await {
                 Ok(stream) => {
                     info!("Outgoing connection established with {}", address);
@@ -118,7 +121,7 @@ impl<Message: 'static + Send + DeserializeOwned + Debug> NetReceiver<Message> {
     }
 
     async fn spawn_worker(socket: TcpStream, peer: SocketAddr, deliver: Sender<Message>) {
-        tokio::spawn(async move {
+        pspawn!(format!("Net-Receiver-{:?}", peer), {
             let mut transport = Framed::new(socket, LengthDelimitedCodec::new());
             while let Some(frame) = transport.next().await {
                 match frame

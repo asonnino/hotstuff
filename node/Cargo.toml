@@ -24,11 +24,12 @@ crypto = { path = "../crypto" }
 store = { path = "../store" }
 consensus = { path = "../consensus" }
 mempool = { path = "../mempool" }
+profile = { path = "../profile" }
 
 [features]
 benchmark = []
 
-[[bin]]         
-name = "client"   
-path = "src/client.rs" 
-required-features = ["benchmark"] 
+[[bin]]
+name = "client"
+path = "src/client.rs"
+required-features = ["benchmark"]

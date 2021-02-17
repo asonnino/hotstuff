@@ -6,6 +6,9 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::Sender;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
+use profile::pspawn;
+use profile::*;
+
 pub struct Front {
     address: SocketAddr,
     deliver: Sender<Transaction>,
@@ -38,7 +41,7 @@ impl Front {
     }
 
     async fn spawn_worker(socket: TcpStream, peer: SocketAddr, deliver: Sender<Transaction>) {
-        tokio::spawn(async move {
+        pspawn!("Front-Worker", {
             let mut transport = Framed::new(socket, LengthDelimitedCodec::new());
             while let Some(frame) = transport.next().await {
                 match frame {
