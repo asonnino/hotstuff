@@ -11,6 +11,10 @@ use network::{NetReceiver, NetSender};
 use store::Store;
 use tokio::sync::mpsc::{channel, Sender};
 
+use profile::pspawn;
+use profile::*;
+
+
 #[cfg(test)]
 #[path = "tests/consensus_tests.rs"]
 pub mod consensus_tests;
@@ -36,12 +40,12 @@ impl Consensus {
             x
         })?;
         let network_receiver = NetReceiver::new(address, tx_core.clone());
-        tokio::spawn(async move {
+        pspawn!("Net-Receiver", {
             network_receiver.run().await;
         });
 
         let mut network_sender = NetSender::new(rx_network);
-        tokio::spawn(async move {
+        pspawn!("Net-Sender", {
             network_sender.run().await;
         });
 
@@ -76,7 +80,7 @@ impl Consensus {
             /* network_channel */ tx_network,
             commit_channel,
         );
-        tokio::spawn(async move {
+        pspawn!("Consensus-Core", {
             core.run().await;
         });
 

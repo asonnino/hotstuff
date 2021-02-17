@@ -2,6 +2,9 @@ use std::collections::{HashMap, VecDeque};
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::sync::oneshot;
 
+use profile::pspawn;
+use profile::*;
+
 #[cfg(test)]
 #[path = "tests/store_tests.rs"]
 pub mod store_tests;
@@ -28,7 +31,7 @@ impl Store {
         let db = rocksdb::DB::open_default(path)?;
         let mut obligations = HashMap::<_, VecDeque<oneshot::Sender<_>>>::new();
         let (tx, mut rx) = channel(100);
-        tokio::spawn(async move {
+        pspawn!("Store", {
             while let Some(command) = rx.recv().await {
                 match command {
                     StoreCommand::Write(key, value, sender) => {

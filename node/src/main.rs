@@ -13,8 +13,12 @@ use mempool::Committee as MempoolCommittee;
 use std::fs;
 use tokio::task::JoinHandle;
 
+use profile::pspawn;
+use profile::*;
+
 #[tokio::main]
 async fn main() {
+
     let matches = App::new(crate_name!())
         .version(crate_version!())
         .about("A research implementation of the HostStuff protocol.")
@@ -60,17 +64,22 @@ async fn main() {
             }
         }
         ("run", Some(subm)) => {
-            let key_file = subm.value_of("keys").unwrap();
-            let committee_file = subm.value_of("committee").unwrap();
-            let parameters_file = subm.value_of("parameters");
-            let store_path = subm.value_of("store").unwrap();
-            match Node::new(committee_file, key_file, store_path, parameters_file).await {
-                Ok(mut node) => {
-                    // Sink the commit channel.
-                    while node.commit.recv().await.is_some() {}
+            let subm = subm.clone();
+            let handle = pspawn!("Main", {
+                let key_file = subm.value_of("keys").unwrap();
+                let committee_file = subm.value_of("committee").unwrap();
+                let parameters_file = subm.value_of("parameters");
+                let store_path = subm.value_of("store").unwrap();
+                match Node::new(committee_file, key_file, store_path, parameters_file).await {
+                    Ok(mut node) => {
+                        // Sink the commit channel.
+                        while node.commit.recv().await.is_some() {}
+                    }
+                    Err(e) => error!("{}", e),
                 }
-                Err(e) => error!("{}", e),
-            }
+            });
+            handle.await;
+            return;
         }
         ("deploy", Some(subm)) => {
             let nodes = subm.value_of("nodes").unwrap();
@@ -86,6 +95,7 @@ async fn main() {
         }
         _ => unreachable!(),
     }
+
 }
 
 fn deploy_testbed(nodes: usize) -> Result<Vec<JoinHandle<()>>, Box<dyn std::error::Error>> {

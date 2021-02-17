@@ -6,6 +6,9 @@ use std::time::Duration;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::time::sleep;
 
+use profile::pspawn;
+use profile::*;
+
 #[cfg(test)]
 #[path = "tests/timer_tests.rs"]
 pub mod timer_tests;
@@ -26,7 +29,7 @@ impl<Id: 'static + Hash + Eq + Clone + Send + Sync> Timer<Id> {
     pub fn new() -> Self {
         let (tx_notifier, rx_notifier) = channel(100);
         let (tx_inner, mut rx_inner): (Sender<Command<Id>>, _) = channel(100);
-        tokio::spawn(async move {
+        pspawn!("Timer", {
             let mut waiting = FuturesUnordered::new();
             let mut pending = HashMap::new();
             loop {

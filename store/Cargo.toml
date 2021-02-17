@@ -8,3 +8,5 @@ publish = false
 [dependencies]
 rocksdb = "0.15.0"
 tokio = { version = "1.1.0", features = ["sync", "macros", "rt"] }
+
+profile = { path = "../profile" }

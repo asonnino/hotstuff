@@ -11,6 +11,9 @@ use store::Store;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::sync::oneshot;
 
+use profile::pspawn;
+use profile::*;
+
 #[cfg(test)]
 #[path = "tests/mempool_tests.rs"]
 pub mod mempool_tests;
@@ -45,7 +48,7 @@ impl SimpleMempool {
         })?;
 
         let front = Front::new(address, tx_client);
-        tokio::spawn(async move {
+        pspawn!("Simple-Mempool-Front", {
             front.run().await;
         });
 
@@ -55,12 +58,12 @@ impl SimpleMempool {
             x
         })?;
         let network_receiver = NetReceiver::new(address, tx_core);
-        tokio::spawn(async move {
+        pspawn!("Simple-Mempool-Receiver", {
             network_receiver.run().await;
         });
 
         let mut network_sender = NetSender::new(rx_network);
-        tokio::spawn(async move {
+        pspawn!("Simple-Mempool-Sender", {
             network_sender.run().await;
         });
 
@@ -76,7 +79,7 @@ impl SimpleMempool {
             /* client_channel */ rx_client,
             /* network_channel */ tx_network,
         );
-        tokio::spawn(async move {
+        pspawn!("Core-Runner", {
             core.run().await;
         });
 

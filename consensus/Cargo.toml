@@ -21,6 +21,7 @@ store = { path = "../store" }
 crypto = { path = "../crypto" }
 network = { path = "../network" }
 mempool = { path = "../mempool" }
+profile = { path = "../profile" }
 
 [dev-dependencies]
 rand = "0.7.3"

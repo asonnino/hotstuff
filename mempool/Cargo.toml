@@ -20,6 +20,7 @@ futures = "0.3.8"
 crypto = { path = "../crypto" }
 store = { path = "../store" }
 network = { path = "../network" }
+profile = { path = "../profile" }
 
 [dev-dependencies]
 rand = "0.7.3"

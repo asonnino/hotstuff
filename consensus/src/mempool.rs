@@ -10,6 +10,9 @@ use std::collections::HashMap;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
+use profile::pspawn;
+use profile::*;
+
 type DriverMessage = (Vec<u8>, Block, Receiver<()>);
 
 pub struct MempoolDriver<Mempool> {
@@ -22,7 +25,7 @@ impl<Mempool: 'static + NodeMempool> MempoolDriver<Mempool> {
     pub fn new(mempool: Mempool, core_channel: Sender<CoreMessage>, store: Store) -> Self {
         let (tx_inner, mut rx_inner): (_, Receiver<DriverMessage>) = channel(1000);
         let mut waiting = FuturesUnordered::new();
-        tokio::spawn(async move {
+        pspawn!("Mempool", {
             loop {
                 tokio::select! {
                     Some((wait_on, block, handler)) = rx_inner.recv().fuse() => {
