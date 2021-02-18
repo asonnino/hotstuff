@@ -103,7 +103,7 @@ impl fmt::Debug for Block {
 
 impl fmt::Display for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "B{}", self.round)
+        write!(f, "B{}({})", self.round, base64::encode(&self.payload))
     }
 }
 

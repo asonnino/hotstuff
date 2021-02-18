@@ -3,7 +3,6 @@ use crate::config::{Committee, Parameters, Secret};
 use consensus::{Block, Consensus, ConsensusError};
 use crypto::SignatureService;
 use log::info;
-use mempool::Payload;
 use mempool::{MempoolError, SimpleMempool};
 use store::{Store, StoreError};
 use thiserror::Error;
@@ -29,7 +28,6 @@ pub enum NodeError {
 
 pub struct Node {
     pub commit: Receiver<Block>,
-    store: Store,
 }
 
 impl Node {
@@ -81,10 +79,7 @@ impl Node {
         .await?;
 
         info!("Node {} successfully booted", name);
-        Ok(Self {
-            commit: rx_commit,
-            store,
-        })
+        Ok(Self { commit: rx_commit })
     }
 
     pub fn print_key_file(filename: &str) -> Result<(), NodeError> {
@@ -92,36 +87,8 @@ impl Node {
     }
 
     pub async fn analyze_block(&mut self) {
-        while let Some(block) = self.commit.recv().await {
-            let id = format!("{}", block);
-
-            // Skip empty blocks.
-            if block.payload.is_empty() {
-                continue;
-            }
-
-            // Load the payload from storage.
-            let bytes = self
-                .store
-                .read(block.payload)
-                .await
-                .expect("Failed to read committed block from store")
-                .unwrap_or_else(|| panic!("Payload missing from store"));
-
-            // Deserialize the payload.
-            let payload: Payload =
-                bincode::deserialize(&bytes).expect("Failed to deserialize payload");
-
-            #[cfg(feature = "benchmark")]
-            for tx in payload.transactions {
-                // Check if it contains a special transaction.
-                if tx.windows(2).all(|x| x[0] == x[1]) && tx.contains(&5u8) {
-                    info!("{} contains a special transaction", id);
-                }
-            }
-
-            #[cfg(not(feature = "benchmark"))]
-            info!("{} committed with {} txs", id, payload.transactions.len());
+        while let Some(_block) = self.commit.recv().await {
+            // This is where we can further process committed block.
         }
     }
 }
