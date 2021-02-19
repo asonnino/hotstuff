@@ -31,8 +31,9 @@ class LogParser:
                 results = p.map(self._parse_clients, clients)
         except (ValueError, IndexError) as e:
             raise ParseError(f'Failed to parse client log: {e}')
-        self.txs, self.size, self.rate, self.start, self.end, self.misses, \
+        self.txs, self.size, self.rate, self.start, self.end, misses, \
             self.sent_samples = zip(*results)
+        self.misses = sum(self.misses)
 
         # Parse the nodes logs.
         try:
@@ -40,15 +41,20 @@ class LogParser:
                 results = p.map(self._parse_nodes, nodes)
         except (ValueError, IndexError) as e:
             raise ParseError(f'Failed to parse node log: {e}')
-        self.payload, proposals, commits, samples = zip(*results)
+        self.payload, proposals, commits, samples, timeouts = zip(*results)
         self.proposals = {k: v for x in proposals for k, v in x.items()}
         self.commits = {k: v for x in commits for k, v in x.items()}
         self.samples = {k: v for x in samples for k, v in x.items()}
+        self.timeouts = max(timeouts)
 
-        # Check whether clients missed their target rate.
-        misses = sum(self.misses)
-        if misses != 0:
-            Print.warn(f'Clients missed their target rate {misses:,} time(s)')
+        # Check whether clients missed their target rate or if the nodes timed out.
+        if self.misses != 0:
+            Print.warn(
+                f'Clients missed their target rate {self.misses:,} time(s)'
+            )
+
+        if self.timeouts > 1:  # It is expected to time out once at the beginning.
+            Print.warn(f'Nodes timed out {self.timeouts:,} time(s)')
 
         # Ensure that all (non-empty) blocks and sample transactions are committed.
         if len(self.proposals) != len(self.commits):
@@ -105,7 +111,10 @@ class LogParser:
         tmp = findall(r'Payload ([^ ]+) contains (\d+) sample', log)
         samples = {d: int(s) for d, s in tmp}
 
-        return payload, proposals, commits, samples
+        tmp = findall(r'.* Timeout reached', log)
+        timeouts = len(tmp)
+
+        return payload, proposals, commits, samples, timeouts
 
     def _to_posix(self, string):
         x = datetime.fromisoformat(string.replace('Z', '+00:00'))
