@@ -32,7 +32,7 @@ class LogParser:
         except (ValueError, IndexError) as e:
             raise ParseError(f'Failed to parse client log: {e}')
         self.txs, self.size, self.rate, self.start, self.end, self.misses, \
-            self.send_special = zip(*results)
+            self.sent_samples = zip(*results)
 
         # Parse the nodes logs.
         try:
@@ -40,18 +40,22 @@ class LogParser:
                 results = p.map(self._parse_nodes, nodes)
         except (ValueError, IndexError) as e:
             raise ParseError(f'Failed to parse node log: {e}')
-        proposals, commits, self.commit_special = zip(*results)
+        proposals, commits, samples = zip(*results)
         self.proposals = {k: v for x in proposals for k, v in x.items()}
         self.commits = {k: v for x in commits for k, v in x.items()}
+        self.samples = {k: v for x in samples for k, v in x.items()}
 
         # Check whether clients missed their target rate.
         misses = sum(self.misses)
         if misses != 0:
             Print.warn(f'Clients missed their target rate {misses:,} time(s)')
 
-        # Check whether all (non-empty) blocks created are committed.
+        # Ensure that all (non-empty) blocks and sample transactions are committed.
         if len(self.proposals) != len(self.commits):
             raise ParseError('Nodes did not commit all non-empty block(s)')
+
+        if any(not x in self.commits for x in self.samples.keys()):
+            raise ParseError('Nodes did not commit all sample tx(s)')
 
     def _verify(self, clients, nodes):
         # Ensure all clients managed to submit their share of txs.
@@ -77,63 +81,75 @@ class LogParser:
         size = int(search(r'Transactions size: (\d+)', log).group(1))
         rate = int(search(r'Transactions rate: (\d+)', log).group(1))
 
-        tmp = search(r'([-:.T0123456789]*Z) .* Start ', log).group(1)
+        tmp = search(r'\[(.*Z) .* Start ', log).group(1)
         start = self._to_posix(tmp)
-        tmp = search(r'([-:.T0123456789]*Z) .* Finished', log).group(1)
+        tmp = search(r'\[(.*Z) .* Finished', log).group(1)
         end = self._to_posix(tmp)
 
         misses = len(findall(r'rate too high', log))
 
-        tmp = findall(r'([-:.T0123456789]*Z) .* special transaction', log)
-        send_special = [self._to_posix(x) for x in tmp]
+        tmp = findall(r'\[(.*Z) .* sample transaction', log)
+        samples = [self._to_posix(x) for x in tmp]
 
-        return txs, size, rate, start, end, misses, send_special
+        return txs, size, rate, start, end, misses, samples
 
     def _parse_nodes(self, log):
-        tmp = findall(r'([-:.T0123456789]*Z) .* Created non-empty B(\d+)', log)
-        proposals = {r: self._to_posix(t) for t, r in tmp}
+        tmp = findall(r'\[(.*Z) .* Created B\d+\(([^ ]+)\)', log)
+        proposals = {d: self._to_posix(t) for t, d in tmp}
 
-        tmp = findall(r'([-:.T0123456789]*Z) .* Committed B(\d+)', log)
-        commits = {r: self._to_posix(t) for t, r in tmp if r in proposals}
+        tmp = findall(r'\[(.*Z) .* Committed B\d+\(([^ ]+)\)', log)
+        commits = {d: self._to_posix(t) for t, d in tmp if d in proposals}
 
-        tmp = findall(r'([-:.T0123456789]*Z) .* B(\d+) .* special', log)
-        special = [self._to_posix(t) for t, r in tmp if r in proposals]
+        tmp = findall(r'Payload ([^ ]+) contains (\d+) sample', log)
+        samples = {d: int(s) for d, s in tmp}
 
-        return proposals, commits, special
+        return proposals, commits, samples
 
     def _to_posix(self, string):
         x = datetime.fromisoformat(string.replace('Z', '+00:00'))
         return datetime.timestamp(x)
 
-    def consensus_throughput(self):
+    def _consensus_throughput(self):
+        if not self.commits:
+            return 0, 0, 0
         start, end = min(self.proposals.values()), max(self.commits.values())
         duration = end - start
         tps = sum(self.txs) / duration
         bps = tps * self.size[0]
         return tps, bps, duration
 
-    def consensus_latency(self):
+    def _consensus_latency(self):
+        if not self.commits:
+            return 0
         latency = [c - self.proposals[r] for r, c in self.commits.items()]
-        return mean(latency) if latency else 0
+        return mean(latency)
 
-    def end_to_end_throughput(self):
+    def _end_to_end_throughput(self):
+        if not self.commits:
+            return 0, 0, 0
         start, end = min(self.start), max(self.commits.values())
         duration = end - start
         tps = sum(self.txs) / duration
         bps = tps * self.size[0]
         return tps, bps, duration
 
-    def end_to_end_latency(self):
-        latency = []
-        for send, commit in zip(self.send_special, self.commit_special):
-            latency += [c - s for s, c in zip(send, commit)]
-        return mean(latency) if latency else 0
+    def _end_to_end_latency(self):
+        start = [x for sub in self.sent_samples for x in sub]
+        if not (self.samples and start):
+            return 0
+
+        end = []
+        for digest, occurrence in self.samples.items():
+            time = self.commits[digest]
+            end += [time] * occurrence
+
+        return mean(end) - mean(start)
 
     def result(self):
-        consensus_latency = self.consensus_latency() * 1000
-        consensus_tps, consensus_bps, _ = self.consensus_throughput()
-        end_to_end_tps, end_to_end_bps, duration = self.end_to_end_throughput()
-        end_to_end_latency = self.end_to_end_latency() * 1000
+        consensus_latency = self._consensus_latency() * 1000
+        consensus_tps, consensus_bps, _ = self._consensus_throughput()
+        end_to_end_tps, end_to_end_bps, duration = self._end_to_end_throughput()
+        end_to_end_latency = self._end_to_end_latency() * 1000
         return (
             '\n'
             '-----------------------------------------\n'
