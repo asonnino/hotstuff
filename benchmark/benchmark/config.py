@@ -118,7 +118,6 @@ class BenchParameters:
                 raise ConfigError('Missing number of nodes')
 
             self.nodes = [int(x) for x in nodes]
-            self.txs = int(json['txs'])
             self.rate = int(json['rate'])
             self.size = int(json['size'])
             self.duration = int(json['duration'])

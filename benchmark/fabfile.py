@@ -15,14 +15,13 @@ from aws.remote import Bench, BenchError
 def local(ct):
     bench_params = {
         'nodes': 4,
-        'txs': 10_000,
         'size': 512,
-        'rate': 1_000,
+        'rate': 1000,
         'duration': 30,
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 5000,
+            'timeout_delay': 2000,
             'sync_retry_delay': 10_000
         },
         'mempool': {
@@ -31,7 +30,7 @@ def local(ct):
         }
     }
     try:
-        ret = LocalBench(bench_params, node_params).run(debug=True).result()
+        ret = LocalBench(bench_params, node_params).run(debug=False).result()
         print(ret)
     except BenchError as e:
         Print.error(e)

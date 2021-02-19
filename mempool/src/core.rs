@@ -101,6 +101,9 @@ impl Core {
         let bytes = digest.to_vec();
 
         #[cfg(feature = "benchmark")]
+        info!("Payload {} contains {} B", base64::encode(&bytes), payload.size());
+
+        #[cfg(feature = "benchmark")]
         if payload.sample_txs > 0 {
             info!(
                 "Payload {} contains {} sample tx(s)",

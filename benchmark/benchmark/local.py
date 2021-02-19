@@ -42,6 +42,7 @@ class LocalBench:
         self._kill_nodes()
 
         try:
+            '''
             Print.info('Setting up testbed...')
             nodes = self.nodes[0]
 
@@ -74,14 +75,12 @@ class LocalBench:
 
             # Run the clients (they will wait for the nodes to be ready).
             addresses = committee.front_addresses()
-            txs_share = ceil(self.txs / nodes)
             rate_share = ceil(self.rate / nodes)
             timeout = self.node_parameters.timeout_delay
             client_logs = [PathMaker.client_log_file(i) for i in range(nodes)]
             for addr, log_file in zip(addresses, client_logs):
                 cmd = CommandMaker.run_client(
                     addr,
-                    txs_share,
                     self.size,
                     rate_share,
                     timeout
@@ -105,7 +104,7 @@ class LocalBench:
             Print.info(f'Running benchmark ({self.duration} sec)...')
             sleep(self.duration)
             self._kill_nodes()
-
+            '''
             # Parse logs and return the parser.
             Print.info('Parsing logs...')
             return LogParser.process('./logs')
