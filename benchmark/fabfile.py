@@ -100,7 +100,7 @@ def remote(ctx):
         },
         'mempool': {
             'queue_capacity': 100_000_000,
-            'max_payload_size': 2_000_000
+            'max_payload_size': 100_000
         }
     }
     try:
