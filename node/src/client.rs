@@ -129,7 +129,9 @@ impl Client {
             if self.rate != 0 && now.elapsed().as_millis() > BURST_DURATION as u128 {
                 warn!("Transaction rate too high for this client");
             }
-            self.send_sample_transaction(&mut transport).await?;
+            if x % PRECISION == 0 {
+                self.send_sample_transaction(&mut transport).await?;
+            }
         }
         info!("Finished sending transactions");
         Ok(())
