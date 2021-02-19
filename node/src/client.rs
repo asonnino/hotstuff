@@ -110,7 +110,7 @@ impl Client {
             interval.as_mut().tick().await;
             let now = Instant::now();
             if let Err(e) = self.send_burst(&mut transport, burst, counter).await {
-                warn!("{:?}", e);
+                warn!("Failed to send transaction: {}", e);
                 break;
             }
             if now.elapsed().as_millis() > BURST_DURATION as u128 {
@@ -118,7 +118,7 @@ impl Client {
             }
             if counter % PRECISION == 0 {
                 if let Err(e) = self.send_sample_transaction(&mut transport).await {
-                    warn!("{:?}", e);
+                    warn!("Failed to send transaction: {}", e);
                     break;
                 }
             }
@@ -138,10 +138,7 @@ impl Client {
             tx.put_u64(nonce);
             tx.put_u64(x as u64);
             tx.resize(self.size, 0u8);
-            transport
-                .send(tx.freeze())
-                .await
-                .context("Failed to send transaction")?;
+            transport.send(tx.freeze()).await?;
         }
         Ok(())
     }
@@ -153,10 +150,8 @@ impl Client {
         info!("Sending sample transaction");
         let mut tx = BytesMut::with_capacity(self.size);
         tx.resize(self.size, 5u8);
-        transport
-            .send(tx.freeze())
-            .await
-            .context("Failed to send transaction")
+        transport.send(tx.freeze()).await?;
+        Ok(())
     }
 
     pub async fn wait(&self) {

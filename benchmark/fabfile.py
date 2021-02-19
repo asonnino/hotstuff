@@ -95,12 +95,12 @@ def remote(ctx):
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 20_000,
+            'timeout_delay': 100_000,
             'sync_retry_delay': 10_000
         },
         'mempool': {
             'queue_capacity': 100_000_000,
-            'max_payload_size': 2_000_000
+            'max_payload_size': 2000_000
         }
     }
     try:
