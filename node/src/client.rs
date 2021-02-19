@@ -18,7 +18,6 @@ async fn main() -> Result<()> {
         .about("Benchmark client for HotStuff nodes.")
         .args_from_usage("<ADDR> 'The network address of the node where to send txs'")
         .args_from_usage("--timeout=<INT> 'The nodes timeout value'")
-        .args_from_usage("--transactions=<INT> 'The number of transactions for the benchmark'")
         .args_from_usage("--size=<INT> 'The size of each transaction in bytes'")
         .args_from_usage("--rate=<INT> 'The rate (txs/s) at which to send the transactions'")
         .args_from_usage("--nodes=[ADDR]... 'Network addresses that must be reachable before starting the benchmark.'")
@@ -34,11 +33,6 @@ async fn main() -> Result<()> {
         .unwrap()
         .parse::<SocketAddr>()
         .context("Invalid socket address format")?;
-    let transactions = matches
-        .value_of("transactions")
-        .unwrap()
-        .parse::<usize>()
-        .context("The number of transactions must be a non-negative integer")?;
     let size = matches
         .value_of("size")
         .unwrap()
@@ -47,7 +41,7 @@ async fn main() -> Result<()> {
     let rate = matches
         .value_of("rate")
         .unwrap()
-        .parse::<usize>()
+        .parse::<u64>()
         .context("The rate of transactions must be a non-negative integer")?;
     let timeout = matches
         .value_of("timeout")
@@ -63,12 +57,10 @@ async fn main() -> Result<()> {
         .context("Invalid socket address format")?;
 
     info!("Node address: {}", target);
-    info!("Number of transactions: {}", transactions);
     info!("Transactions size: {} B", size);
     info!("Transactions rate: {} tx/s", rate);
     let client = Client {
         target,
-        transactions,
         size,
         rate,
         timeout,
@@ -84,17 +76,16 @@ async fn main() -> Result<()> {
 
 struct Client {
     target: SocketAddr,
-    transactions: usize,
     size: usize,
-    rate: usize,
+    rate: u64,
     timeout: u64,
     nodes: Vec<SocketAddr>,
 }
 
 impl Client {
     pub async fn send(&self) -> Result<()> {
-        const PRECISION: usize = 20; // Sample precision.
-        const BURST_DURATION: usize = 1000 / PRECISION;
+        const PRECISION: u64 = 20; // Sample precision.
+        const BURST_DURATION: u64 = 1000 / PRECISION;
 
         // The transaction size must be at least 16 bytes to ensure all txs are different.
         if self.size < 16 {
@@ -103,44 +94,43 @@ impl Client {
             ));
         }
 
-        // Adapt for the case where the transaction rate is zero.
-        let (batches, burst) = match self.rate {
-            0 => (1, self.transactions),
-            _ => (
-                PRECISION * self.transactions / self.rate + 1,
-                self.rate / PRECISION,
-            ),
-        };
-
         // Connect to the mempool.
         let stream = TcpStream::connect(self.target)
             .await
             .context(format!("failed to connect to {}", self.target))?;
 
         // Submit all transactions.
+        let burst = self.rate / PRECISION;
+        let mut counter = 0;
         let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
-        let interval = interval(Duration::from_millis(BURST_DURATION as u64));
+        let interval = interval(Duration::from_millis(BURST_DURATION));
         tokio::pin!(interval);
         info!("Start sending transactions");
-        for x in 0..batches {
+        loop {
             interval.as_mut().tick().await;
             let now = Instant::now();
-            self.send_burst(&mut transport, burst, x as u64).await?;
-            if self.rate != 0 && now.elapsed().as_millis() > BURST_DURATION as u128 {
+            if let Err(e) = self.send_burst(&mut transport, burst, counter).await {
+                warn!("Failed to send transaction: {}", e);
+                break;
+            }
+            if now.elapsed().as_millis() > BURST_DURATION as u128 {
                 warn!("Transaction rate too high for this client");
             }
-            if x % PRECISION == 0 {
-                self.send_sample_transaction(&mut transport).await?;
+            if counter % PRECISION == 0 {
+                if let Err(e) = self.send_sample_transaction(&mut transport).await {
+                    warn!("Failed to send transaction: {}", e);
+                    break;
+                }
             }
+            counter += 1;
         }
-        info!("Finished sending transactions");
         Ok(())
     }
 
     async fn send_burst(
         &self,
         transport: &mut Framed<TcpStream, LengthDelimitedCodec>,
-        load: usize,
+        load: u64,
         nonce: u64,
     ) -> Result<()> {
         for x in 0..load {
@@ -148,10 +138,7 @@ impl Client {
             tx.put_u64(nonce);
             tx.put_u64(x as u64);
             tx.resize(self.size, 0u8);
-            transport
-                .send(tx.freeze())
-                .await
-                .context("Failed to send transaction")?;
+            transport.send(tx.freeze()).await?;
         }
         Ok(())
     }
@@ -163,10 +150,8 @@ impl Client {
         info!("Sending sample transaction");
         let mut tx = BytesMut::with_capacity(self.size);
         tx.resize(self.size, 5u8);
-        transport
-            .send(tx.freeze())
-            .await
-            .context("Failed to send transaction")
+        transport.send(tx.freeze()).await?;
+        Ok(())
     }
 
     pub async fn wait(&self) {

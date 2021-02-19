@@ -20,9 +20,6 @@ class LogParser:
         assert all(isinstance(x, str) for y in inputs for x in y)
         assert all(x for x in inputs)
 
-        # Ensure the benchmark run without errors.
-        self._verify(clients, nodes)
-
         self.committee_size = len(nodes)
 
         # Parse the clients logs.
@@ -30,9 +27,9 @@ class LogParser:
             with Pool() as p:
                 results = p.map(self._parse_clients, clients)
         except (ValueError, IndexError) as e:
-            raise ParseError(f'Failed to parse client log: {e}')
-        self.txs, self.size, self.rate, self.start, self.end, misses, \
-            self.sent_samples = zip(*results)
+            raise ParseError(f'Failed to parse client logs: {e}')
+        self.size, self.rate, self.start, misses, self.sent_samples \
+            = zip(*results)
         self.misses = sum(misses)
 
         # Parse the nodes logs.
@@ -40,66 +37,46 @@ class LogParser:
             with Pool() as p:
                 results = p.map(self._parse_nodes, nodes)
         except (ValueError, IndexError) as e:
-            raise ParseError(f'Failed to parse node log: {e}')
-        self.payload, proposals, commits, samples, timeouts = zip(*results)
+            raise ParseError(f'Failed to parse node logs: {e}')
+        self.payload, proposals, commits, sizes, self.samples, timeouts \
+            = zip(*results)
         self.proposals = {k: v for x in proposals for k, v in x.items()}
         self.commits = {k: v for x in commits for k, v in x.items()}
-        self.samples = {k: v for x in samples for k, v in x.items()}
+        self.sizes = {k: v for x in sizes for k, v in x.items()}
         self.timeouts = max(timeouts)
 
-        # Check whether clients missed their target rate or if the nodes timed out.
+        # Check whether clients missed their target rate.
         if self.misses != 0:
             Print.warn(
                 f'Clients missed their target rate {self.misses:,} time(s)'
             )
 
-        if self.timeouts > 1:  # It is expected to time out once at the beginning.
+        # Check whether the nodes timed out.
+        # Note that nodes are expected to time out once at the beginning.
+        if self.timeouts > 1:
             Print.warn(f'Nodes timed out {self.timeouts:,} time(s)')
 
-        # Ensure that all (non-empty) blocks and sample transactions are committed.
-        if len(self.proposals) != len(self.commits):
-            raise ParseError('Nodes did not commit all non-empty block(s)')
-
-        if any(not x in self.commits for x in self.samples.keys()):
-            raise ParseError('Nodes did not commit all sample tx(s)')
-
-    def _verify(self, clients, nodes):
-        # Ensure all clients managed to submit their share of txs.
-        status = [search(r'Finished', x) for x in clients]
-        if sum(x is not None for x in status) != len(clients):
-            raise ParseError('Client(s) failed to send all their txs')
-
-        with Pool() as p:
-            # Ensure none of the nodes panicked.
-            status = p.starmap(search, zip(repeat(r'panic'), nodes))
-            if any(x is not None for x in status):
-                raise ParseError('Node(s) panicked')
-
-            # Ensure no transactions have been dropped.
-            status = p.starmap(search, zip(
-                repeat(r'dropping transaction'), nodes)
-            )
-            if any(x is not None for x in status):
-                raise ParseError('Transactions dropped (mempool buffer full)')
-
     def _parse_clients(self, log):
-        txs = int(search(r'Number of transactions: (\d+)', log).group(1))
+        if search(r'Error', log) is not None:
+            raise ParseError('Client(s) panicked')
+
         size = int(search(r'Transactions size: (\d+)', log).group(1))
         rate = int(search(r'Transactions rate: (\d+)', log).group(1))
 
         tmp = search(r'\[(.*Z) .* Start ', log).group(1)
         start = self._to_posix(tmp)
-        tmp = search(r'\[(.*Z) .* Finished', log).group(1)
-        end = self._to_posix(tmp)
 
         misses = len(findall(r'rate too high', log))
 
         tmp = findall(r'\[(.*Z) .* sample transaction', log)
         samples = [self._to_posix(x) for x in tmp]
 
-        return txs, size, rate, start, end, misses, samples
+        return size, rate, start, misses, samples
 
     def _parse_nodes(self, log):
+        if search(r'panic', log) is not None:
+            raise ParseError('Client(s) panicked')
+
         payload = int(search(r'Max payload size: (\d+)', log).group(1))
 
         tmp = findall(r'\[(.*Z) .* Created B\d+\(([^ ]+)\)', log)
@@ -108,13 +85,16 @@ class LogParser:
         tmp = findall(r'\[(.*Z) .* Committed B\d+\(([^ ]+)\)', log)
         commits = {d: self._to_posix(t) for t, d in tmp if d in proposals}
 
-        tmp = findall(r'Payload ([^ ]+) contains (\d+) sample', log)
-        samples = {d: int(s) for d, s in tmp}
+        tmp = findall(r'Payload ([^ ]+) contains (\d+) B', log)
+        sizes = {d: int(s) for d, s in tmp if d in commits}
 
-        tmp = findall(r'.* Timeout reached', log)
+        tmp = findall(r'Payload ([^ ]+) contains (\d+) sample', log)
+        samples = {d: int(s) for d, s in tmp if d in commits}
+
+        tmp = findall(r'.* Timeout', log)
         timeouts = len(tmp)
 
-        return payload, proposals, commits, samples, timeouts
+        return payload, proposals, commits, sizes, samples, timeouts
 
     def _to_posix(self, string):
         x = datetime.fromisoformat(string.replace('Z', '+00:00'))
@@ -125,36 +105,37 @@ class LogParser:
             return 0, 0, 0
         start, end = min(self.proposals.values()), max(self.commits.values())
         duration = end - start
-        tps = sum(self.txs) / duration
-        bps = tps * self.size[0]
+        bytes = sum(self.sizes.values())
+        bps = bytes / duration
+        tps = bps / self.size[0]
         return tps, bps, duration
 
     def _consensus_latency(self):
-        if not self.commits:
-            return 0
         latency = [c - self.proposals[r] for r, c in self.commits.items()]
-        return mean(latency)
+        return mean(latency) if latency else 0
 
     def _end_to_end_throughput(self):
         if not self.commits:
             return 0, 0, 0
         start, end = min(self.start), max(self.commits.values())
         duration = end - start
-        tps = sum(self.txs) / duration
-        bps = tps * self.size[0]
+        bytes = sum(self.sizes.values())
+        bps = bytes / duration
+        tps = bps / self.size[0]
         return tps, bps, duration
 
     def _end_to_end_latency(self):
-        start = [x for sub in self.sent_samples for x in sub]
-        if not (self.samples and start):
-            return 0
+        latency = []
+        for start_times, samples in zip(self.sent_samples, self.samples):
+            start_times.sort()
 
-        end = []
-        for digest, occurrence in self.samples.items():
-            time = self.commits[digest]
-            end += [time] * occurrence
+            end_times = []
+            for digest, occurrences in samples.items():
+                tmp = self.commits[digest]
+                end_times += [tmp] * occurrences
 
-        return mean(end) - mean(start)
+            latency += [x - y for x, y in zip(end_times, start_times)]
+        return mean(latency) if latency else 0
 
     def result(self):
         consensus_latency = self._consensus_latency() * 1000
@@ -167,7 +148,6 @@ class LogParser:
             ' RESULTS:\n'
             '-----------------------------------------\n'
             f' Committee size: {self.committee_size} nodes\n'
-            f' Number of transactions: {sum(self.txs):,} txs\n'
             f' Max payload size: {self.payload[0]:,} B \n'
             f' Transaction size: {self.size[0]:,} B \n'
             f' Transaction rate: {sum(self.rate):,} tx/s\n'

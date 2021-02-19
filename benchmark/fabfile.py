@@ -2,7 +2,7 @@ from fabric import task
 from glob import glob
 
 from benchmark.local import LocalBench
-from benchmark.logs import ParseError, LogAggregator
+from benchmark.logs import ParseError, LogParser, LogAggregator
 from benchmark.utils import Print
 from benchmark.plot import Ploter, PlotError
 from aws.instance import InstanceManager
@@ -15,14 +15,13 @@ from aws.remote import Bench, BenchError
 def local(ct):
     bench_params = {
         'nodes': 4,
-        'txs': 10_000,
         'size': 512,
-        'rate': 1_000,
-        'duration': 30,
+        'rate': 1000,
+        'duration': 20,
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 5000,
+            'timeout_delay': 2000,
             'sync_retry_delay': 10_000
         },
         'mempool': {
@@ -31,7 +30,7 @@ def local(ct):
         }
     }
     try:
-        ret = LocalBench(bench_params, node_params).run(debug=True).result()
+        ret = LocalBench(bench_params, node_params).run(debug=False).result()
         print(ret)
     except BenchError as e:
         Print.error(e)
@@ -89,20 +88,19 @@ def install(ctx):
 def remote(ctx):
     bench_params = {
         'nodes': [4],
-        'txs': 2_000_000,
         'size': 512,
-        'rate': 10_000,
-        'duration': 360,
+        'rate': 9_000,
+        'duration': 300,
         'runs': 1,
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 20_000,
+            'timeout_delay': 30_000,
             'sync_retry_delay': 10_000
         },
         'mempool': {
             'queue_capacity': 100_000_000,
-            'max_payload_size': 2_000_000
+            'max_payload_size': 1_000_000
         }
     }
     try:
@@ -117,6 +115,14 @@ def kill(ctx):
         Bench(ctx).kill()
     except BenchError as e:
         Print.error(e)
+
+
+@task
+def logs(ctx):
+    try:
+        print(LogParser.process('./logs').result())
+    except ParseError as e:
+        Print.error(BenchError('Failed to parse logs', e))
 
 
 @task
