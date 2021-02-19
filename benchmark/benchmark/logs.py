@@ -33,7 +33,7 @@ class LogParser:
             raise ParseError(f'Failed to parse client log: {e}')
         self.txs, self.size, self.rate, self.start, self.end, misses, \
             self.sent_samples = zip(*results)
-        self.misses = sum(self.misses)
+        self.misses = sum(misses)
 
         # Parse the nodes logs.
         try:
