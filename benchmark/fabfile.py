@@ -2,7 +2,7 @@ from fabric import task
 from glob import glob
 
 from benchmark.local import LocalBench
-from benchmark.logs import ParseError, LogAggregator
+from benchmark.logs import ParseError, LogParser, LogAggregator
 from benchmark.utils import Print
 from benchmark.plot import Ploter, PlotError
 from aws.instance import InstanceManager
@@ -89,7 +89,7 @@ def remote(ctx):
     bench_params = {
         'nodes': [4],
         'size': 512,
-        'rate': 7_000,
+        'rate': 10_000,
         'duration': 360,
         'runs': 1,
     }
@@ -118,6 +118,14 @@ def kill(ctx):
 
 
 @task
+def logs(ctx):
+    try:
+        print(LogParser.process('./logs').result())
+    except ParseError as e:
+        Print.error(BenchError('Failed to parse logs', e))
+
+
+@task
 def aggregate(ctx):
     files = glob('benchmark.*.txt')
     try:
@@ -135,9 +143,3 @@ def plot(ctx):
         ploter.plot_latency('Committee size', ploter.txs)
     except PlotError as e:
         Print.error(BenchError('Failed to plot performance', e))
-
-@task
-def test(ctx):
-    from benchmark.logs import LogParser
-    ret = LogParser.process('./logs').result()
-    print(ret)
