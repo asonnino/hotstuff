@@ -59,9 +59,7 @@ class LogParser:
 
     def _parse_clients(self, log):
         if search(r'Error', log) is not None:
-            # TODO: Clients may be killed after nodes...
-            #raise ParseError('Client(s) panicked')
-            pass
+            raise ParseError('Client(s) panicked')
 
         size = int(search(r'Transactions size: (\d+)', log).group(1))
         rate = int(search(r'Transactions rate: (\d+)', log).group(1))
