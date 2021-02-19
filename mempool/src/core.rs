@@ -101,10 +101,10 @@ impl Core {
         let bytes = digest.to_vec();
 
         #[cfg(feature = "benchmark")]
-        if payload.special_txs > 0 {
+        if payload.sample_txs > 0 {
             info!(
-                "Payload {} contains {} special tx(s)",
-                base64::encode(&bytes), payload.special_txs
+                "Payload {} contains {} sample tx(s)",
+                base64::encode(&bytes), payload.sample_txs
             );
         }
 

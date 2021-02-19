@@ -13,7 +13,7 @@ pub struct Payload {
     pub author: PublicKey,
     pub signature: Signature,
     #[cfg(feature = "benchmark")]
-    pub special_txs: usize,
+    pub sample_txs: usize,
 }
 
 impl Payload {
@@ -21,14 +21,14 @@ impl Payload {
         transactions: Vec<Transaction>,
         author: PublicKey,
         mut signature_service: SignatureService,
-        #[cfg(feature = "benchmark")] special_txs: usize,
+        #[cfg(feature = "benchmark")] sample_txs: usize,
     ) -> Self {
         let payload = Self {
             transactions,
             author,
             signature: Signature::default(),
             #[cfg(feature = "benchmark")]
-            special_txs,
+            sample_txs,
         };
         let signature = signature_service.request_signature(payload.digest()).await;
         Self {
@@ -66,7 +66,7 @@ pub struct PayloadMaker {
     name: PublicKey,
     signature_service: SignatureService,
     #[cfg(feature = "benchmark")]
-    special_txs: usize,
+    sample_txs: usize,
 }
 
 impl PayloadMaker {
@@ -78,7 +78,7 @@ impl PayloadMaker {
             name,
             signature_service,
             #[cfg(feature = "benchmark")]
-            special_txs: 0,
+            sample_txs: 0,
         }
     }
 
@@ -91,8 +91,8 @@ impl PayloadMaker {
         
         #[cfg(feature = "benchmark")]
         if tx.windows(2).all(|x| x[0] == x[1]) && tx.contains(&5u8) {
-            // Count the number of special transactions in the payload.
-            self.special_txs += 1;
+            // Count the number of sample transactions in the payload.
+            self.sample_txs += 1;
         }
 
         self.transactions.push(tx);
@@ -101,22 +101,25 @@ impl PayloadMaker {
     }
 
     pub async fn make(&mut self) -> Payload {
-        self.size = 0;
         let transactions = self.transactions.drain(..).collect();
-        let payload = Payload::new(
+        #[cfg(feature = "benchmark")]
+        let sample_txs = self.sample_txs;
+
+        // Cleanup state.
+        self.size = 0;
+        #[cfg(feature = "benchmark")]
+        {
+            self.sample_txs = 0;
+        }
+
+        // Make a payload.
+        Payload::new(
             transactions,
             self.name,
             self.signature_service.clone(),
             #[cfg(feature = "benchmark")]
-            self.special_txs,
+            sample_txs,
         )
-        .await;
-
-        #[cfg(feature = "benchmark")]
-        {
-            self.special_txs = 0;
-        }
-
-        payload
+        .await
     }
 }

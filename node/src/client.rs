@@ -129,9 +129,7 @@ impl Client {
             if self.rate != 0 && now.elapsed().as_millis() > BURST_DURATION as u128 {
                 warn!("Transaction rate too high for this client");
             }
-            if x % PRECISION == 0 {
-                self.send_magic_transaction(&mut transport).await?;
-            }
+            self.send_sample_transaction(&mut transport).await?;
         }
         info!("Finished sending transactions");
         Ok(())
@@ -156,11 +154,11 @@ impl Client {
         Ok(())
     }
 
-    async fn send_magic_transaction(
+    async fn send_sample_transaction(
         &self,
         transport: &mut Framed<TcpStream, LengthDelimitedCodec>,
     ) -> Result<()> {
-        info!("Sending special transaction");
+        info!("Sending sample transaction");
         let mut tx = BytesMut::with_capacity(self.size);
         tx.resize(self.size, 5u8);
         transport
