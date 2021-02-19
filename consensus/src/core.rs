@@ -234,7 +234,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         }
         self.timer.cancel(self.round).await;
         self.round = round + 1;
-        info!("Moved to round {}", self.round);
+        debug!("Moved to round {}", self.round);
 
         // Cleanup the vote aggregator.
         self.aggregator.cleanup(&self.round);
@@ -257,7 +257,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         )
         .await;
         if !block.payload.is_empty() {
-            info!("Created non-empty {}", block);
+            info!("Created {}", block);
         }
         debug!("Created {:?}", block);
 
@@ -297,7 +297,10 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         let mut commit_rule = b0.round + 1 == b1.round;
         commit_rule &= b1.round + 1 == block.round;
         if commit_rule {
-            info!("Committed {}", b0);
+            if !b0.payload.is_empty() {
+                info!("Committed {}", b0);
+            }
+            debug!("Committed {:?}", b0);
             self.mempool_driver.garbage_collect(&b0).await;
             if let Err(e) = self.commit_channel.send(b0.clone()).await {
                 warn!("Failed to send block through the commit channel: {}", e);

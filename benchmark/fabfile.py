@@ -15,10 +15,10 @@ from aws.remote import Bench, BenchError
 def local(ct):
     bench_params = {
         'nodes': 4,
-        'txs': 250_000,
+        'txs': 10_000,
         'size': 512,
-        'rate': 150_000,
-        'duration': 20,
+        'rate': 1_000,
+        'duration': 30,
     }
     node_params = {
         'consensus': {
@@ -31,7 +31,7 @@ def local(ct):
         }
     }
     try:
-        ret = LocalBench(bench_params, node_params).run(debug=False).result()
+        ret = LocalBench(bench_params, node_params).run(debug=True).result()
         print(ret)
     except BenchError as e:
         Print.error(e)
@@ -89,15 +89,15 @@ def install(ctx):
 def remote(ctx):
     bench_params = {
         'nodes': [4],
-        'txs': 1_000_000,
+        'txs': 2_000_000,
         'size': 512,
         'rate': 10_000,
-        'duration': 1000,
-        'runs': 2,
+        'duration': 360,
+        'runs': 1,
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 5000,
+            'timeout_delay': 20_000,
             'sync_retry_delay': 10_000
         },
         'mempool': {

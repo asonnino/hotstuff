@@ -37,7 +37,7 @@ impl Node {
         store_path: &str,
         parameters: Option<&str>,
     ) -> Result<Self, NodeError> {
-        let (tx_commit, rx_commit) = channel(100);
+        let (tx_commit, rx_commit) = channel(1000);
 
         // Read the committee and secret key from file.
         let committee = Committee::read(committee_file)?;
@@ -72,7 +72,7 @@ impl Node {
             committee.consensus,
             parameters.consensus,
             signature_service,
-            store,
+            store.clone(),
             mempool,
             /* commit_channel */ tx_commit,
         )
@@ -84,5 +84,11 @@ impl Node {
 
     pub fn print_key_file(filename: &str) -> Result<(), NodeError> {
         Secret::new().write(filename)
+    }
+
+    pub async fn analyze_block(&mut self) {
+        while let Some(_block) = self.commit.recv().await {
+            // This is where we can further process committed block.
+        }
     }
 }

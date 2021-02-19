@@ -44,7 +44,8 @@ impl Front {
                 match frame {
                     Ok(x) => deliver.send(x.to_vec()).await.expect("Core channel closed"),
                     Err(e) => {
-                        warn!("Failed to receive client transaction: {}", e)
+                        warn!("Failed to receive client transaction: {}", e);
+                        return;
                     }
                 }
             }

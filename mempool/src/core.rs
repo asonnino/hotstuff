@@ -5,7 +5,7 @@ use crate::simple::ConsensusMessage;
 use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
-use log::{debug, error, warn};
+use log::{debug, error, warn, info};
 use network::NetMessage;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -50,6 +50,7 @@ impl Core {
     ) -> Self {
         let queue = VecDeque::with_capacity(parameters.queue_capacity);
         let payload_maker = PayloadMaker::new(name, signature_service, parameters.max_payload_size);
+        info!("Max payload size: {} B", parameters.max_payload_size);
         Self {
             name,
             committee,
@@ -64,8 +65,7 @@ impl Core {
         }
     }
 
-    async fn store_payload(&mut self, digest: &Digest, payload: &Payload) -> MempoolResult<()> {
-        let key = digest.to_vec();
+    async fn store_payload(&mut self, key: Vec<u8>, payload: &Payload) -> MempoolResult<()> {
         let value = bincode::serialize(payload).expect("Failed to serialize payload");
         self.store
             .write(key, value)
@@ -93,6 +93,29 @@ impl Core {
         Ok(())
     }
 
+    async fn process_own_payload(
+        &mut self,
+        digest: &Digest,
+        payload: Payload,
+    ) -> MempoolResult<()> {
+        let bytes = digest.to_vec();
+
+        #[cfg(feature = "benchmark")]
+        if payload.sample_txs > 0 {
+            info!(
+                "Payload {} contains {} sample tx(s)",
+                base64::encode(&bytes), payload.sample_txs
+            );
+        }
+
+        // Store the payload.
+        self.store_payload(bytes, &payload).await?;
+
+        // Share the payload with all other nodes.
+        let message = CoreMessage::Payload(payload);
+        self.transmit(&message, None).await
+    }
+
     async fn handle_transaction(&mut self, transaction: Transaction) -> MempoolResult<()> {
         // Drop the transaction if our mempool is full.
         ensure!(
@@ -104,11 +127,8 @@ impl Core {
         // we will add to the queue.
         if let Some(payload) = self.payload_maker.add(transaction).await {
             let digest = payload.digest();
-            self.store_payload(&digest, &payload).await?;
+            self.process_own_payload(&digest, payload).await?;
             self.queue.push_front(digest);
-            // Share this new payload with all other nodes.
-            let message = CoreMessage::Payload(payload);
-            self.transmit(&message, None).await?;
         }
         Ok(())
     }
@@ -132,9 +152,9 @@ impl Core {
         payload.signature.verify(&digest, &author)?;
 
         // Store payload.
-        // NOTE: A bad node may make us store a lot of crap. There is no limit
-        // to how many payload they can send us, and we will store them all.
-        self.store_payload(&digest, &payload).await?;
+        // TODO [issue #18]: A bad node may make us store a lot of junk. There is no
+        // limit to how many payload they can send us, and we will store them all.
+        self.store_payload(digest.to_vec(), &payload).await?;
         Ok(())
     }
 
@@ -156,9 +176,7 @@ impl Core {
                 return Ok(Vec::default());
             }
             let digest = payload.digest();
-            self.store_payload(&digest, &payload).await?;
-            let message = CoreMessage::Payload(payload);
-            self.transmit(&message, None).await?;
+            self.process_own_payload(&digest, payload).await?;
             Ok(digest.to_vec())
         }
     }
@@ -167,7 +185,7 @@ impl Core {
         match self.store.read(digest.to_vec()).await? {
             Some(_) => Ok(true),
             None => {
-                debug!("Requesting sync for payload {:?}", &digest.to_vec()[..8]);
+                debug!("Requesting sync for payload {}", base64::encode(&digest.to_vec()));
                 let message = CoreMessage::PayloadRequest(digest, self.name);
                 self.transmit(&message, None).await?;
                 Ok(false)
