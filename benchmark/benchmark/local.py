@@ -42,7 +42,6 @@ class LocalBench:
         self._kill_nodes()
 
         try:
-            '''
             Print.info('Setting up testbed...')
             nodes = self.nodes[0]
 
@@ -104,7 +103,7 @@ class LocalBench:
             Print.info(f'Running benchmark ({self.duration} sec)...')
             sleep(self.duration)
             self._kill_nodes()
-            '''
+
             # Parse logs and return the parser.
             Print.info('Parsing logs...')
             return LogParser.process('./logs')
