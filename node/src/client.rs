@@ -110,18 +110,21 @@ impl Client {
             interval.as_mut().tick().await;
             let now = Instant::now();
             if let Err(e) = self.send_burst(&mut transport, burst, counter).await {
-                warn!("{}", e);
+                warn!("{:?}", e);
+                break;
             }
             if now.elapsed().as_millis() > BURST_DURATION as u128 {
                 warn!("Transaction rate too high for this client");
             }
             if counter % PRECISION == 0 {
                 if let Err(e) = self.send_sample_transaction(&mut transport).await {
-                    warn!("{}", e);
+                    warn!("{:?}", e);
+                    break;
                 }
             }
             counter += 1;
         }
+        Ok(())
     }
 
     async fn send_burst(
