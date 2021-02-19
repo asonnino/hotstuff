@@ -171,14 +171,12 @@ class Bench:
         # Run the clients (they will wait for the nodes to be ready).
         committee = Committee.load(PathMaker.committee_file())
         addresses = committee.front_addresses()
-        txs_share = ceil(bench_parameters.txs / committee.size())
         rate_share = ceil(bench_parameters.rate / committee.size())
         timeout = node_parameters.timeout_delay
         client_logs = [PathMaker.client_log_file(i) for i in range(len(hosts))]
         for host, addr, log_file in zip(hosts, addresses, client_logs):
             cmd = CommandMaker.run_client(
                 addr,
-                txs_share,
                 bench_parameters.size,
                 rate_share,
                 timeout,

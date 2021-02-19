@@ -20,9 +20,6 @@ class LogParser:
         assert all(isinstance(x, str) for y in inputs for x in y)
         assert all(x for x in inputs)
 
-        # Ensure the benchmark run without errors.
-        self._verify(clients, nodes)
-
         self.committee_size = len(nodes)
 
         # Parse the clients logs.
@@ -60,19 +57,12 @@ class LogParser:
         if self.timeouts > 1:  
             Print.warn(f'Nodes timed out {self.timeouts:,} time(s)')
 
-    def _verify(self, clients, nodes):
-        with Pool() as p:
-            # Ensure none of the clients panicked.
-            status = p.starmap(search, zip(repeat(r'Error'), clients))
-            if any(x is not None for x in status):
-                raise ParseError('Client(s) panicked')
-
-            # Ensure none of the nodes panicked.
-            status = p.starmap(search, zip(repeat(r'panic'), nodes))
-            if any(x is not None for x in status):
-                raise ParseError('Node(s) panicked')
-
     def _parse_clients(self, log):
+        if search(r'Error', log) is not None:
+            # TODO: Clients may be killed after nodes...
+            #raise ParseError('Client(s) panicked')
+            pass
+
         size = int(search(r'Transactions size: (\d+)', log).group(1))
         rate = int(search(r'Transactions rate: (\d+)', log).group(1))
 
@@ -87,6 +77,9 @@ class LogParser:
         return size, rate, start, misses, samples
 
     def _parse_nodes(self, log):
+        if search(r'panic', log) is not None:
+            raise ParseError('Client(s) panicked')
+
         payload = int(search(r'Max payload size: (\d+)', log).group(1))
 
         tmp = findall(r'\[(.*Z) .* Created B\d+\(([^ ]+)\)', log)
@@ -99,7 +92,7 @@ class LogParser:
         sizes = {d: int(s) for d, s in tmp if d in commits}
 
         tmp = findall(r'Payload ([^ ]+) contains (\d+) sample', log)
-        samples = {d: int(s) for d, s in tmp}
+        samples = {d: int(s) for d, s in tmp if d in commits}
 
         tmp = findall(r'.* Timeout', log)
         timeouts = len(tmp)

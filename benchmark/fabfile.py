@@ -88,9 +88,8 @@ def install(ctx):
 def remote(ctx):
     bench_params = {
         'nodes': [4],
-        'txs': 2_000_000,
         'size': 512,
-        'rate': 10_000,
+        'rate': 7_000,
         'duration': 360,
         'runs': 1,
     }
@@ -136,3 +135,9 @@ def plot(ctx):
         ploter.plot_latency('Committee size', ploter.txs)
     except PlotError as e:
         Print.error(BenchError('Failed to plot performance', e))
+
+@task
+def test(ctx):
+    from benchmark.logs import LogParser
+    ret = LogParser.process('./logs').result()
+    print(ret)
