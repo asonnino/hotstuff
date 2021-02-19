@@ -53,7 +53,7 @@ class LogParser:
 
         # Check whether the nodes timed out.
         # Note that nodes are expected to time out once at the beginning.
-        if self.timeouts > 1:  
+        if self.timeouts > 1:
             Print.warn(f'Nodes timed out {self.timeouts:,} time(s)')
 
     def _parse_clients(self, log):
@@ -130,10 +130,10 @@ class LogParser:
             start_times.sort()
 
             end_times = []
-            for digest, occurrence in samples.items():
+            for digest, occurrences in samples.items():
                 tmp = self.commits[digest]
-                end_times += [tmp] * occurrence
-            
+                end_times += [tmp] * occurrences
+
             latency += [x - y for x, y in zip(end_times, start_times)]
         return mean(latency) if latency else 0
 

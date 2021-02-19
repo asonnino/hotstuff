@@ -198,6 +198,10 @@ class Bench:
             )
             self._background_run(host, cmd, log_file)
 
+        # Wait for the nodes to synchronize
+        Print.info('Waiting for the nodes to synchronize...')
+        sleep(2 * node_parameters.timeout_delay / 1000)
+
         # Wait for all transactions to be processed.
         duration = bench_parameters.duration
         for _ in progress_bar(range(20), prefix=f'Running benchmark ({duration} sec):'):

@@ -17,7 +17,7 @@ def local(ct):
         'nodes': 4,
         'size': 512,
         'rate': 1000,
-        'duration': 30,
+        'duration': 20,
     }
     node_params = {
         'consensus': {
@@ -89,18 +89,18 @@ def remote(ctx):
     bench_params = {
         'nodes': [4],
         'size': 512,
-        'rate': 10_000,
-        'duration': 360,
+        'rate': 9_000,
+        'duration': 300,
         'runs': 1,
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 100_000,
+            'timeout_delay': 30_000,
             'sync_retry_delay': 10_000
         },
         'mempool': {
             'queue_capacity': 100_000_000,
-            'max_payload_size': 2000_000
+            'max_payload_size': 1_000_000
         }
     }
     try:
