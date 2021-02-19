@@ -38,12 +38,11 @@ class LogParser:
                 results = p.map(self._parse_nodes, nodes)
         except (ValueError, IndexError) as e:
             raise ParseError(f'Failed to parse node logs: {e}')
-        self.payload, proposals, commits, sizes, samples, timeouts \
+        self.payload, proposals, commits, sizes, self.samples, timeouts \
             = zip(*results)
         self.proposals = {k: v for x in proposals for k, v in x.items()}
         self.commits = {k: v for x in commits for k, v in x.items()}
         self.sizes = {k: v for x in sizes for k, v in x.items()}
-        self.samples = {k: v for x in samples for k, v in x.items()}
         self.timeouts = max(timeouts)
 
         # Check whether clients missed their target rate.
@@ -112,10 +111,8 @@ class LogParser:
         return tps, bps, duration
 
     def _consensus_latency(self):
-        if not self.commits:
-            return 0
         latency = [c - self.proposals[r] for r, c in self.commits.items()]
-        return mean(latency)
+        return mean(latency) if latency else 0
 
     def _end_to_end_throughput(self):
         if not self.commits:
@@ -128,16 +125,17 @@ class LogParser:
         return tps, bps, duration
 
     def _end_to_end_latency(self):
-        start = [x for sub in self.sent_samples for x in sub]
-        if not (self.samples and start):
-            return 0
+        latency = []
+        for start_times, samples in zip(self.sent_samples, self.samples):
+            start_times.sort()
 
-        end = []
-        for digest, occurrence in self.samples.items():
-            time = self.commits[digest]
-            end += [time] * occurrence
-
-        return mean(end) - mean(start)
+            end_times = []
+            for digest, occurrence in samples.items():
+                tmp = self.commits[digest]
+                end_times += [tmp] * occurrence
+            
+            latency += [x - y for x, y in zip(end_times, start_times)]
+        return mean(latency) if latency else 0
 
     def result(self):
         consensus_latency = self._consensus_latency() * 1000
