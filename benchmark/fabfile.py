@@ -89,15 +89,15 @@ def install(ctx):
 def remote(ctx):
     bench_params = {
         'nodes': [4],
-        'txs': 200_000,
+        'txs': 400_000,
         'size': 512,
-        'rate': 1_000,
+        'rate': 7_000,
         'duration': 360,
         'runs': 1,
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 5000,
+            'timeout_delay': 10_000,
             'sync_retry_delay': 10_000
         },
         'mempool': {

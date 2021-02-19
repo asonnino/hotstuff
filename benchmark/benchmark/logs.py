@@ -40,7 +40,7 @@ class LogParser:
                 results = p.map(self._parse_nodes, nodes)
         except (ValueError, IndexError) as e:
             raise ParseError(f'Failed to parse node log: {e}')
-        proposals, commits, samples = zip(*results)
+        self.payload, proposals, commits, samples = zip(*results)
         self.proposals = {k: v for x in proposals for k, v in x.items()}
         self.commits = {k: v for x in commits for k, v in x.items()}
         self.samples = {k: v for x in samples for k, v in x.items()}
@@ -94,6 +94,8 @@ class LogParser:
         return txs, size, rate, start, end, misses, samples
 
     def _parse_nodes(self, log):
+        payload = int(search(r'Max payload size: (\d+)', log).group(1))
+
         tmp = findall(r'\[(.*Z) .* Created B\d+\(([^ ]+)\)', log)
         proposals = {d: self._to_posix(t) for t, d in tmp}
 
@@ -103,7 +105,7 @@ class LogParser:
         tmp = findall(r'Payload ([^ ]+) contains (\d+) sample', log)
         samples = {d: int(s) for d, s in tmp}
 
-        return proposals, commits, samples
+        return payload, proposals, commits, samples
 
     def _to_posix(self, string):
         x = datetime.fromisoformat(string.replace('Z', '+00:00'))
@@ -157,6 +159,7 @@ class LogParser:
             '-----------------------------------------\n'
             f' Committee size: {self.committee_size} nodes\n'
             f' Number of transactions: {sum(self.txs):,} txs\n'
+            f' Max payload size: {self.payload[0]:,} B \n'
             f' Transaction size: {self.size[0]:,} B \n'
             f' Transaction rate: {sum(self.rate):,} tx/s\n'
             f' Execution time: {round(duration):,} s\n'
