@@ -112,7 +112,7 @@ impl Core {
             );
         }
 
-        sleep(Duration::from_millis(500)).await;
+        sleep(Duration::from_millis(100)).await;
 
         // Store the payload.
         self.store_payload(bytes, &payload).await?;

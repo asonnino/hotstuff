@@ -262,7 +262,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         }
         debug!("Created {:?}", block);
 
-        sleep(Duration::from_millis(500)).await;
+        sleep(Duration::from_millis(100)).await;
 
         // Process our new block and broadcast it.
         let message = CoreMessage::Propose(block.clone());
