@@ -89,7 +89,7 @@ def remote(ctx):
     bench_params = {
         'nodes': [4],
         'size': 512,
-        'rate': 10_000,
+        'rate': 15_000,
         'duration': 300,
         'runs': 1,
     }
