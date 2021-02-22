@@ -89,7 +89,7 @@ def remote(ctx):
     bench_params = {
         'nodes': [4],
         'size': 512,
-        'rate': 9_000,
+        'rate': 1000,
         'duration': 300,
         'runs': 1,
     }
@@ -100,7 +100,7 @@ def remote(ctx):
         },
         'mempool': {
             'queue_capacity': 100_000_000,
-            'max_payload_size': 1_000_000
+            'max_payload_size': 2_000_000
         }
     }
     try:
@@ -139,7 +139,7 @@ def plot(ctx):
     files = glob('results/plot/*.txt')
     try:
         ploter = Ploter(files)
-        ploter.plot_tps('Committee size', ploter.txs)
-        ploter.plot_latency('Committee size', ploter.txs)
+        ploter.plot_tps('Committee size', ploter.txs_rate)
+        ploter.plot_latency('Committee size', ploter.txs_rate)
     except PlotError as e:
         Print.error(BenchError('Failed to plot performance', e))

@@ -49,10 +49,6 @@ class Ploter:
         size = int(search(r'Transaction size: (\d+)', data).group(1))
         return x * 10**6 / size
 
-    def txs(self, data):
-        val = search(r'Number of transactions: (\d+)', data).group(1)
-        return f'Total load: {int(val):,} txs'
-
     def tx_size(self, data):
         return search(r'Transaction size: .*', data).group(0)
 
