@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::time::{Duration, sleep};
 
 #[cfg(test)]
 #[path = "tests/core_tests.rs"]
@@ -110,6 +111,8 @@ impl Core {
                 base64::encode(&bytes), payload.sample_txs
             );
         }
+
+        sleep(Duration::from_millis(100)).await;
 
         // Store the payload.
         self.store_payload(bytes, &payload).await?;

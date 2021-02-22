@@ -89,13 +89,13 @@ def remote(ctx):
     bench_params = {
         'nodes': [4],
         'size': 512,
-        'rate': 1000,
+        'rate': 10_000,
         'duration': 300,
         'runs': 1,
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 30_000,
+            'timeout_delay': 60_000,
             'sync_retry_delay': 10_000
         },
         'mempool': {
