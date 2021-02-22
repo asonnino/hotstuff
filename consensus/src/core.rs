@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::max;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::time::{Duration, sleep};
 
 #[cfg(test)]
 #[path = "tests/core_tests.rs"]
@@ -260,6 +261,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             info!("Created {}", block);
         }
         debug!("Created {:?}", block);
+        sleep(Duration::from_millis(200)).await;
 
         // Process our new block and broadcast it.
         let message = CoreMessage::Propose(block.clone());
