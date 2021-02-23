@@ -92,12 +92,14 @@ class NodeParameters:
         try:
             inputs += [json['consensus']['timeout_delay']]
             inputs += [json['consensus']['sync_retry_delay']]
+            inputs += [json['consensus']['min_block_delay']]
             inputs += [json['mempool']['queue_capacity']]
             inputs += [json['mempool']['max_payload_size']]
+            inputs += [json['mempool']['min_block_delay']]
         except KeyError as e:
             raise ConfigError(f'Malformed parameters: missing key {e}')
 
-        if not all((isinstance(x, int) and x > 0) for x in inputs):
+        if not all(isinstance(x, int) for x in inputs):
             raise ConfigError('Invalid parameters type')
 
         self.timeout_delay = json['consensus']['timeout_delay'] 

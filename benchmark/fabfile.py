@@ -22,11 +22,13 @@ def local(ct):
     node_params = {
         'consensus': {
             'timeout_delay': 2000,
-            'sync_retry_delay': 10_000
+            'sync_retry_delay': 10_000,
+            'min_block_delay': 0
         },
         'mempool': {
             'queue_capacity': 10_000,
-            'max_payload_size': 100_000
+            'max_payload_size': 100_000,
+            'min_block_delay': 0
         }
     }
     try:
@@ -91,16 +93,18 @@ def remote(ctx):
         'size': 512,
         'rate': 15_000,
         'duration': 300,
-        'runs': 3,
+        'runs': 2,
     }
     node_params = {
         'consensus': {
             'timeout_delay': 60_000,
-            'sync_retry_delay': 10_000
+            'sync_retry_delay': 10_000,
+            'min_block_delay': 100
         },
         'mempool': {
             'queue_capacity': 100_000_000,
-            'max_payload_size': 2_000_000
+            'max_payload_size': 2_000_000,
+            'min_block_delay': 100
         }
     }
     try:
