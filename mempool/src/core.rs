@@ -112,7 +112,8 @@ impl Core {
             );
         }
 
-        sleep(Duration::from_millis(100)).await;
+        // Wait for the minimum block delay. 
+        sleep(Duration::from_millis(self.parameters.min_block_delay)).await;
 
         // Store the payload.
         self.store_payload(bytes, &payload).await?;
