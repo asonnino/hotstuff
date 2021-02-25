@@ -23,6 +23,7 @@ async fn core(
     let parameters = Parameters {
         queue_capacity: 1,
         max_payload_size: 1,
+        min_block_delay: 0
     };
     let signature_service = SignatureService::new(secret);
     let _ = fs::remove_dir_all(store_path);

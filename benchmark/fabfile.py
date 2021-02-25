@@ -22,11 +22,13 @@ def local(ct):
     node_params = {
         'consensus': {
             'timeout_delay': 2000,
-            'sync_retry_delay': 10_000
+            'sync_retry_delay': 10_000,
+            'min_block_delay': 0
         },
         'mempool': {
             'queue_capacity': 10_000,
-            'max_payload_size': 100_000
+            'max_payload_size': 100_000,
+            'min_block_delay': 0
         }
     }
     try:
@@ -87,20 +89,22 @@ def install(ctx):
 @task
 def remote(ctx):
     bench_params = {
-        'nodes': [4],
+        'nodes': [20],
         'size': 512,
-        'rate': 9_000,
+        'rate': 15_000,
         'duration': 300,
-        'runs': 1,
+        'runs': 2,
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 30_000,
-            'sync_retry_delay': 10_000
+            'timeout_delay': 60_000,
+            'sync_retry_delay': 10_000,
+            'min_block_delay': 0
         },
         'mempool': {
             'queue_capacity': 100_000_000,
-            'max_payload_size': 1_000_000
+            'max_payload_size': 2_000_000,
+            'min_block_delay': 0
         }
     }
     try:
@@ -139,7 +143,7 @@ def plot(ctx):
     files = glob('results/plot/*.txt')
     try:
         ploter = Ploter(files)
-        ploter.plot_tps('Committee size', ploter.txs)
-        ploter.plot_latency('Committee size', ploter.txs)
+        ploter.plot_tps('Committee size', ploter.txs_rate)
+        ploter.plot_latency('Committee size', ploter.txs_rate)
     except PlotError as e:
         Print.error(BenchError('Failed to plot performance', e))

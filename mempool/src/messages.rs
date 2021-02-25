@@ -90,7 +90,7 @@ impl PayloadMaker {
         };
         
         #[cfg(feature = "benchmark")]
-        if tx.windows(2).all(|x| x[0] == x[1]) && tx.contains(&5u8) {
+        if tx.iter().all(|x| *x == 5u8) {
             // Count the number of sample transactions in the payload.
             self.sample_txs += 1;
         }
