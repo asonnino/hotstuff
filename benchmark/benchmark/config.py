@@ -124,5 +124,8 @@ class BenchParameters:
             self.size = int(json['size'])
             self.duration = int(json['duration'])
             self.runs = int(json['runs']) if 'runs' in json else 1
-        except (KeyError, ValueError) as e:
+        except KeyError as e:
             raise ConfigError(f'Malformed bench parameters: missing key {e}')
+
+        except ValueError:
+            raise ConfigError('Invalid parameters type')
