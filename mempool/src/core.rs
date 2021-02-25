@@ -162,6 +162,9 @@ impl Core {
         // TODO [issue #18]: A bad node may make us store a lot of junk. There is no
         // limit to how many payload they can send us, and we will store them all.
         self.store_payload(digest.to_vec(), &payload).await?;
+
+        // Add the payload to the queue.
+        self.queue.push_front(digest);
         Ok(())
     }
 
