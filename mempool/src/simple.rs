@@ -17,8 +17,8 @@ pub mod mempool_tests;
 
 #[derive(Debug)]
 pub enum ConsensusMessage {
-    Get(oneshot::Sender<MempoolResult<Vec<u8>>>),
-    Verify(Digest, oneshot::Sender<MempoolResult<bool>>),
+    Get(oneshot::Sender<MempoolResult<Vec<Digest>>>),
+    Verify(Vec<Digest>, oneshot::Sender<MempoolResult<Vec<Digest>>>),
 }
 
 pub struct SimpleMempool {
@@ -88,7 +88,7 @@ impl SimpleMempool {
 
 #[async_trait]
 impl NodeMempool for SimpleMempool {
-    async fn get(&mut self) -> Vec<u8> {
+    async fn get(&mut self) -> Vec<Vec<u8>> {
         let (sender, receiver) = oneshot::channel();
         let message = ConsensusMessage::Get(sender);
         self.channel
@@ -99,15 +99,18 @@ impl NodeMempool for SimpleMempool {
             .await
             .expect("Failed to receive payload from core")
             .unwrap_or_default()
+            .iter()
+            .map(|x| x.to_vec())
+            .collect()
     }
 
-    async fn verify(&mut self, digest: &[u8]) -> PayloadStatus {
-        if digest.is_empty() {
+    async fn verify(&mut self, payload: &[Vec<u8>]) -> PayloadStatus {
+        if payload.is_empty() {
             return PayloadStatus::Accept;
         }
 
         let (sender, receiver) = oneshot::channel();
-        let message = match digest.try_into() {
+        let message = match payload.iter().map(|x| x[..].try_into()).collect() {
             Ok(x) => ConsensusMessage::Verify(x, sender),
             Err(_) => return PayloadStatus::Reject,
         };
@@ -116,11 +119,11 @@ impl NodeMempool for SimpleMempool {
             .await
             .expect("Consensus channel closed");
         match receiver.await.expect("Failed to receive payload from core") {
-            Ok(true) => PayloadStatus::Accept,
-            Ok(false) => PayloadStatus::Wait(digest.to_vec()),
+            Ok(missing) if missing.is_empty() => PayloadStatus::Accept,
+            Ok(missing) => PayloadStatus::Wait(missing.iter().map(|x| x.to_vec()).collect()),
             Err(_) => PayloadStatus::Reject,
         }
     }
 
-    async fn garbage_collect(&mut self, _payload: &[u8]) {}
+    async fn garbage_collect(&mut self, _payload: &[Vec<u8>]) {}
 }

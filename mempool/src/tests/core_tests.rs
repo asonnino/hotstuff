@@ -23,7 +23,7 @@ async fn core(
     let parameters = Parameters {
         queue_capacity: 1,
         max_payload_size: 1,
-        min_block_delay: 0
+        min_block_delay: 0,
     };
     let signature_service = SignatureService::new(secret);
     let _ = fs::remove_dir_all(store_path);
@@ -95,7 +95,7 @@ async fn get_payload() {
     tx_consensus.send(message).await.unwrap();
     let result = receiver.await.unwrap();
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), payload().digest().to_vec());
+    assert_eq!(result.unwrap(), vec![payload().digest()]);
 }
 
 #[tokio::test]
@@ -111,10 +111,10 @@ async fn verify_existing_payload() {
 
     // Verify a payload.
     let (sender, receiver) = oneshot::channel();
-    let message = ConsensusMessage::Verify(payload().digest(), sender);
+    let message = ConsensusMessage::Verify(vec![payload().digest()], sender);
     tx_consensus.send(message).await.unwrap();
     let result = receiver.await.unwrap();
-    assert!(result.unwrap());
+    assert!(result.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -125,8 +125,9 @@ async fn test_verify_missing_payload() {
 
     // Verify a payload.
     let (sender, receiver) = oneshot::channel();
-    let message = ConsensusMessage::Verify(payload().digest(), sender);
+    let digests = vec![payload().digest()];
+    let message = ConsensusMessage::Verify(digests.clone(), sender);
     tx_consensus.send(message).await.unwrap();
     let result = receiver.await.unwrap();
-    assert!(!result.unwrap());
+    assert_eq!(result.unwrap(), digests);
 }

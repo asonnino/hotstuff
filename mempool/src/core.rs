@@ -5,13 +5,12 @@ use crate::simple::ConsensusMessage;
 use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
-use log::{debug, error, warn, info};
+use log::{debug, error, info, warn};
 use network::NetMessage;
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::time::{Duration, sleep};
+use tokio::time::{sleep, Duration};
 
 #[cfg(test)]
 #[path = "tests/core_tests.rs"]
@@ -32,7 +31,7 @@ pub struct Core {
     consensus_channel: Receiver<ConsensusMessage>,
     client_channel: Receiver<Transaction>,
     network_channel: Sender<NetMessage>,
-    queue: VecDeque<Digest>,
+    queue: Vec<Digest>,
     payload_maker: PayloadMaker,
 }
 
@@ -49,7 +48,7 @@ impl Core {
         client_channel: Receiver<Transaction>,
         network_channel: Sender<NetMessage>,
     ) -> Self {
-        let queue = VecDeque::with_capacity(parameters.queue_capacity);
+        let queue = Vec::with_capacity(parameters.queue_capacity);
         let payload_maker = PayloadMaker::new(name, signature_service, parameters.max_payload_size);
         info!("Max payload size: {} B", parameters.max_payload_size);
         Self {
@@ -102,17 +101,22 @@ impl Core {
         let bytes = digest.to_vec();
 
         #[cfg(feature = "benchmark")]
-        info!("Payload {} contains {} B", base64::encode(&bytes), payload.size());
+        info!(
+            "Payload {} contains {} B",
+            base64::encode(&bytes),
+            payload.size()
+        );
 
         #[cfg(feature = "benchmark")]
         if payload.sample_txs > 0 {
             info!(
                 "Payload {} contains {} sample tx(s)",
-                base64::encode(&bytes), payload.sample_txs
+                base64::encode(&bytes),
+                payload.sample_txs
             );
         }
 
-        // Wait for the minimum block delay. 
+        // Wait for the minimum block delay.
         sleep(Duration::from_millis(self.parameters.min_block_delay)).await;
 
         // Store the payload.
@@ -135,7 +139,7 @@ impl Core {
         if let Some(payload) = self.payload_maker.add(transaction).await {
             let digest = payload.digest();
             self.process_own_payload(&digest, payload).await?;
-            self.queue.push_front(digest);
+            self.queue.push(digest);
         }
         Ok(())
     }
@@ -164,7 +168,7 @@ impl Core {
         self.store_payload(digest.to_vec(), &payload).await?;
 
         // Add the payload to the queue.
-        self.queue.push_front(digest);
+        self.queue.push(digest);
         Ok(())
     }
 
@@ -177,30 +181,33 @@ impl Core {
         Ok(())
     }
 
-    async fn get_payload(&mut self) -> MempoolResult<Vec<u8>> {
-        if let Some(digest) = self.queue.pop_back() {
-            Ok(digest.to_vec())
-        } else {
+    async fn get_payload(&mut self) -> MempoolResult<Vec<Digest>> {
+        if self.queue.is_empty() {
             let payload = self.payload_maker.make().await;
             if payload.size() == 0 {
-                return Ok(Vec::default());
+                return Ok(Vec::new());
             }
             let digest = payload.digest();
             self.process_own_payload(&digest, payload).await?;
-            Ok(digest.to_vec())
+            return Ok(vec![digest]);
         }
+        Ok(self.queue.drain(..).collect())
     }
 
-    async fn verify_payload(&mut self, digest: Digest) -> MempoolResult<bool> {
-        match self.store.read(digest.to_vec()).await? {
-            Some(_) => Ok(true),
-            None => {
-                debug!("Requesting sync for payload {}", base64::encode(&digest.to_vec()));
-                let message = CoreMessage::PayloadRequest(digest, self.name);
+    async fn verify_payload(&mut self, digests: Vec<Digest>) -> MempoolResult<Vec<Digest>> {
+        let mut missing = Vec::new();
+        for digest in digests {
+            if self.store.read(digest.to_vec()).await?.is_none() {
+                debug!(
+                    "Requesting sync for payload {}",
+                    base64::encode(&digest.to_vec())
+                );
+                let message = CoreMessage::PayloadRequest(digest.clone(), self.name);
                 self.transmit(&message, None).await?;
-                Ok(false)
+                missing.push(digest);
             }
         }
+        Ok(missing)
     }
 
     pub async fn run(&mut self) {
@@ -226,8 +233,8 @@ impl Core {
                             log(result.as_ref().map(|_| &()));
                             let _ = sender.send(result);
                         },
-                        ConsensusMessage::Verify(digest, sender) => {
-                            let result = self.verify_payload(digest).await;
+                        ConsensusMessage::Verify(digests, sender) => {
+                            let result = self.verify_payload(digests).await;
                             log(result.as_ref().map(|_| &()));
                             let _ = sender.send(result);
                         }

@@ -19,7 +19,7 @@ impl Default for Parameters {
         Self {
             timeout_delay: 5000,
             sync_retry_delay: 10_000,
-            min_block_delay: 100
+            min_block_delay: 100,
         }
     }
 }

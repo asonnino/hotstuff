@@ -25,3 +25,6 @@ mempool = { path = "../mempool" }
 
 [dev-dependencies]
 rand = "0.7.3"
+
+[features]
+benchmark = []

@@ -25,7 +25,7 @@ async fn end_to_end() {
             let parameters = Parameters {
                 queue_capacity: 1,
                 max_payload_size: 1,
-                min_block_delay: 0
+                min_block_delay: 0,
             };
             let signature_service = SignatureService::new(secret);
             let store_path = format!(".db_test_end_to_end_{}", i);
@@ -37,7 +37,7 @@ async fn end_to_end() {
                     SimpleMempool::new(name, committee, parameters, signature_service, store)
                         .unwrap();
                 sleep(Duration::from_millis(100)).await;
-                let digest = payload().digest().to_vec();
+                let digest = vec![payload().digest().to_vec()];
                 match mempool.verify(&digest).await {
                     PayloadStatus::Accept => assert!(true),
                     _ => assert!(false),

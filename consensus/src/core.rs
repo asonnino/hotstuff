@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::max;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::time::{Duration, sleep};
+use tokio::time::{sleep, Duration};
 
 #[cfg(test)]
 #[path = "tests/core_tests.rs"]
@@ -259,10 +259,15 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         .await;
         if !block.payload.is_empty() {
             info!("Created {}", block);
+
+            #[cfg(feature = "benchmark")]
+            for x in &block.payload {
+                info!("Created B{}({})", block.round, base64::encode(x));
+            }
         }
         debug!("Created {:?}", block);
 
-        // Wait for the minimum block delay. 
+        // Wait for the minimum block delay.
         sleep(Duration::from_millis(self.parameters.min_block_delay)).await;
 
         // Process our new block and broadcast it.
@@ -303,6 +308,11 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         if commit_rule {
             if !b0.payload.is_empty() {
                 info!("Committed {}", b0);
+
+                #[cfg(feature = "benchmark")]
+                for x in &b0.payload {
+                    info!("Committed B{}({})", b0.round, base64::encode(x));
+                }
             }
             debug!("Committed {:?}", b0);
             self.mempool_driver.garbage_collect(&b0).await;
