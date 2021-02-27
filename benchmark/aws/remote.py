@@ -1,3 +1,4 @@
+from os import error
 from fabric import Connection, ThreadingGroup as Group
 from fabric.exceptions import GroupException
 from paramiko import RSAKey
@@ -23,6 +24,10 @@ class FabricError(Exception):
         super().__init__(message)
 
 
+class ExecutionError(Exception):
+    pass
+
+
 class Bench:
     def __init__(self, ctx):
         self.manager = InstanceManager.make()
@@ -34,6 +39,15 @@ class Bench:
             self.connect = ctx.connect_kwargs
         except (IOError, PasswordRequiredException, SSHException) as e:
             raise BenchError('Failed to load SSH key', e)
+
+    def _check_stderr(self, output):
+        if isinstance(output, dict):
+            for x in output.values():
+                if x.stderr:
+                    raise ExecutionError(x.stderr)
+        else:
+            if output.stderr:
+                raise ExecutionError(output.stderr)
 
     def install(self):
         Print.info('Installing rust and cloning the repo...')
@@ -60,7 +74,8 @@ class Bench:
         hosts = self.manager.hosts(flat=True)
         try:
             g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect)
-            g.run(' && '.join(cmd), hide=True)
+            output = g.run(' && '.join(cmd), hide=True)
+            self._check_stderr(output)
             Print.heading(f'Initialized testbed of {len(hosts)} nodes')
         except GroupException as e:
             error = FabricError(e)
@@ -95,16 +110,17 @@ class Bench:
         name = splitext(basename(log_file))[0]
         cmd = f'tmux new -d -s "{name}" "{command} |& tee {log_file}"'
         c = Connection(host, user='ubuntu', connect_kwargs=self.connect)
-        c.run(cmd, hide=True)
+        output = c.run(cmd, hide=True)
+        self._check_stderr(output)
 
     def _update(self, hosts):
         Print.info(
             f'Updating {len(hosts)} nodes (branch "{self.settings.branch}")...'
         )
         cmd = [
-            f'(cd {self.settings.repo_name} && git fetch)',
-            f'(cd {self.settings.repo_name} && git checkout {self.settings.branch})',
-            f'(cd {self.settings.repo_name} && git pull)',
+            f'(cd {self.settings.repo_name} && git fetch -f)',
+            f'(cd {self.settings.repo_name} && git checkout -f {self.settings.branch})',
+            f'(cd {self.settings.repo_name} && git pull -f)',
             'source $HOME/.cargo/env',
             f'(cd {self.settings.repo_name}/node && {CommandMaker.compile()})',
             CommandMaker.alias_binaries(
@@ -243,8 +259,9 @@ class Bench:
         # Update nodes.
         try:
             self._update(selected_hosts)
-        except GroupException as e:
-            raise BenchError('Failed to update nodes', FabricError(e))
+        except (GroupException, ExecutionError) as e:
+            e = FabricError(e) if isinstance(e, GroupException) else e
+            raise BenchError('Failed to update nodes', e)
 
         # Run benchmarks.
         for n in bench_parameters.nodes:
@@ -255,8 +272,8 @@ class Bench:
             try:
                 self._config(hosts, node_parameters)
             except (subprocess.SubprocessError, GroupException) as e:
-                error = FabricError(e)
-                Print.error(BenchError('Failed to configure nodes', error))
+                e = FabricError(e) if isinstance(e, GroupException) else e
+                Print.error(BenchError('Failed to configure nodes', e))
                 continue
 
             # Run the benchmark.
@@ -269,5 +286,6 @@ class Bench:
                     self._logs(hosts).print(f'benchmark.{n}.txt')
                 except (subprocess.SubprocessError, GroupException, ParseError) as e:
                     self.kill(hosts=hosts)
+                    e = FabricError(e) if isinstance(e, GroupException) else e
                     Print.error(BenchError('Benchmark failed', e))
                     continue
