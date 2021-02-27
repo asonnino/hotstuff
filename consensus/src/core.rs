@@ -2,7 +2,7 @@ use crate::aggregator::Aggregator;
 use crate::config::{Committee, Parameters};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
-use crate::mempool::MempoolDriver;
+use crate::mempool::{MempoolDriver, NodeMempool};
 use crate::messages::{Block, Timeout, Vote, QC, TC};
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
@@ -11,7 +11,6 @@ use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
 use log::{debug, error, info, warn};
-use mempool::NodeMempool;
 use network::NetMessage;
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
@@ -132,6 +131,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
 
     async fn make_vote(&mut self, block: &Block) -> Option<Vote> {
         // Check if we can vote for this block.
+        // TODO [issue #25]: The unlock condition is too brutal.
         let safety_rule_1 = block.round > self.last_voted_round;
         let mut safety_rule_2 = block.qc.round >= self.high_qc.round;
         if let Some(ref tc) = block.tc {
@@ -143,7 +143,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
 
         // Ensure we won't vote for contradicting blocks.
         self.increase_last_voted_round(block.round);
-        // TODO: Write to storage preferred_round and last_voted_round.
+        // TODO [issue #15]: Write to storage preferred_round and last_voted_round.
         Some(Vote::new(&block, self.name, self.signature_service.clone()).await)
     }
     // -- End Safety Module --

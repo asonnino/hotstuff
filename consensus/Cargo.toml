@@ -21,7 +21,6 @@ base64 = "0.13.0"
 store = { path = "../store" }
 crypto = { path = "../crypto" }
 network = { path = "../network" }
-mempool = { path = "../mempool" }
 
 [dev-dependencies]
 rand = "0.7.3"

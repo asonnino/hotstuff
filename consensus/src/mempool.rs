@@ -1,12 +1,12 @@
 use crate::core::{CoreMessage, RoundNumber};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::messages::Block;
+use async_trait::async_trait;
 use futures::future::try_join_all;
 use futures::future::FutureExt as _;
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
 use log::{debug, error};
-use mempool::{NodeMempool, PayloadStatus};
 use std::collections::HashMap;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -14,6 +14,31 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 #[cfg(test)]
 #[path = "tests/mempool_tests.rs"]
 pub mod mempool_tests;
+
+pub enum PayloadStatus {
+    Accept,
+    Reject,
+    Wait(Vec<Vec<u8>>),
+}
+
+#[async_trait]
+pub trait NodeMempool: Send + Sync {
+    /// Consensus calls this method whenever it needs to create a new block.
+    /// The mempool needs to promptly provide a payload.
+    async fn get(&mut self) -> Vec<Vec<u8>>;
+
+    /// Consensus calls this method when receiving a new block. The mempool should
+    /// return Accept if the block can be processed right away, Wait(missing_values)
+    /// if the block should be processed when missing_value is the storage, or
+    /// Reject if the payload is invalid and the block should be dropped.
+    async fn verify(&mut self, payload: &[Vec<u8>]) -> PayloadStatus;
+
+    /// Consensus calls this method upon commit a block. The mempool can use the
+    /// knowledge that a block is committed to clean up its internal state.
+    async fn garbage_collect(&mut self, payload: &[Vec<u8>]);
+}
+
+// TODO [issue #3] Merge the mempool driver with the synchronizer.
 
 type DriverMessage = (Vec<Vec<u8>>, Block, Receiver<()>);
 

@@ -34,8 +34,7 @@ async fn end_to_end() {
 
             tokio::spawn(async move {
                 let mut mempool =
-                    SimpleMempool::new(name, committee, parameters, signature_service, store)
-                        .unwrap();
+                    Mempool::new(name, committee, parameters, signature_service, store).unwrap();
                 sleep(Duration::from_millis(100)).await;
                 let digest = vec![payload().digest().to_vec()];
                 match mempool.verify(&digest).await {
