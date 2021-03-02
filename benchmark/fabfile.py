@@ -91,7 +91,7 @@ def remote(ctx):
     bench_params = {
         'nodes': [4],
         'size': 512,
-        'rate': 15_000,
+        'rate': 25_000,
         'duration': 300,
         'runs': 1,
     }
@@ -99,12 +99,12 @@ def remote(ctx):
         'consensus': {
             'timeout_delay': 60_000,
             'sync_retry_delay': 10_000,
-            'min_block_delay': 0
+            'min_block_delay': 100
         },
         'mempool': {
             'queue_capacity': 100_000_000,
-            'max_payload_size': 2_000_000,
-            'min_block_delay': 0
+            'max_payload_size': 500_000,
+            'min_block_delay': 100
         }
     }
     try:

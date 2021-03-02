@@ -301,6 +301,9 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         // Store the block only if we have already processed all its ancestors.
         self.store_block(block).await?;
 
+        // Cleanup the mempool.
+        self.mempool_driver.cleanup(&b0, &b1).await;
+
         // Check if we can commit the head of the 2-chain.
         // Note that we commit blocks only if we have all its ancestors.
         let mut commit_rule = b0.round + 1 == b1.round;
@@ -315,7 +318,6 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
                 }
             }
             debug!("Committed {:?}", b0);
-            self.mempool_driver.garbage_collect(&b0).await;
             if let Err(e) = self.commit_channel.send(b0.clone()).await {
                 warn!("Failed to send block through the commit channel: {}", e);
             }

@@ -8,6 +8,7 @@ use crypto::{Digest, PublicKey, SignatureService};
 use log::{debug, error, info, warn};
 use network::NetMessage;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::{sleep, Duration};
@@ -31,7 +32,7 @@ pub struct Core {
     consensus_channel: Receiver<ConsensusMessage>,
     client_channel: Receiver<Transaction>,
     network_channel: Sender<NetMessage>,
-    queue: Vec<Digest>,
+    queue: HashSet<Digest>,
     payload_maker: PayloadMaker,
 }
 
@@ -48,7 +49,7 @@ impl Core {
         client_channel: Receiver<Transaction>,
         network_channel: Sender<NetMessage>,
     ) -> Self {
-        let queue = Vec::with_capacity(parameters.queue_capacity);
+        let queue = HashSet::with_capacity(parameters.queue_capacity);
         let payload_maker = PayloadMaker::new(name, signature_service, parameters.max_payload_size);
         info!("Max payload size: {} B", parameters.max_payload_size);
         Self {
@@ -139,7 +140,7 @@ impl Core {
         if let Some(payload) = self.payload_maker.add(transaction).await {
             let digest = payload.digest();
             self.process_own_payload(&digest, payload).await?;
-            self.queue.push(digest);
+            self.queue.insert(digest);
         }
         Ok(())
     }
@@ -164,11 +165,11 @@ impl Core {
 
         // Store payload.
         // TODO [issue #18]: A bad node may make us store a lot of junk. There is no
-        // limit to how many payload they can send us, and we will store them all.
+        // limit to how many payloads they can send us, and we will store them all.
         self.store_payload(digest.to_vec(), &payload).await?;
 
         // Add the payload to the queue.
-        self.queue.push(digest);
+        self.queue.insert(digest);
         Ok(())
     }
 
@@ -191,7 +192,7 @@ impl Core {
             self.process_own_payload(&digest, payload).await?;
             return Ok(vec![digest]);
         }
-        Ok(self.queue.drain(..).collect())
+        Ok(self.queue.drain().collect())
     }
 
     async fn verify_payload(&mut self, digests: Vec<Digest>) -> MempoolResult<Vec<Digest>> {
@@ -208,6 +209,12 @@ impl Core {
             }
         }
         Ok(missing)
+    }
+
+    fn cleanup(&mut self, digests: Vec<Digest>) {
+        for x in &digests {
+            self.queue.remove(x);
+        }
     }
 
     pub async fn run(&mut self) {
@@ -237,7 +244,8 @@ impl Core {
                             let result = self.verify_payload(digests).await;
                             log(result.as_ref().map(|_| &()));
                             let _ = sender.send(result);
-                        }
+                        },
+                        ConsensusMessage::Cleanup(digests) => self.cleanup(digests),
                     }
                     Ok(())
                 },

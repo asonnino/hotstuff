@@ -4,7 +4,7 @@ from itertools import repeat
 from multiprocessing import Pool
 from os.path import join
 from re import findall, search
-from statistics import mean, stdev
+from statistics import mean, median_grouped, stdev
 
 from benchmark.utils import Print
 
@@ -38,11 +38,13 @@ class LogParser:
                 results = p.map(self._parse_nodes, nodes)
         except (ValueError, IndexError) as e:
             raise ParseError(f'Failed to parse node logs: {e}')
-        self.payload, proposals, commits, sizes, self.samples, timeouts \
+        self.payload, proposals, commits, sizes, self.samples, timeouts, \
             = zip(*results)
-        self.proposals = {k: v for x in proposals for k, v in x.items()}
-        self.commits = {k: v for x in commits for k, v in x.items()}
-        self.sizes = {k: v for x in sizes for k, v in x.items()}
+        self.proposals = self._merge_results(proposals)
+        self.commits = self._merge_results(commits)
+        self.sizes = {
+            k: v for x in sizes for k, v in x.items() if k in self.commits
+        }
         self.timeouts = max(timeouts)
 
         # Check whether clients missed their target rate.
@@ -55,6 +57,14 @@ class LogParser:
         # Note that nodes are expected to time out once at the beginning.
         if self.timeouts > 1:
             Print.warn(f'Nodes timed out {self.timeouts:,} time(s)')
+
+    def _merge_results(self, input):
+        merged = {}
+        for x in input:
+            for k, v in x.items():
+                if not k in merged or merged[k] > v:
+                    merged[k] = v
+        return merged
 
     def _parse_clients(self, log):
         if search(r'Error', log) is not None:
@@ -80,13 +90,21 @@ class LogParser:
         payload = int(search(r'Max payload size: (\d+)', log).group(1))
 
         tmp = findall(r'\[(.*Z) .* Created B\d+\(([^ ]+)\)', log)
-        proposals = {d: self._to_posix(t) for t, d in tmp}
+        proposals = {}
+        for t, d in tmp:
+            new = self._to_posix(t)
+            if d not in proposals or proposals[d] > new:
+                proposals[d] = new
 
         tmp = findall(r'\[(.*Z) .* Committed B\d+\(([^ ]+)\)', log)
-        commits = {d: self._to_posix(t) for t, d in tmp if d in proposals}
+        commits = {}
+        for t, d in tmp:
+            new = self._to_posix(t)
+            if d not in commits or commits[d] > new:
+                commits[d] = new
 
         tmp = findall(r'Payload ([^ ]+) contains (\d+) B', log)
-        sizes = {d: int(s) for d, s in tmp if d in commits}
+        sizes = {d: int(s) for d, s in tmp}
 
         tmp = findall(r'Payload ([^ ]+) contains (\d+) sample', log)
         samples = {d: int(s) for d, s in tmp if d in commits}
@@ -111,7 +129,7 @@ class LogParser:
         return tps, bps, duration
 
     def _consensus_latency(self):
-        latency = [c - self.proposals[r] for r, c in self.commits.items()]
+        latency = [c - self.proposals[d] for d, c in self.commits.items()]
         return mean(latency) if latency else 0
 
     def _end_to_end_throughput(self):
