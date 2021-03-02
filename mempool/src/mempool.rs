@@ -19,6 +19,7 @@ pub mod mempool_tests;
 pub enum ConsensusMessage {
     Get(oneshot::Sender<MempoolResult<Vec<Digest>>>),
     Verify(Vec<Digest>, oneshot::Sender<MempoolResult<Vec<Digest>>>),
+    Cleanup(Vec<Digest>),
 }
 
 pub struct Mempool {
@@ -94,7 +95,7 @@ impl NodeMempool for Mempool {
         self.channel
             .send(message)
             .await
-            .expect("Consensus channel closed");
+            .expect("Failed to send message through consensus channel");
         receiver
             .await
             .expect("Failed to receive payload from core")
@@ -117,7 +118,7 @@ impl NodeMempool for Mempool {
         self.channel
             .send(message)
             .await
-            .expect("Consensus channel closed");
+            .expect("Failed to send message through consensus channel");
         match receiver.await.expect("Failed to receive payload from core") {
             Ok(missing) if missing.is_empty() => PayloadStatus::Accept,
             Ok(missing) => PayloadStatus::Wait(missing.iter().map(|x| x.to_vec()).collect()),
@@ -125,5 +126,16 @@ impl NodeMempool for Mempool {
         }
     }
 
-    async fn garbage_collect(&mut self, _payload: &[Vec<u8>]) {}
+    async fn garbage_collect(&mut self, payload: &[Vec<u8>]) {
+        let digests = payload
+            .iter()
+            .map(|x| x[..].try_into())
+            .collect::<Result<_, _>>()
+            .expect("Invalid payload");
+        let message = ConsensusMessage::Cleanup(digests);
+        self.channel
+            .send(message)
+            .await
+            .expect("Failed to send message through consensus channel");
+    }
 }

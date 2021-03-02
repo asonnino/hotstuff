@@ -120,18 +120,19 @@ impl<Mempool: 'static + NodeMempool> MempoolDriver<Mempool> {
         }
     }
 
-    pub async fn garbage_collect(&mut self, block: &Block) {
+    pub async fn cleanup(&mut self, b0: &Block, b1: &Block) {
         // Cleanup the driver.
-        let round = block.round;
+        let round = b1.round;
         for (k, v) in &self.pending {
-            if !v.is_closed() && k < &round {
+            if !v.is_closed() && k <= &round {
                 let _ = v.send(()).await;
             }
         }
-        self.pending.retain(|k, _| k < &round);
+        self.pending.retain(|k, _| k > &round);
 
         // Cleanup the mempool.
-        self.mempool.garbage_collect(&block.payload).await;
+        let payloads = [&b0.payload[..], &b1.payload[..]].concat();
+        self.mempool.garbage_collect(&payloads).await;
     }
 
     pub async fn get(&mut self) -> Vec<Vec<u8>> {

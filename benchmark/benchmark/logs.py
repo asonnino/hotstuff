@@ -4,7 +4,7 @@ from itertools import repeat
 from multiprocessing import Pool
 from os.path import join
 from re import findall, search
-from statistics import mean, stdev
+from statistics import mean, median_grouped, stdev
 
 from benchmark.utils import Print
 
@@ -40,9 +40,9 @@ class LogParser:
             raise ParseError(f'Failed to parse node logs: {e}')
         self.payload, proposals, commits, sizes, self.samples, timeouts \
             = zip(*results)
-        self.proposals = {k: v for x in proposals for k, v in x.items()}
-        self.commits = {k: v for x in commits for k, v in x.items()}
-        self.sizes = {k: v for x in sizes for k, v in x.items()}
+        self.proposals = self._merge_results(proposals)
+        self.commits = self._merge_results(commits)
+        self.sizes = self._merge_results(sizes)
         self.timeouts = max(timeouts)
 
         # Check whether clients missed their target rate.
@@ -55,6 +55,14 @@ class LogParser:
         # Note that nodes are expected to time out once at the beginning.
         if self.timeouts > 1:
             Print.warn(f'Nodes timed out {self.timeouts:,} time(s)')
+
+    def _merge_results(self, input):
+        merged = {}
+        for x in input:
+            for k, v in x.items():
+                if k not in merged:
+                    merged[k] = v
+        return merged
 
     def _parse_clients(self, log):
         if search(r'Error', log) is not None:

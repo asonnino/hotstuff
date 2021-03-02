@@ -89,7 +89,7 @@ def install(ctx):
 @task
 def remote(ctx):
     bench_params = {
-        'nodes': [4],
+        'nodes': [4, 5, 6, 7],
         'size': 512,
         'rate': 15_000,
         'duration': 300,
