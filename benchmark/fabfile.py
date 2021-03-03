@@ -91,17 +91,17 @@ def install(ctx):
 def remote(ctx):
     bench_params = {
         'nodes': [4],
-        'rate': [25_000],
+        'rate': [35_000],
         'tx_size': 512,
         'duration': 300,
-        'runs': 2,
+        'runs': 4,
     }
     node_params = {
         'consensus': {
             'timeout_delay': 60_000,
             'sync_retry_delay': 500_000,
             'max_payload_size': 1_000,
-            'min_block_delay': 150
+            'min_block_delay': 100
         },
         'mempool': {
             'queue_capacity': 100_000_000,
@@ -133,7 +133,7 @@ def logs(ctx):
 
 @task
 def aggregate(ctx):
-    files = glob('benchmark.*.txt')
+    files = glob('results/**/bench*.txt')
     try:
         LogAggregator(files).print('benchmark.txt')
     except ParseError as e:

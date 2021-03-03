@@ -40,8 +40,8 @@ class LogParser:
             raise ParseError(f'Failed to parse node logs: {e}')
         self.payload, proposals, commits, sizes, self.samples, timeouts, \
             = zip(*results)
-        self.proposals = self._merge_results(proposals)
-        self.commits = self._merge_results(commits)
+        self.proposals = self._merge_results([x.items() for x in proposals])
+        self.commits = self._merge_results([x.items() for x in commits])
         self.sizes = {
             k: v for x in sizes for k, v in x.items() if k in self.commits
         }
@@ -61,7 +61,7 @@ class LogParser:
     def _merge_results(self, input):
         merged = {}
         for x in input:
-            for k, v in x.items():
+            for k, v in x:
                 if not k in merged or merged[k] > v:
                     merged[k] = v
         return merged
@@ -90,18 +90,12 @@ class LogParser:
         payload = int(search(r'Max payload size: (\d+)', log).group(1))
 
         tmp = findall(r'\[(.*Z) .* Created B\d+\(([^ ]+)\)', log)
-        proposals = {}
-        for t, d in tmp:
-            new = self._to_posix(t)
-            if d not in proposals or proposals[d] > new:
-                proposals[d] = new
+        tmp = [(d, self._to_posix(t)) for t, d in tmp]
+        proposals = self._merge_results([tmp])
 
         tmp = findall(r'\[(.*Z) .* Committed B\d+\(([^ ]+)\)', log)
-        commits = {}
-        for t, d in tmp:
-            new = self._to_posix(t)
-            if d not in commits or commits[d] > new:
-                commits[d] = new
+        tmp = [(d, self._to_posix(t)) for t, d in tmp]
+        commits = self._merge_results([tmp])
 
         tmp = findall(r'Payload ([^ ]+) contains (\d+) B', log)
         sizes = {d: int(s) for d, s in tmp}
