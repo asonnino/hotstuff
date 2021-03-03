@@ -178,7 +178,7 @@ class Bench:
 
         return committee
 
-    def _run_single(self, hosts, bench_parameters, node_parameters, debug=False):
+    def _run_single(self, hosts, rate, bench_parameters, node_parameters, debug=False):
         Print.info('Booting testbed...')
 
         # Kill any potentially unfinished run and delete logs.
@@ -187,13 +187,13 @@ class Bench:
         # Run the clients (they will wait for the nodes to be ready).
         committee = Committee.load(PathMaker.committee_file())
         addresses = committee.front_addresses()
-        rate_share = ceil(bench_parameters.rate / committee.size())
+        rate_share = ceil(rate / committee.size())
         timeout = node_parameters.timeout_delay
         client_logs = [PathMaker.client_log_file(i) for i in range(len(hosts))]
         for host, addr, log_file in zip(hosts, addresses, client_logs):
             cmd = CommandMaker.run_client(
                 addr,
-                bench_parameters.size,
+                bench_parameters.tx_size,
                 rate_share,
                 timeout,
                 nodes=addresses
@@ -234,8 +234,9 @@ class Bench:
         for i, host in enumerate(progress):
             c = Connection(host, user='ubuntu', connect_kwargs=self.connect)
             c.get(PathMaker.node_log_file(i), local=PathMaker.node_log_file(i))
-            c.get(PathMaker.client_log_file(i),
-                  local=PathMaker.client_log_file(i))
+            c.get(
+                PathMaker.client_log_file(i), local=PathMaker.client_log_file(i)
+            )
 
         # Parse logs and return the parser.
         Print.info('Parsing logs and computing performance...')
@@ -265,27 +266,30 @@ class Bench:
 
         # Run benchmarks.
         for n in bench_parameters.nodes:
-            Print.heading(f'\nStarting benchmark with {n} nodes')
-            hosts = selected_hosts[:n]
+            for r in bench_parameters.rate:
+                Print.heading(f'\nRunning {n} nodes (input rate: {r:,} tx/s)')
+                hosts = selected_hosts[:n]
 
-            # Upload all configuration files.
-            try:
-                self._config(hosts, node_parameters)
-            except (subprocess.SubprocessError, GroupException) as e:
-                e = FabricError(e) if isinstance(e, GroupException) else e
-                Print.error(BenchError('Failed to configure nodes', e))
-                continue
-
-            # Run the benchmark.
-            for i in range(bench_parameters.runs):
-                Print.heading(f'Run {i+1}/{bench_parameters.runs}')
+                # Upload all configuration files.
                 try:
-                    self._run_single(
-                        hosts, bench_parameters, node_parameters, debug
-                    )
-                    self._logs(hosts).print(f'benchmark.{n}.txt')
-                except (subprocess.SubprocessError, GroupException, ParseError) as e:
-                    self.kill(hosts=hosts)
+                    self._config(hosts, node_parameters)
+                except (subprocess.SubprocessError, GroupException) as e:
                     e = FabricError(e) if isinstance(e, GroupException) else e
-                    Print.error(BenchError('Benchmark failed', e))
+                    Print.error(BenchError('Failed to configure nodes', e))
                     continue
+
+                # Run the benchmark.
+                for i in range(bench_parameters.runs):
+                    Print.heading(f'Run {i+1}/{bench_parameters.runs}')
+                    try:
+                        self._run_single(
+                            hosts, r, bench_parameters, node_parameters, debug
+                        )
+                        parser = self._logs(hosts)
+                        parser.print(bench_parameters.result_filename(n, r))
+                    except (subprocess.SubprocessError, GroupException, ParseError) as e:
+                        self.kill(hosts=hosts)
+                        if isinstance(e, GroupException):
+                            e = FabricError(e)
+                        Print.error(BenchError('Benchmark failed', e))
+                        continue

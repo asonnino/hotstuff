@@ -190,13 +190,15 @@ impl Core {
             }
             let digest = payload.digest();
             self.process_own_payload(&digest, payload).await?;
-            return Ok(vec![digest]);
+            Ok(vec![digest])
+        } else {
+            let digest_len = Digest::default().len();
+            let digests = self.queue.iter().take(max / digest_len).cloned().collect();
+            for x in &digests {
+                self.queue.remove(x);
+            }
+            Ok(digests)
         }
-        let digests = self.queue.iter().take(max / 32).cloned().collect();
-        for x in &digests {
-            self.queue.remove(x);
-        }
-        Ok(digests)
     }
 
     async fn verify_payload(&mut self, digests: Vec<Digest>) -> MempoolResult<Vec<Digest>> {

@@ -168,7 +168,7 @@ class LogParser:
             f' Committee size: {self.committee_size} nodes\n'
             f' Max payload size: {self.payload[0]:,} B \n'
             f' Transaction size: {self.size[0]:,} B \n'
-            f' Transaction rate: {sum(self.rate):,} tx/s\n'
+            f' Input rate: {sum(self.rate):,} tx/s\n'
             f' Execution time: {round(duration):,} s\n'
             '\n'
             f' Consensus TPS: {round(consensus_tps):,} tx/s\n'

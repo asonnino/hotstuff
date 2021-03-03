@@ -15,13 +15,13 @@ from aws.remote import Bench, BenchError
 def local(ct):
     bench_params = {
         'nodes': 4,
-        'size': 512,
-        'rate': 1000,
+        'rate': 1_000,
+        'tx_size': 512,
         'duration': 20,
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 1000,
+            'timeout_delay': 1_000,
             'sync_retry_delay': 10_000,
             'max_payload_size': 500,
             'min_block_delay': 0
@@ -90,18 +90,18 @@ def install(ctx):
 @task
 def remote(ctx):
     bench_params = {
-        'nodes': [4, 5, 6, 7],
-        'size': 512,
-        'rate': 15_000,
+        'nodes': [4],
+        'rate': [25_000],
+        'tx_size': 512,
         'duration': 300,
-        'runs': 1,
+        'runs': 2,
     }
     node_params = {
         'consensus': {
             'timeout_delay': 60_000,
-            'sync_retry_delay': 10_000,
-            'max_payload_size': 500,
-            'min_block_delay': 100
+            'sync_retry_delay': 500_000,
+            'max_payload_size': 1_000,
+            'min_block_delay': 150
         },
         'mempool': {
             'queue_capacity': 100_000_000,

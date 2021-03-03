@@ -80,7 +80,7 @@ class LocalBench:
             for addr, log_file in zip(addresses, client_logs):
                 cmd = CommandMaker.run_client(
                     addr,
-                    self.size,
+                    self.tx_size,
                     rate_share,
                     timeout
                 )

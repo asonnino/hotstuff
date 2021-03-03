@@ -120,9 +120,14 @@ class BenchParameters:
             if not nodes:
                 raise ConfigError('Missing number of nodes')
 
+            rate = json['rate'] 
+            rate = rate if isinstance(rate, list) else [rate]
+            if not rate:
+                raise ConfigError('Missing input rate')
+
             self.nodes = [int(x) for x in nodes]
-            self.rate = int(json['rate'])
-            self.size = int(json['size'])
+            self.rate = [int(x) for x in rate]
+            self.tx_size = int(json['tx_size'])
             self.duration = int(json['duration'])
             self.runs = int(json['runs']) if 'runs' in json else 1
         except KeyError as e:
@@ -130,3 +135,6 @@ class BenchParameters:
 
         except ValueError:
             raise ConfigError('Invalid parameters type')
+
+    def result_filename(self, nodes, rate):
+        return f'bench-{nodes}-{rate}-{self.tx_size}.txt'
