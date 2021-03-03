@@ -23,6 +23,7 @@ def local(ct):
         'consensus': {
             'timeout_delay': 1000,
             'sync_retry_delay': 10_000,
+            'max_payload_size': 500,
             'min_block_delay': 0
         },
         'mempool': {
@@ -91,7 +92,7 @@ def remote(ctx):
     bench_params = {
         'nodes': [4],
         'size': 512,
-        'rate': 25_000,
+        'rate': 15_000,
         'duration': 300,
         'runs': 1,
     }
@@ -99,6 +100,7 @@ def remote(ctx):
         'consensus': {
             'timeout_delay': 60_000,
             'sync_retry_delay': 10_000,
+            'max_payload_size': 500,
             'min_block_delay': 100
         },
         'mempool': {

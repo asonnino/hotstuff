@@ -17,7 +17,7 @@ pub mod mempool_tests;
 
 #[derive(Debug)]
 pub enum ConsensusMessage {
-    Get(oneshot::Sender<MempoolResult<Vec<Digest>>>),
+    Get(usize, oneshot::Sender<MempoolResult<Vec<Digest>>>),
     Verify(Vec<Digest>, oneshot::Sender<MempoolResult<Vec<Digest>>>),
     Cleanup(Vec<Digest>),
 }
@@ -89,9 +89,9 @@ impl Mempool {
 
 #[async_trait]
 impl NodeMempool for Mempool {
-    async fn get(&mut self) -> Vec<Vec<u8>> {
+    async fn get(&mut self, max: usize) -> Vec<Vec<u8>> {
         let (sender, receiver) = oneshot::channel();
-        let message = ConsensusMessage::Get(sender);
+        let message = ConsensusMessage::Get(max, sender);
         self.channel
             .send(message)
             .await

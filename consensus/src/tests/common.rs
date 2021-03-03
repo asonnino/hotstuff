@@ -188,7 +188,7 @@ pub struct MockMempool;
 
 #[async_trait]
 impl NodeMempool for MockMempool {
-    async fn get(&mut self) -> Vec<Vec<u8>> {
+    async fn get(&mut self, _max: usize) -> Vec<Vec<u8>> {
         let mut rng = StdRng::from_seed([0; 32]);
         let mut payload = [0u8; 32];
         rng.fill_bytes(&mut payload);

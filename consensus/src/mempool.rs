@@ -24,8 +24,8 @@ pub enum PayloadStatus {
 #[async_trait]
 pub trait NodeMempool: Send + Sync {
     /// Consensus calls this method whenever it needs to create a new block.
-    /// The mempool needs to promptly provide a payload.
-    async fn get(&mut self) -> Vec<Vec<u8>>;
+    /// The mempool needs to promptly provide at most 'max' payloads.
+    async fn get(&mut self, max: usize) -> Vec<Vec<u8>>;
 
     /// Consensus calls this method when receiving a new block. The mempool should
     /// return Accept if the block can be processed right away, Wait(missing_values)
@@ -135,7 +135,7 @@ impl<Mempool: 'static + NodeMempool> MempoolDriver<Mempool> {
         self.mempool.garbage_collect(&payloads).await;
     }
 
-    pub async fn get(&mut self) -> Vec<Vec<u8>> {
-        self.mempool.get().await
+    pub async fn get(&mut self, max: usize) -> Vec<Vec<u8>> {
+        self.mempool.get(max).await
     }
 }

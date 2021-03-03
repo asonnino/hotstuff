@@ -182,7 +182,7 @@ impl Core {
         Ok(())
     }
 
-    async fn get_payload(&mut self) -> MempoolResult<Vec<Digest>> {
+    async fn get_payload(&mut self, max: usize) -> MempoolResult<Vec<Digest>> {
         if self.queue.is_empty() {
             let payload = self.payload_maker.make().await;
             if payload.size() == 0 {
@@ -192,7 +192,11 @@ impl Core {
             self.process_own_payload(&digest, payload).await?;
             return Ok(vec![digest]);
         }
-        Ok(self.queue.drain().collect())
+        let digests = self.queue.iter().take(max / 32).cloned().collect();
+        for x in &digests {
+            self.queue.remove(x);
+        }
+        Ok(digests)
     }
 
     async fn verify_payload(&mut self, digests: Vec<Digest>) -> MempoolResult<Vec<Digest>> {
@@ -235,8 +239,8 @@ impl Core {
                 },
                 Some(message) = self.consensus_channel.recv() => {
                     match message {
-                        ConsensusMessage::Get(sender) => {
-                            let result = self.get_payload().await;
+                        ConsensusMessage::Get(max, sender) => {
+                            let result = self.get_payload(max).await;
                             log(result.as_ref().map(|_| &()));
                             let _ = sender.send(result);
                         },

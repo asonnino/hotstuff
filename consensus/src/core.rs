@@ -248,12 +248,13 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     #[async_recursion]
     async fn generate_proposal(&mut self, tc: Option<TC>) -> ConsensusResult<()> {
         // Make a new block.
+        let payload = self.mempool_driver.get(self.parameters.max_payload_size).await;
         let block = Block::new(
             self.high_qc.clone(),
             tc,
             self.name,
             self.round,
-            /* payload */ self.mempool_driver.get().await,
+            payload,
             self.signature_service.clone(),
         )
         .await;
