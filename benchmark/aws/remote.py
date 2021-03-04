@@ -6,6 +6,7 @@ from paramiko.ssh_exception import PasswordRequiredException, SSHException
 from os.path import basename, splitext
 from time import sleep
 from math import ceil
+from os.path import join
 import subprocess
 
 from benchmark.config import Committee, Key, NodeParameters, BenchParameters, ConfigError
@@ -251,6 +252,12 @@ class Bench:
         except ConfigError as e:
             raise BenchError('Invalid nodes or bench parameters', e)
 
+        try:
+            cmd = f'mkdir -p {PathMaker.results_path()}'
+            subprocess.run(cmd.split(), check=True)
+        except subprocess.SubprocessError as e:
+            raise BenchError('Failed to create results folder', e)
+
         # Select which hosts to use.
         selected_hosts = self._select_hosts(bench_parameters)
         if not selected_hosts:
@@ -285,8 +292,12 @@ class Bench:
                         self._run_single(
                             hosts, r, bench_parameters, node_parameters, debug
                         )
-                        parser = self._logs(hosts)
-                        parser.print(bench_parameters.result_filename(n, r))
+                        self._logs(hosts).print(
+                            join(
+                                PathMaker.results_path(),
+                                bench_parameters.result_filename(n, r)
+                            )
+                        )
                     except (subprocess.SubprocessError, GroupException, ParseError) as e:
                         self.kill(hosts=hosts)
                         if isinstance(e, GroupException):

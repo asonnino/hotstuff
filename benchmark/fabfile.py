@@ -2,7 +2,8 @@ from fabric import task
 from glob import glob
 
 from benchmark.local import LocalBench
-from benchmark.logs import ParseError, LogParser, LogAggregator
+from benchmark.logs import ParseError, LogParser
+from benchmark.aggregator import LogAggregator
 from benchmark.utils import Print
 from benchmark.plot import Ploter, PlotError
 from aws.instance import InstanceManager
@@ -133,19 +134,14 @@ def logs(ctx):
 
 @task
 def aggregate(ctx):
-    files = glob('results/**/bench*.txt')
-    try:
-        LogAggregator(files).print('benchmark.txt')
-    except ParseError as e:
-        Print.error(BenchError('Failed to aggregate logs', e))
+    LogAggregator().print()
 
 
 @task
 def plot(ctx):
-    files = glob('results/plot/*.txt')
     try:
-        ploter = Ploter(files)
-        ploter.plot_tps('Committee size', ploter.txs_rate)
-        ploter.plot_latency('Committee size', ploter.txs_rate)
+        ploter = Ploter(glob('plot/*.txt'))
+        #ploter.plot_tps(ploter.tx_size)
+        ploter.plot_latency(ploter.nodes)
     except PlotError as e:
         Print.error(BenchError('Failed to plot performance', e))

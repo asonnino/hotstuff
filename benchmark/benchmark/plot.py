@@ -27,14 +27,14 @@ class Ploter:
             raise PlotError(f'Failed to load log files: {e}')
 
     def _tps(self, data):
-        avg = [int(x) for x in findall(r'Average TPS: (\d+)', data)]
-        std = [int(x) for x in findall(r'Std TPS: (\d+)', data)]
-        return avg, std
+        values = findall(r' TPS: (\d+) \+/- (\d+)', data)
+        values = [(int(x), int(y)) for x, y in values]
+        return list(zip(*values))
 
-    def _latency(self, data):
-        avg = [int(x) for x in findall(r'Average latency: (\d+)', data)]
-        std = [int(x) for x in findall(r'Std latency: (\d+)', data)]
-        return avg, std
+    def _latency(self, data, scale=1):
+        values = findall(r' Latency: (\d+) \+/- (\d+)', data)
+        values = [(float(x)/scale, float(y)/scale) for x, y in values]
+        return list(zip(*values))
 
     def _variable(self, data):
         return [int(x) for x in findall(r'Variable value: X=(\d+)', data)]
@@ -49,19 +49,20 @@ class Ploter:
         size = int(search(r'Transaction size: (\d+)', data).group(1))
         return x * 10**6 / size
 
+    def nodes(self, data):
+        x = search(r'Committee size: (\d+)', data).group(1)
+        return f'{x} nodes'
+
     def tx_size(self, data):
         return search(r'Transaction size: .*', data).group(0)
-
-    def txs_rate(self, data):
-        val = search(r'Transaction rate: (\d+)', data).group(1)
-        return f'Transaction rate: {int(val):,} tx/s'
 
     def _plot(self, x_label, y_label, y_axis, z_axis, filename):
         plt.figure()
         for result in self.results:
             y_values, y_err = y_axis(result)
             x_values = self._variable(result)
-            assert len(y_values) == len(y_err) and len(y_err) == len(x_values)
+            if len(y_values) != len(y_err) or len(y_err) != len(x_values):
+                raise PlotError('Unequal number of x, y, and y_err values')
 
             plt.errorbar(
                 x_values, y_values, yerr=y_err,  # uplims=True, lolims=True,
@@ -71,10 +72,10 @@ class Ploter:
         plt.ylim(bottom=0)
         plt.xlabel(x_label)
         plt.ylabel(y_label[0])
-        plt.legend(loc='lower left')
+        plt.legend(loc='upper right')
         ax = plt.gca()
         #ax.ticklabel_format(useOffset=False, style='plain')
-        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        #ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
         if len(y_label) > 1:
             secaxy = ax.secondary_yaxis(
@@ -86,14 +87,14 @@ class Ploter:
         plt.savefig(f'{filename}.pdf', bbox_inches='tight')
         plt.savefig(f'{filename}.png', bbox_inches='tight')
 
-    def plot_tps(self, x_label, z_axis):
-        assert isinstance(x_label, str)
+    def plot_tps(self, z_axis):
         assert hasattr(z_axis, '__call__')
+        x_label = 'Committee size'
         y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
         self._plot(x_label, y_label, self._tps, z_axis, 'tps')
 
-    def plot_latency(self, x_label, z_axis):
-        assert isinstance(x_label, str)
+    def plot_latency(self, z_axis):
         assert hasattr(z_axis, '__call__')
-        y_label = ['Consensus latency (ms)']
+        x_label = 'Throughput (tx/s)'
+        y_label = ['Latency (ms)']
         self._plot(x_label, y_label, self._latency, z_axis, 'latency')
