@@ -3,7 +3,7 @@ use crate::config::{Committee, Parameters, Secret};
 use consensus::{Block, Consensus, ConsensusError};
 use crypto::SignatureService;
 use log::info;
-use mempool::{MempoolError, SimpleMempool};
+use mempool::{Mempool, MempoolError};
 use store::{Store, StoreError};
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver};
@@ -58,7 +58,7 @@ impl Node {
         let signature_service = SignatureService::new(secret_key);
 
         // Make a new mempool.
-        let mempool = SimpleMempool::new(
+        let mempool = Mempool::new(
             name,
             committee.mempool,
             parameters.mempool,

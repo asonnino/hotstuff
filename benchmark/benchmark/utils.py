@@ -43,6 +43,10 @@ class PathMaker:
         assert isinstance(i, int) and i >= 0
         return f'logs/client-{i}.log'
 
+    @staticmethod
+    def results_path():
+        return './results'
+
 
 class Color:
     HEADER = '\033[95m'

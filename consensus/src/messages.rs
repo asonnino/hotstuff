@@ -19,7 +19,7 @@ pub struct Block {
     pub tc: Option<TC>,
     pub author: PublicKey,
     pub round: RoundNumber,
-    pub payload: Vec<u8>,
+    pub payload: Vec<Vec<u8>>,
     pub signature: Signature,
 }
 
@@ -29,7 +29,7 @@ impl Block {
         tc: Option<TC>,
         author: PublicKey,
         round: RoundNumber,
-        payload: Vec<u8>,
+        payload: Vec<Vec<u8>>,
         mut signature_service: SignatureService,
     ) -> Self {
         let block = Self {
@@ -81,7 +81,9 @@ impl Hash for Block {
         let mut hasher = Sha512::new();
         hasher.update(self.author.0);
         hasher.update(self.round.to_le_bytes());
-        hasher.update(&self.payload);
+        for x in &self.payload {
+            hasher.update(x);
+        }
         hasher.update(&self.qc.hash);
         Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }
@@ -96,14 +98,14 @@ impl fmt::Debug for Block {
             self.author,
             self.round,
             self.qc,
-            self.payload.len(),
+            self.payload.iter().map(|x| x.len()).sum::<usize>(),
         )
     }
 }
 
 impl fmt::Display for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "B{}({})", self.round, base64::encode(&self.payload))
+        write!(f, "B{}", self.round)
     }
 }
 
