@@ -117,9 +117,6 @@ impl Core {
             );
         }
 
-        // Wait for the minimum block delay.
-        sleep(Duration::from_millis(self.parameters.min_block_delay)).await;
-
         // Store the payload.
         self.store_payload(bytes, &payload).await?;
 
@@ -141,6 +138,9 @@ impl Core {
             let digest = payload.digest();
             self.process_own_payload(&digest, payload).await?;
             self.queue.insert(digest);
+
+            // Wait for the minimum block delay.
+            sleep(Duration::from_millis(self.parameters.min_block_delay)).await;
         }
         Ok(())
     }
