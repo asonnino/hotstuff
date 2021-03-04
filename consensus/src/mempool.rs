@@ -1,4 +1,4 @@
-use crate::core::{CoreMessage, RoundNumber};
+use crate::core::{CoreMessage, SeqNumber};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::messages::Block;
 use futures::future::FutureExt as _;
@@ -15,7 +15,7 @@ type DriverMessage = (Vec<u8>, Block, Receiver<()>);
 pub struct MempoolDriver<Mempool> {
     inner_channel: Sender<DriverMessage>,
     mempool: Mempool,
-    pending: HashMap<RoundNumber, Sender<()>>,
+    pending: HashMap<SeqNumber, Sender<()>>,
 }
 
 impl<Mempool: 'static + NodeMempool> MempoolDriver<Mempool> {

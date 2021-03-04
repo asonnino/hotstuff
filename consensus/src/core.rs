@@ -18,12 +18,16 @@ use std::cmp::max;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::{Duration, sleep};
+use std::collections::HashMap;
 
 #[cfg(test)]
 #[path = "tests/core_tests.rs"]
 pub mod core_tests;
 
-pub type RoundNumber = u64;
+pub type SeqNumber = u64; // For both round and view
+pub type HeightNumber = u8;  // height={1,2,3} in fallback chain, height=0 for sync block
+pub type Bool = u8;
+pub type CommitteeSize = u64;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum CoreMessage {
@@ -47,10 +51,16 @@ pub struct Core<Mempool> {
     core_channel: Receiver<CoreMessage>,
     network_channel: Sender<NetMessage>,
     commit_channel: Sender<Block>,
-    round: RoundNumber,
-    last_voted_round: RoundNumber,
+    round: SeqNumber,     // current round
+    view: SeqNumber,       // current view
+    height: HeightNumber,   // current height
+    last_voted_round: SeqNumber,
     high_qc: QC,
-    timer: Timer<RoundNumber>,
+    fallback: Bool, // 0 if not in async fallback, 1 if in async fallback
+    async_voted_round: HashMap<PublicKey, SeqNumber>,    // voted round number during fallback for each i
+    async_voted_height: HashMap<PublicKey, HeightNumber>,  // voted height number during fallback for each i
+    async_high_qc: HashMap<PublicKey, QC>,  // highest QC during fallback for each i
+    timer: Timer<SeqNumber>,
     aggregator: Aggregator,
 }
 
@@ -70,6 +80,11 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         commit_channel: Sender<Block>,
     ) -> Self {
         let aggregator = Aggregator::new(committee.clone());
+        let mut fallback = 0;
+        // If run VABA
+        if parameters.protocol == 1 {
+            fallback = 1;
+        }
         Self {
             name,
             committee,
@@ -83,8 +98,14 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             commit_channel,
             core_channel,
             round: 1,
+            view: 1,
+            height: 1,
             last_voted_round: 0,
             high_qc: QC::genesis(),
+            fallback,
+            async_voted_round: HashMap::new(),
+            async_voted_height: HashMap::new(),
+            async_high_qc: HashMap::new(),
             timer: Timer::new(),
             aggregator,
         }
@@ -126,7 +147,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     }
 
     // -- Start Safety Module --
-    fn increase_last_voted_round(&mut self, target: RoundNumber) {
+    fn increase_last_voted_round(&mut self, target: SeqNumber) {
         self.last_voted_round = max(self.last_voted_round, target);
     }
 
@@ -199,7 +220,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
 
     async fn handle_timeout(&mut self, timeout: &Timeout) -> ConsensusResult<()> {
         debug!("Processing {:?}", timeout);
-        if timeout.round < self.round {
+        if timeout.seq < self.round {
             return Ok(());
         }
 
@@ -214,7 +235,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             debug!("Assembled {:?}", tc);
 
             // Try to advance the round.
-            self.advance_round(tc.round).await;
+            self.advance_round(tc.seq).await;
 
             // Broadcast the TC.
             let message = CoreMessage::TC(tc.clone());
@@ -229,7 +250,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     }
 
     #[async_recursion]
-    async fn advance_round(&mut self, round: RoundNumber) {
+    async fn advance_round(&mut self, round: SeqNumber) {
         if round < self.round {
             return;
         }
@@ -252,7 +273,10 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             self.high_qc.clone(),
             tc,
             self.name,
+            self.view,
             self.round,
+            self.height,
+            self.fallback,
             /* payload */ self.mempool_driver.get().await,
             self.signature_service.clone(),
         )
@@ -353,7 +377,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
 
         // Process the TC (if any). This may also allow us to advance round.
         if let Some(ref tc) = block.tc {
-            self.advance_round(tc.round).await;
+            self.advance_round(tc.seq).await;
         }
 
         // Let's see if we have the block's data. If we don't, the mempool
@@ -381,7 +405,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     }
 
     async fn handle_tc(&mut self, tc: TC) -> ConsensusResult<()> {
-        self.advance_round(tc.round).await;
+        self.advance_round(tc.seq).await;
         if self.name == self.leader_elector.get_leader(self.round) {
             self.generate_proposal(Some(tc)).await?;
         }

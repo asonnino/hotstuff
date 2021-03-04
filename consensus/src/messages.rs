@@ -1,5 +1,5 @@
 use crate::config::Committee;
-use crate::core::RoundNumber;
+use crate::core::{SeqNumber, HeightNumber, Bool};
 use crate::error::{ConsensusError, ConsensusResult};
 use crypto::{Digest, Hash, PublicKey, Signature, SignatureService};
 use ed25519_dalek::Digest as _;
@@ -13,12 +13,16 @@ use std::fmt;
 #[path = "tests/messages_tests.rs"]
 pub mod messages_tests;
 
+// daniel: Add view, height, fallback in Block, Vote and QC
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Block {
     pub qc: QC,
     pub tc: Option<TC>,
     pub author: PublicKey,
-    pub round: RoundNumber,
+    pub view: SeqNumber,   // increment by 1 after every async fallback, initially 1
+    pub round: SeqNumber,
+    pub height: HeightNumber,   // for async block height={1,2,3}, for sync block height=1
+    pub fallback: Bool,  // 1 if async block; 0 if sync block
     pub payload: Vec<u8>,
     pub signature: Signature,
 }
@@ -28,7 +32,10 @@ impl Block {
         qc: QC,
         tc: Option<TC>,
         author: PublicKey,
-        round: RoundNumber,
+        view: SeqNumber,
+        round: SeqNumber,
+        height: HeightNumber,
+        fallback: Bool,
         payload: Vec<u8>,
         mut signature_service: SignatureService,
     ) -> Self {
@@ -36,7 +43,10 @@ impl Block {
             qc,
             tc,
             author,
+            view,
             round,
+            height,
+            fallback,
             payload,
             signature: Signature::default(),
         };
@@ -80,7 +90,10 @@ impl Hash for Block {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
         hasher.update(self.author.0);
+        hasher.update(self.view.to_le_bytes());
         hasher.update(self.round.to_le_bytes());
+        hasher.update(self.height.to_le_bytes());
+        hasher.update(&self.fallback.to_le_bytes());
         hasher.update(&self.payload);
         hasher.update(&self.qc.hash);
         Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
@@ -91,12 +104,15 @@ impl fmt::Debug for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(
             f,
-            "{}: B({}, {}, {:?}, {})",
+            "{}: B(author {}, view {}, round {}, height {}, qc {:?}, payload_len {}, fallback {})",
             self.digest(),
             self.author,
+            self.view,
             self.round,
+            self.height,
             self.qc,
             self.payload.len(),
+            self.fallback
         )
     }
 }
@@ -110,7 +126,10 @@ impl fmt::Display for Block {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Vote {
     pub hash: Digest,
-    pub round: RoundNumber,
+    pub view: SeqNumber,
+    pub round: SeqNumber,
+    pub height: HeightNumber,
+    pub fallback: Bool,
     pub author: PublicKey,
     pub signature: Signature,
 }
@@ -123,7 +142,10 @@ impl Vote {
     ) -> Self {
         let vote = Self {
             hash: block.digest(),
+            view: block.view,
             round: block.round,
+            height: block.height,
+            fallback: block.fallback,
             author,
             signature: Signature::default(),
         };
@@ -148,7 +170,10 @@ impl Hash for Vote {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
         hasher.update(&self.hash);
+        hasher.update(self.view.to_le_bytes());
         hasher.update(self.round.to_le_bytes());
+        hasher.update(self.height.to_le_bytes());
+        hasher.update(&self.fallback.to_le_bytes());
         Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }
 }
@@ -162,7 +187,10 @@ impl fmt::Debug for Vote {
 #[derive(Clone, Serialize, Deserialize, Default)]
 pub struct QC {
     pub hash: Digest,
-    pub round: RoundNumber,
+    pub view: SeqNumber,
+    pub round: SeqNumber,
+    pub height: HeightNumber,
+    pub fallback: Bool,
     pub votes: Vec<(PublicKey, Signature)>,
 }
 
@@ -200,7 +228,10 @@ impl Hash for QC {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
         hasher.update(&self.hash);
+        hasher.update(self.view.to_le_bytes());
         hasher.update(self.round.to_le_bytes());
+        hasher.update(self.height.to_le_bytes());
+        hasher.update(&self.fallback.to_le_bytes());
         Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }
 }
@@ -213,14 +244,18 @@ impl fmt::Debug for QC {
 
 impl PartialEq for QC {
     fn eq(&self, other: &Self) -> bool {
-        self.hash == other.hash && self.round == other.round
+        self.hash == other.hash && self.view == other.view && self.round == other.round && self.height == other.height && self.fallback == other.fallback
     }
 }
 
+// daniel: 
+// Nodes sign Hash(seq, high_qc_round)
+// For VABA or async fallback, seq=view
+// For HotStuff, seq=round
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Timeout {
     pub high_qc: QC,
-    pub round: RoundNumber,
+    pub seq: SeqNumber,
     pub author: PublicKey,
     pub signature: Signature,
 }
@@ -228,13 +263,13 @@ pub struct Timeout {
 impl Timeout {
     pub async fn new(
         high_qc: QC,
-        round: RoundNumber,
+        seq: SeqNumber,
         author: PublicKey,
         mut signature_service: SignatureService,
     ) -> Self {
         let timeout = Self {
             high_qc,
-            round,
+            seq,
             author,
             signature: Signature::default(),
         };
@@ -266,7 +301,7 @@ impl Timeout {
 impl Hash for Timeout {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
-        hasher.update(self.round.to_le_bytes());
+        hasher.update(self.seq.to_le_bytes());
         hasher.update(self.high_qc.round.to_le_bytes());
         Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }
@@ -274,14 +309,16 @@ impl Hash for Timeout {
 
 impl fmt::Debug for Timeout {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "TV({}, {}, {:?})", self.author, self.round, self.high_qc)
+        write!(f, "TV({}, {}, {:?})", self.author, self.seq, self.high_qc)
     }
 }
 
+// for VABA or async fallback, seq=view
+// for HotStuff, seq=round
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TC {
-    pub round: RoundNumber,
-    pub votes: Vec<(PublicKey, Signature, RoundNumber)>,
+    pub seq: SeqNumber,
+    pub votes: Vec<(PublicKey, Signature, SeqNumber)>,
 }
 
 impl TC {
@@ -304,7 +341,7 @@ impl TC {
         // Check the signatures.
         for (author, signature, high_qc_round) in &self.votes {
             let mut hasher = Sha512::new();
-            hasher.update(self.round.to_le_bytes());
+            hasher.update(self.seq.to_le_bytes());
             hasher.update(high_qc_round.to_le_bytes());
             let digest = Digest(hasher.finalize().as_slice()[..32].try_into().unwrap());
             signature.verify(&digest, &author)?;
@@ -312,13 +349,13 @@ impl TC {
         Ok(())
     }
 
-    pub fn high_qc_rounds(&self) -> Vec<RoundNumber> {
+    pub fn high_qc_rounds(&self) -> Vec<SeqNumber> {
         self.votes.iter().map(|(_, _, r)| r).cloned().collect()
     }
 }
 
 impl fmt::Debug for TC {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "TC({}, {:?})", self.round, self.high_qc_rounds())
+        write!(f, "TC({}, {:?})", self.seq, self.high_qc_rounds())
     }
 }

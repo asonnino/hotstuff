@@ -1,5 +1,5 @@
 use crate::config::{Committee, Stake};
-use crate::core::RoundNumber;
+use crate::core::SeqNumber;
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::messages::{Timeout, Vote, QC, TC};
 use crypto::Hash as _;
@@ -10,10 +10,12 @@ use std::collections::{HashMap, HashSet};
 #[path = "tests/aggregator_tests.rs"]
 pub mod aggregator_tests;
 
+// In HotStuff, votes/timeouts aggregated by round
+// In VABA and async fallback, votes aggregated by round, timeouts/coin_share aggregated by view
 pub struct Aggregator {
     committee: Committee,
-    votes_aggregators: HashMap<RoundNumber, HashMap<Digest, Box<QCMaker>>>,
-    timeouts_aggregators: HashMap<RoundNumber, Box<TCMaker>>,
+    votes_aggregators: HashMap<SeqNumber, HashMap<Digest, Box<QCMaker>>>,
+    timeouts_aggregators: HashMap<SeqNumber, Box<TCMaker>>,
 }
 
 impl Aggregator {
@@ -44,14 +46,20 @@ impl Aggregator {
 
         // Add the new timeout to our aggregator and see if we have a TC.
         self.timeouts_aggregators
-            .entry(timeout.round)
+            .entry(timeout.seq)
             .or_insert_with(|| Box::new(TCMaker::new()))
             .append(timeout, &self.committee)
     }
 
-    pub fn cleanup(&mut self, round: &RoundNumber) {
+    // used in HotStuff
+    pub fn cleanup(&mut self, round: &SeqNumber) {
         self.votes_aggregators.retain(|k, _| k >= round);
         self.timeouts_aggregators.retain(|k, _| k >= round);
+    }
+    // used in VABA and async fallback
+    pub fn cleanup_async(&mut self, round: &SeqNumber, view: &SeqNumber) {
+        self.votes_aggregators.retain(|k, _| k >= round);
+        self.timeouts_aggregators.retain(|k, _| k >= view);
     }
 }
 
@@ -86,7 +94,10 @@ impl QCMaker {
             self.weight = 0; // Ensures QC is only made once.
             return Ok(Some(QC {
                 hash: vote.hash.clone(),
+                view: vote.view,
                 round: vote.round,
+                height: vote.height,
+                fallback: vote.fallback,
                 votes: self.votes.clone(),
             }));
         }
@@ -96,7 +107,7 @@ impl QCMaker {
 
 struct TCMaker {
     weight: Stake,
-    votes: Vec<(PublicKey, Signature, RoundNumber)>,
+    votes: Vec<(PublicKey, Signature, SeqNumber)>,
     used: HashSet<PublicKey>,
 }
 
@@ -130,7 +141,7 @@ impl TCMaker {
         if self.weight >= committee.quorum_threshold() {
             self.weight = 0; // Ensures TC is only created once.
             return Ok(Some(TC {
-                round: timeout.round,
+                seq: timeout.seq,
                 votes: self.votes.clone(),
             }));
         }

@@ -12,6 +12,7 @@ pub struct Parameters {
     pub timeout_delay: u64,
     pub sync_retry_delay: u64,
     pub min_block_delay: u64,
+    pub protocol: u8,   // 0 for HotStuff, 1 for chained-VABA, 2 for async fallback
 }
 
 impl Default for Parameters {
@@ -19,7 +20,8 @@ impl Default for Parameters {
         Self {
             timeout_delay: 5000,
             sync_retry_delay: 10_000,
-            min_block_delay: 100
+            min_block_delay: 100,
+            protocol: 0
         }
     }
 }

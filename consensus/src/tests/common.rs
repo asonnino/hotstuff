@@ -1,5 +1,5 @@
 use crate::config::Committee;
-use crate::core::RoundNumber;
+use crate::core::{SeqNumber, HeightNumber, Bool};
 use crate::messages::{Block, Timeout, Vote, QC};
 use async_trait::async_trait;
 use crypto::Hash as _;
@@ -44,7 +44,10 @@ impl Block {
     pub fn new_from_key(
         qc: QC,
         author: PublicKey,
-        round: RoundNumber,
+        view: SeqNumber,
+        round: SeqNumber,
+        height: HeightNumber,
+        fallback: Bool,
         payload: Vec<u8>,
         secret: &SecretKey,
     ) -> Self {
@@ -52,7 +55,10 @@ impl Block {
             qc,
             tc: None,
             author,
+            view,
             round,
+            height,
+            fallback,
             payload,
             signature: Signature::default(),
         };
@@ -70,13 +76,19 @@ impl PartialEq for Block {
 impl Vote {
     pub fn new_from_key(
         hash: Digest,
-        round: RoundNumber,
+        view: SeqNumber,
+        round: SeqNumber,
+        height: HeightNumber,
+        fallback: Bool,
         author: PublicKey,
         secret: &SecretKey,
     ) -> Self {
         let vote = Self {
             hash,
+            view,
             round,
+            height,
+            fallback,
             author,
             signature: Signature::default(),
         };
@@ -94,13 +106,13 @@ impl PartialEq for Vote {
 impl Timeout {
     pub fn new_from_key(
         high_qc: QC,
-        round: RoundNumber,
+        seq: SeqNumber,
         author: PublicKey,
         secret: &SecretKey,
     ) -> Self {
         let timeout = Self {
             high_qc,
-            round,
+            seq,
             author,
             signature: Signature::default(),
         };
@@ -121,20 +133,23 @@ impl PartialEq for Timeout {
 // Fixture.
 pub fn block() -> Block {
     let (public_key, secret_key) = keys().pop().unwrap();
-    Block::new_from_key(QC::genesis(), public_key, 1, Vec::new(), &secret_key)
+    Block::new_from_key(QC::genesis(), public_key, 1, 1, 1, 0, Vec::new(), &secret_key)
 }
 
 // Fixture.
 pub fn vote() -> Vote {
     let (public_key, secret_key) = keys().pop().unwrap();
-    Vote::new_from_key(block().digest(), 1, public_key, &secret_key)
+    Vote::new_from_key(block().digest(), 1, 1, 1, 0, public_key, &secret_key)
 }
 
 // Fixture.
 pub fn qc() -> QC {
     let qc = QC {
         hash: Digest::default(),
+        view: 1,
         round: 1,
+        height: 1,
+        fallback: 0,
         votes: Vec::new(),
     };
     let digest = qc.digest();
@@ -159,7 +174,10 @@ pub fn chain(keys: Vec<(PublicKey, SecretKey)>) -> Vec<Block> {
             let block = Block::new_from_key(
                 latest_qc.clone(),
                 *public_key,
-                1 + i as RoundNumber,
+                1,
+                1 + i as SeqNumber,
+                1,
+                0,
                 Vec::new(),
                 secret_key,
             );
@@ -167,7 +185,10 @@ pub fn chain(keys: Vec<(PublicKey, SecretKey)>) -> Vec<Block> {
             // Make a qc for that block (it will be used for the next block).
             let qc = QC {
                 hash: block.digest(),
+                view: block.view,
                 round: block.round,
+                height: block.height,
+                fallback: block.fallback,
                 votes: Vec::new(),
             };
             let digest = qc.digest();

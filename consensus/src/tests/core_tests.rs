@@ -50,7 +50,7 @@ async fn core(
     (tx_core, rx_network, rx_commit)
 }
 
-fn leader_keys(round: RoundNumber) -> (PublicKey, SecretKey) {
+fn leader_keys(round: SeqNumber) -> (PublicKey, SecretKey) {
     let leader_elector = LeaderElector::new(committee());
     let leader = leader_elector.get_leader(round);
     keys()
@@ -64,7 +64,7 @@ async fn handle_proposal() {
     // Make a block and the vote we expect to receive.
     let block = chain(vec![leader_keys(1)]).pop().unwrap();
     let (public_key, secret_key) = keys().pop().unwrap();
-    let vote = Vote::new_from_key(block.digest(), block.round, public_key, &secret_key);
+    let vote = Vote::new_from_key(block.digest(), block.view, block.round, block.height, block.fallback, public_key, &secret_key);
 
     // Run a core instance.
     let store_path = ".db_test_handle_proposal";
@@ -96,17 +96,20 @@ async fn generate_proposal() {
     let (next_leader, next_leader_key) = leader_keys(2);
 
     // Make a block, votes, and QC.
-    let block = Block::new_from_key(QC::genesis(), leader, 1, Vec::new(), &leader_key);
+    let block = Block::new_from_key(QC::genesis(), leader, 1, 1, 1, 0, Vec::new(), &leader_key);
     let hash = block.digest();
     let votes: Vec<_> = keys()
         .iter()
         .map(|(public_key, secret_key)| {
-            Vote::new_from_key(hash.clone(), block.round, *public_key, &secret_key)
+            Vote::new_from_key(hash.clone(), block.view, block.round, block.height, block.fallback, *public_key, &secret_key)
         })
         .collect();
     let qc = QC {
         hash,
+        view: block.view,
         round: block.round,
+        height: block.height,
+        fallback: block.fallback,
         votes: votes
             .iter()
             .cloned()
