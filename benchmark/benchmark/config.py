@@ -93,6 +93,7 @@ class NodeParameters:
             inputs += [json['consensus']['timeout_delay']]
             inputs += [json['consensus']['sync_retry_delay']]
             inputs += [json['consensus']['min_block_delay']]
+            inputs += [json['consensus']['protocol']]
             inputs += [json['mempool']['queue_capacity']]
             inputs += [json['mempool']['max_payload_size']]
             inputs += [json['mempool']['min_block_delay']]
@@ -103,6 +104,7 @@ class NodeParameters:
             raise ConfigError('Invalid parameters type')
 
         self.timeout_delay = json['consensus']['timeout_delay'] 
+        self.protocol = json['consensus']['protocol']
         self.json = json
 
     def print(self, filename):

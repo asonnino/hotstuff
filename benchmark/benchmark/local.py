@@ -85,6 +85,14 @@ class LocalBench:
                     timeout
                 )
                 self._background_run(cmd, log_file)
+            
+            protocol = self.node_parameters.protocol
+            if protocol == 0:
+                Print.info('Running HotStuff')
+            if protocol == 1:
+                Print.info('Running Chained-VABA')
+            if protocol == 2:
+                Print.info('Running HotStuff with Async Fallback')
 
             # Run the nodes.
             dbs = [PathMaker.db_path(i) for i in range(nodes)]

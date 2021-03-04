@@ -17,13 +17,14 @@ def local(ct):
         'nodes': 4,
         'size': 512,
         'rate': 1000,
-        'duration': 20,
+        'duration': 5,
     }
     node_params = {
         'consensus': {
             'timeout_delay': 2000,
             'sync_retry_delay': 10_000,
-            'min_block_delay': 0
+            'min_block_delay': 0,
+            'protocol': 0   # 0 for HotStuff, 1 for chained-VABA, 2 for async fallback
         },
         'mempool': {
             'queue_capacity': 10_000,
