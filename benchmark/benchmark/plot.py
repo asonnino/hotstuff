@@ -75,10 +75,7 @@ class Ploter:
             secaxy.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
 
         for x in ['pdf', 'png']:
-            plt.savefig(
-                join(PathMaker.plot_path(), f'{filename}.{x}'), 
-                bbox_inches='tight'
-            )
+            plt.savefig(PathMaker.plot_file(filename, x), bbox_inches='tight')
 
     @staticmethod
     def nodes(data):
@@ -95,7 +92,7 @@ class Ploter:
         x_label = 'Input rate (tx/s)'
         y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
 
-        files = glob(join(PathMaker.plot_path(), r'agg-[1-9]*-x-[1-9]*.txt'))
+        files = glob(PathMaker.agg_file(r'[0-9]*', 'x', r'*'))
         ploter = cls(files)
         ploter._plot(x_label, y_label, ploter._tps, z_axis, 'robustness')
 
@@ -105,7 +102,7 @@ class Ploter:
         x_label = 'Throughput (tx/s)'
         y_label = ['Latency (ms)']
 
-        files = glob(join(PathMaker.plot_path(), r'agg-[1-9]*-any-[1-9]*.txt'))
+        files = glob(PathMaker.agg_file(r'[0-9]*', 'any', r'*'))
         ploter = cls(files)
         ploter._plot(x_label, y_label, ploter._latency, z_axis, 'latency')
 
@@ -115,6 +112,6 @@ class Ploter:
         x_label = 'Committee size'
         y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
 
-        files = glob(join(PathMaker.plot_path(), r'agg-x-any-[1-9]*.txt'))
+        files = glob(PathMaker.agg_file('x', 'any', r'*'))
         ploter = cls(files)
         ploter._plot(x_label, y_label, ploter._tps, z_axis, 'tps')

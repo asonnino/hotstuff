@@ -135,6 +135,3 @@ class BenchParameters:
 
         except ValueError:
             raise ConfigError('Invalid parameters type')
-
-    def result_filename(self, nodes, rate):
-        return f'bench-{nodes}-{rate}-{self.tx_size}.txt'

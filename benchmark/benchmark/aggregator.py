@@ -2,8 +2,8 @@ from re import search
 from collections import defaultdict
 from statistics import mean, stdev
 from glob import glob
-from os.path import join
 from copy import deepcopy
+import os
 
 from benchmark.utils import PathMaker
 
@@ -68,7 +68,7 @@ class Result:
 
 class LogAggregator:
     def __init__(self):
-        filenames = glob(join(PathMaker.results_path(), '*.txt'))
+        filenames = glob(PathMaker.result_file(r'*', r'*', r'*'))
         data = ''
         for filename in filenames:
             with open(filename, 'r') as f:
@@ -82,12 +82,14 @@ class LogAggregator:
         self.records = {k: Result.aggregate(v) for k, v in records.items()}
 
     def print(self):
+        if not os.path.exists(PathMaker.plots_path()):
+            os.makedirs(PathMaker.plots_path())
+
         results = [
             self._print_latency(), self._print_tps(), self._print_robustness()
         ]
         for records in results:
             for setup, values in records.items():
-                values.sort(key=lambda x: x[0])
                 data = '\n'.join(
                     f' Variable value: X={x}\n{y}' for x, y in values
                 )
@@ -102,16 +104,24 @@ class LogAggregator:
                     '-----------------------------------------\n'
                 )
 
-                filename = f'agg-{setup.nodes}-{setup.rate}-{setup.tx_size}.txt'
-                with open(join(PathMaker.plot_path(), filename), 'w') as f:
+                filename = PathMaker.agg_file(
+                    setup.nodes, setup.rate, setup.tx_size
+                )
+                with open(filename, 'w') as f:
                     f.write(string)
 
     def _print_latency(self):
         records = deepcopy(self.records)
         organized = defaultdict(list)
         for setup, result in records.items():
+            rate = setup.rate
             setup.rate = 'any'
-            organized[setup] += [(result.mean_tps, result)]
+            organized[setup] += [(result.mean_tps, result, rate)]
+
+        for setup, results in list(organized.items()):
+            results.sort(key=lambda x: x[2])
+            organized[setup] = [(x, y) for x, y, _ in results]
+
         return organized
 
     def _print_tps(self, max_latency=4000):
@@ -132,6 +142,7 @@ class LogAggregator:
                 if new_point or highest_tps:
                     organized[setup] += [(nodes, result)]
 
+        [v.sort(key=lambda x: x[0]) for v in organized.values()]
         return organized
 
     def _print_robustness(self):
@@ -141,4 +152,6 @@ class LogAggregator:
             rate = setup.rate
             setup.rate = 'x'
             organized[setup] += [(rate, result)]
+
+        [v.sort(key=lambda x: x[0]) for v in organized.values()]
         return organized

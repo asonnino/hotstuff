@@ -92,10 +92,10 @@ def install(ctx):
 def remote(ctx):
     bench_params = {
         'nodes': [4],
-        'rate': [35_000],
+        'rate': [20_000],
         'tx_size': 512,
         'duration': 300,
-        'runs': 1,
+        'runs': 2,
     }
     node_params = {
         'consensus': {
@@ -117,6 +117,17 @@ def remote(ctx):
 
 
 @task
+def plot(ctx):
+    LogAggregator().print()
+    try:
+        Ploter.plot_robustness(Ploter.nodes)
+        Ploter.plot_latency(Ploter.nodes)
+        Ploter.plot_tps(Ploter.tx_size)
+    except PlotError as e:
+        Print.error(BenchError('Failed to plot performance', e))
+
+
+@task
 def kill(ctx):
     try:
         Bench(ctx).kill()
@@ -130,14 +141,3 @@ def logs(ctx):
         print(LogParser.process('./logs').result())
     except ParseError as e:
         Print.error(BenchError('Failed to parse logs', e))
-
-
-@task
-def plot(ctx):
-    LogAggregator().print()
-    try:
-        Ploter.plot_robustness(Ploter.nodes)
-        Ploter.plot_latency(Ploter.nodes)
-        Ploter.plot_tps(Ploter.tx_size)
-    except PlotError as e:
-        Print.error(BenchError('Failed to plot performance', e))
