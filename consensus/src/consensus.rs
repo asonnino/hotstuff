@@ -1,5 +1,6 @@
 use crate::config::{Committee, Parameters};
 use crate::core::Core;
+use crate::fallback::Fallback;
 use crate::error::ConsensusResult;
 use crate::leader::LeaderElector;
 use crate::mempool::MempoolDriver;
@@ -63,23 +64,46 @@ impl Consensus {
         )
         .await;
 
-        let mut core = Core::new(
-            name,
-            committee,
-            parameters,
-            signature_service,
-            store,
-            leader_elector,
-            mempool_driver,
-            synchronizer,
-            /* core_channel */ rx_core,
-            /* network_channel */ tx_network,
-            commit_channel,
-        );
-        tokio::spawn(async move {
-            core.run().await;
-        });
-
+        match parameters.protocol {
+            0 => {  // Run HotStuff
+                let mut core = Core::new(
+                    name,
+                    committee,
+                    parameters,
+                    signature_service,
+                    store,
+                    leader_elector,
+                    mempool_driver,
+                    synchronizer,
+                    /* core_channel */ rx_core,
+                    /* network_channel */ tx_network,
+                    commit_channel,
+                );
+                tokio::spawn(async move {
+                    core.run().await;
+                });
+            },
+            1 => {  // Run HotStuff with Async Fallback
+                let mut hotstuff_with_fallback = Fallback::new(
+                    name,
+                    committee,
+                    parameters,
+                    signature_service,
+                    store,
+                    leader_elector,
+                    mempool_driver,
+                    synchronizer,
+                    /* core_channel */ rx_core,
+                    /* network_channel */ tx_network,
+                    commit_channel,
+                );
+                tokio::spawn(async move {
+                    hotstuff_with_fallback.run().await;
+                });
+            }
+            _ => return Ok(()),
+        }
+    
         Ok(())
     }
 }

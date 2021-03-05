@@ -12,7 +12,7 @@ pub struct Parameters {
     pub timeout_delay: u64,
     pub sync_retry_delay: u64,
     pub min_block_delay: u64,
-    pub protocol: u8,   // 0 for HotStuff, 1 for chained-VABA, 2 for async fallback
+    pub protocol: u8,
 }
 
 impl Default for Parameters {
@@ -66,6 +66,13 @@ impl Committee {
     }
 
     pub fn quorum_threshold(&self) -> Stake {
+        // If N = 3f + 1 + k (0 <= k < 3)
+        // then (2 N + 3) / 3 = 2f + 1 + (2k + 2)/3 = 2f + 1 + k = N - f
+        let total_votes: Stake = self.authorities.values().map(|x| x.stake).sum();
+        2 * total_votes / 3 + 1
+    }
+
+    pub fn random_coin_threshold(&self) -> Stake {
         // If N = 3f + 1 + k (0 <= k < 3)
         // then (2 N + 3) / 3 = 2f + 1 + (2k + 2)/3 = 2f + 1 + k = N - f
         let total_votes: Stake = self.authorities.values().map(|x| x.stake).sum();

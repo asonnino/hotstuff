@@ -4,6 +4,7 @@ mod aggregator;
 mod config;
 mod consensus;
 mod core;
+mod fallback;
 mod leader;
 mod mempool;
 mod messages;

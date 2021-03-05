@@ -50,6 +50,9 @@ pub enum ConsensusError {
     #[error("Received TC without a quorum")]
     TCRequiresQuorum,
 
+    #[error("Received RandomCoin without a quorum")]
+    RandomCoinRequiresQuorum,
+
     #[error("Malformed block {0}")]
     MalformedBlock(Digest),
 
@@ -62,4 +65,11 @@ pub enum ConsensusError {
 
     #[error("Invalid payload")]
     InvalidPayload,
+
+    #[error("Block rounds not consecutive! rounds {rd1}, {rd2} and {rd3}")]
+    NonConsecutiveRounds {
+        rd1: SeqNumber,
+        rd2: SeqNumber,
+        rd3: SeqNumber,
+    },
 }

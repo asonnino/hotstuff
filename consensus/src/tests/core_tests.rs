@@ -64,7 +64,7 @@ async fn handle_proposal() {
     // Make a block and the vote we expect to receive.
     let block = chain(vec![leader_keys(1)]).pop().unwrap();
     let (public_key, secret_key) = keys().pop().unwrap();
-    let vote = Vote::new_from_key(block.digest(), block.view, block.round, block.height, block.fallback, public_key, &secret_key);
+    let vote = Vote::new_from_key(block.digest(), block.view, block.round, block.height, block.fallback, block.author, public_key, &secret_key);
 
     // Run a core instance.
     let store_path = ".db_test_handle_proposal";
@@ -101,7 +101,7 @@ async fn generate_proposal() {
     let votes: Vec<_> = keys()
         .iter()
         .map(|(public_key, secret_key)| {
-            Vote::new_from_key(hash.clone(), block.view, block.round, block.height, block.fallback, *public_key, &secret_key)
+            Vote::new_from_key(hash.clone(), block.view, block.round, block.height, block.fallback, block.author, *public_key, &secret_key)
         })
         .collect();
     let qc = QC {
@@ -110,6 +110,7 @@ async fn generate_proposal() {
         round: block.round,
         height: block.height,
         fallback: block.fallback,
+        proposer: block.author,
         votes: votes
             .iter()
             .cloned()

@@ -3,7 +3,7 @@ use crate::config::{Committee, Parameters};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
 use crate::mempool::MempoolDriver;
-use crate::messages::{Block, Timeout, Vote, QC, TC};
+use crate::messages::{Block, Timeout, Vote, QC, TC, SignedQC, RandomnessShare, RandomCoin};
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
 use async_recursion::async_recursion;
@@ -18,16 +18,15 @@ use std::cmp::max;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::{Duration, sleep};
-use std::collections::HashMap;
+// use std::collections::HashMap;
 
 #[cfg(test)]
 #[path = "tests/core_tests.rs"]
 pub mod core_tests;
 
 pub type SeqNumber = u64; // For both round and view
-pub type HeightNumber = u8;  // height={1,2,3} in fallback chain, height=0 for sync block
+pub type HeightNumber = u8;  // height={1,2} in fallback chain, height=1 for sync block
 pub type Bool = u8;
-pub type CommitteeSize = u64;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum CoreMessage {
@@ -35,6 +34,9 @@ pub enum CoreMessage {
     Vote(Vote),
     Timeout(Timeout),
     TC(TC),
+    SignedQC(SignedQC),
+    RandomnessShare(RandomnessShare),
+    RandomCoin(RandomCoin),
     LoopBack(Block),
     SyncRequest(Digest, PublicKey),
 }
@@ -57,9 +59,6 @@ pub struct Core<Mempool> {
     last_voted_round: SeqNumber,
     high_qc: QC,
     fallback: Bool, // 0 if not in async fallback, 1 if in async fallback
-    async_voted_round: HashMap<PublicKey, SeqNumber>,    // voted round number during fallback for each i
-    async_voted_height: HashMap<PublicKey, HeightNumber>,  // voted height number during fallback for each i
-    async_high_qc: HashMap<PublicKey, QC>,  // highest QC during fallback for each i
     timer: Timer<SeqNumber>,
     aggregator: Aggregator,
 }
@@ -103,9 +102,6 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             last_voted_round: 0,
             high_qc: QC::genesis(),
             fallback,
-            async_voted_round: HashMap::new(),
-            async_voted_height: HashMap::new(),
-            async_high_qc: HashMap::new(),
             timer: Timer::new(),
             aggregator,
         }
@@ -412,6 +408,19 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         Ok(())
     }
 
+    // daniel: dummy handlers
+    async fn handle_signed_qc(&mut self, _: SignedQC) -> ConsensusResult<()> {
+        Ok(())
+    }
+
+    async fn handle_rs(&mut self, _: RandomnessShare) -> ConsensusResult<()> {
+        Ok(())
+    }
+
+    async fn handle_rc(&mut self, _: RandomCoin) -> ConsensusResult<()> {
+        Ok(())
+    }
+
     pub async fn run(&mut self) {
         // Upon booting, generate the very first block (if we are the leader).
         // Also, schedule a timer in case we don't hear from the leader.
@@ -432,6 +441,9 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
                         CoreMessage::Vote(vote) => self.handle_vote(&vote).await,
                         CoreMessage::Timeout(timeout) => self.handle_timeout(&timeout).await,
                         CoreMessage::TC(tc) => self.handle_tc(tc).await,
+                        CoreMessage::SignedQC(signed_qc) => self.handle_signed_qc(signed_qc).await,
+                        CoreMessage::RandomnessShare(rs) => self.handle_rs(rs).await,
+                        CoreMessage::RandomCoin(rc) => self.handle_rc(rc).await,
                         CoreMessage::LoopBack(block) => self.process_block(&block).await,
                         CoreMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await
                     }

@@ -24,7 +24,7 @@ def local(ct):
             'timeout_delay': 2000,
             'sync_retry_delay': 10_000,
             'min_block_delay': 0,
-            'protocol': 0   # 0 for HotStuff, 1 for chained-VABA, 2 for async fallback
+            'protocol': 0   # 0 for HotStuff, 1 for async fallback, 2 for chained-VABA
         },
         'mempool': {
             'queue_capacity': 10_000,

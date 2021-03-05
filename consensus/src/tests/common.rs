@@ -80,6 +80,7 @@ impl Vote {
         round: SeqNumber,
         height: HeightNumber,
         fallback: Bool,
+        proposer: PublicKey,
         author: PublicKey,
         secret: &SecretKey,
     ) -> Self {
@@ -89,6 +90,7 @@ impl Vote {
             round,
             height,
             fallback,
+            proposer,
             author,
             signature: Signature::default(),
         };
@@ -139,21 +141,23 @@ pub fn block() -> Block {
 // Fixture.
 pub fn vote() -> Vote {
     let (public_key, secret_key) = keys().pop().unwrap();
-    Vote::new_from_key(block().digest(), 1, 1, 1, 0, public_key, &secret_key)
+    Vote::new_from_key(block().digest(), 1, 1, 1, 0, block().author, public_key, &secret_key)
 }
 
 // Fixture.
 pub fn qc() -> QC {
+    let mut keys = keys();
+    let (public_key, secret_key) = keys.pop().unwrap();
     let qc = QC {
         hash: Digest::default(),
         view: 1,
         round: 1,
         height: 1,
         fallback: 0,
+        proposer: public_key,
         votes: Vec::new(),
     };
     let digest = qc.digest();
-    let mut keys = keys();
     let votes: Vec<_> = (0..3)
         .map(|_| {
             let (public_key, secret_key) = keys.pop().unwrap();
@@ -189,6 +193,7 @@ pub fn chain(keys: Vec<(PublicKey, SecretKey)>) -> Vec<Block> {
                 round: block.round,
                 height: block.height,
                 fallback: block.fallback,
+                proposer: block.author,
                 votes: Vec::new(),
             };
             let digest = qc.digest();

@@ -21,7 +21,7 @@ pub struct Block {
     pub author: PublicKey,
     pub view: SeqNumber,   // increment by 1 after every async fallback, initially 1
     pub round: SeqNumber,
-    pub height: HeightNumber,   // for async block height={1,2,3}, for sync block height=1
+    pub height: HeightNumber,   // for async block height={1,2}, for sync block height=1
     pub fallback: Bool,  // 1 if async block; 0 if sync block
     pub payload: Vec<u8>,
     pub signature: Signature,
@@ -130,6 +130,7 @@ pub struct Vote {
     pub round: SeqNumber,
     pub height: HeightNumber,
     pub fallback: Bool,
+    pub proposer: PublicKey,    // proposer of the block
     pub author: PublicKey,
     pub signature: Signature,
 }
@@ -146,6 +147,7 @@ impl Vote {
             round: block.round,
             height: block.height,
             fallback: block.fallback,
+            proposer: block.author,
             author,
             signature: Signature::default(),
         };
@@ -173,7 +175,8 @@ impl Hash for Vote {
         hasher.update(self.view.to_le_bytes());
         hasher.update(self.round.to_le_bytes());
         hasher.update(self.height.to_le_bytes());
-        hasher.update(&self.fallback.to_le_bytes());
+        hasher.update(self.fallback.to_le_bytes());
+        hasher.update(self.proposer.0);
         Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }
 }
@@ -191,6 +194,7 @@ pub struct QC {
     pub round: SeqNumber,
     pub height: HeightNumber,
     pub fallback: Bool,
+    pub proposer: PublicKey,  // proposer of the block
     pub votes: Vec<(PublicKey, Signature)>,
 }
 
@@ -231,7 +235,8 @@ impl Hash for QC {
         hasher.update(self.view.to_le_bytes());
         hasher.update(self.round.to_le_bytes());
         hasher.update(self.height.to_le_bytes());
-        hasher.update(&self.fallback.to_le_bytes());
+        hasher.update(self.fallback.to_le_bytes());
+        hasher.update(self.proposer.0);
         Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }
 }
@@ -244,7 +249,65 @@ impl fmt::Debug for QC {
 
 impl PartialEq for QC {
     fn eq(&self, other: &Self) -> bool {
-        self.hash == other.hash && self.view == other.view && self.round == other.round && self.height == other.height && self.fallback == other.fallback
+        self.hash == other.hash && self.view == other.view && self.round == other.round && self.height == other.height && self.proposer == other.proposer && self.fallback == other.fallback
+    }
+}
+
+// daniel: Signed height-2 QC
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SignedQC {
+    pub qc: QC,
+    pub author: PublicKey,
+    pub signature: Signature,
+}
+
+impl SignedQC {
+    pub async fn new(
+        qc: QC,
+        author: PublicKey,
+        mut signature_service: SignatureService,
+    ) -> Self {
+        let signed_qc = Self {
+            qc,
+            author,
+            signature: Signature::default(),
+        };
+        let signature = signature_service.request_signature(signed_qc.digest()).await;
+        Self {
+            signature,
+            ..signed_qc
+        }
+    }
+
+    pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
+        // Ensure the authority has voting rights.
+        ensure!(
+            committee.stake(&self.author) > 0,
+            ConsensusError::UnknownAuthority(self.author)
+        );
+
+        // Check the signature.
+        self.signature.verify(&self.digest(), &self.author)?;
+
+        // Check the embedded QC.
+        if self.qc != QC::genesis() {
+            self.qc.verify(committee)?;
+        }
+        Ok(())
+    }
+}
+
+impl Hash for SignedQC {
+    fn digest(&self) -> Digest {
+        let mut hasher = Sha512::new();
+        hasher.update(self.qc.digest());
+        Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
+    }
+}
+
+impl fmt::Debug for SignedQC {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "Signed QC({}, {:?})", self.author, self.qc)
     }
 }
 
@@ -357,5 +420,105 @@ impl TC {
 impl fmt::Debug for TC {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(f, "TC({}, {:?})", self.seq, self.high_qc_rounds())
+    }
+}
+
+// daniel: 
+// TODO: Shared randomness for VABA and async fallback
+//
+#[derive(Clone, Serialize, Deserialize)]
+pub struct RandomnessShare {
+    pub seq: SeqNumber, // view
+    pub author: PublicKey,
+    pub signature: Signature,
+}
+
+impl RandomnessShare {
+    pub async fn new(
+        seq: SeqNumber,
+        author: PublicKey,
+        mut signature_service: SignatureService,
+    ) -> Self {
+        let timeout = Self {
+            seq,
+            author,
+            signature: Signature::default(),
+        };
+        let signature = signature_service.request_signature(timeout.digest()).await;
+        Self {
+            signature,
+            ..timeout
+        }
+    }
+
+    pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
+        // Ensure the authority has voting rights.
+        ensure!(
+            committee.stake(&self.author) > 0,
+            ConsensusError::UnknownAuthority(self.author)
+        );
+
+        // Check the signature.
+        self.signature.verify(&self.digest(), &self.author)?;
+
+        Ok(())
+    }
+}
+
+impl Hash for RandomnessShare {
+    fn digest(&self) -> Digest {
+        let mut hasher = Sha512::new();
+        hasher.update(self.seq.to_le_bytes());
+        Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
+    }
+}
+
+impl fmt::Debug for RandomnessShare {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "RandomnessShare ({}, {})", self.author, self.seq)
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+pub struct RandomCoin {
+    pub seq: SeqNumber, // view
+    pub votes: Vec<(PublicKey, RandomnessShare)>,
+}
+
+impl RandomCoin {
+    pub fn genesis() -> Self {
+        RandomCoin::default()
+    }
+    
+    pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
+        // Ensure the QC has a quorum.
+        let mut weight = 0;
+        let mut used = HashSet::new();
+        for (name, _) in self.votes.iter() {
+            ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
+            let voting_rights = committee.stake(name);
+            ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
+            used.insert(*name);
+            weight += voting_rights;
+        }
+        ensure!(
+            weight >= committee.random_coin_threshold(),
+            ConsensusError::RandomCoinRequiresQuorum
+        );
+
+        // Check the signatures.
+        for (author, share) in &self.votes {
+            let mut hasher = Sha512::new();
+            hasher.update(self.seq.to_le_bytes());
+            let digest = Digest(hasher.finalize().as_slice()[..32].try_into().unwrap());
+            share.signature.verify(&digest, &author)?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Debug for RandomCoin {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "RandomCoin({})", self.seq)
     }
 }

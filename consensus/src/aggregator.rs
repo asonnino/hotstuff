@@ -57,7 +57,7 @@ impl Aggregator {
         self.timeouts_aggregators.retain(|k, _| k >= round);
     }
     // used in VABA and async fallback
-    pub fn cleanup_async(&mut self, round: &SeqNumber, view: &SeqNumber) {
+    pub fn cleanup_async(&mut self, view: &SeqNumber, round: &SeqNumber) {
         self.votes_aggregators.retain(|k, _| k >= round);
         self.timeouts_aggregators.retain(|k, _| k >= view);
     }
@@ -98,6 +98,7 @@ impl QCMaker {
                 round: vote.round,
                 height: vote.height,
                 fallback: vote.fallback,
+                proposer: vote.proposer,
                 votes: self.votes.clone(),
             }));
         }
