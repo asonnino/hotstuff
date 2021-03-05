@@ -44,8 +44,16 @@ class PathMaker:
         return f'logs/client-{i}.log'
 
     @staticmethod
+    def logs_path():
+        return './logs'
+
+    @staticmethod
     def results_path():
         return './results'
+
+    @staticmethod
+    def plot_path():
+        return './plot'
 
 
 class Color:

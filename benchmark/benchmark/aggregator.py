@@ -3,6 +3,7 @@ from collections import defaultdict
 from statistics import mean, stdev
 from glob import glob
 from os.path import join
+from copy import deepcopy
 
 from benchmark.utils import PathMaker
 
@@ -81,41 +82,47 @@ class LogAggregator:
         self.records = {k: Result.aggregate(v) for k, v in records.items()}
 
     def print(self):
-        self._print_latency()
-        self._print_tps()
+        results = [
+            self._print_latency(), self._print_tps(), self._print_robustness()
+        ]
+        for records in results:
+            for setup, values in records.items():
+                values.sort(key=lambda x: x[0])
+                data = '\n'.join(
+                    f' Variable value: X={x}\n{y}' for x, y in values
+                )
+                string = (
+                    '\n'
+                    '-----------------------------------------\n'
+                    ' RESULTS:\n'
+                    '-----------------------------------------\n'
+                    f'{setup}'
+                    '\n'
+                    f'{data}'
+                    '-----------------------------------------\n'
+                )
+
+                filename = f'agg-{setup.nodes}-{setup.rate}-{setup.tx_size}.txt'
+                with open(join(PathMaker.plot_path(), filename), 'w') as f:
+                    f.write(string)
 
     def _print_latency(self):
+        records = deepcopy(self.records)
         organized = defaultdict(list)
-        for setup, result in self.records.items():
-            setup.rate = 'X'
+        for setup, result in records.items():
+            setup.rate = 'any'
             organized[setup] += [(result.mean_tps, result)]
-
-        for setup, values in organized.items():
-            values.sort(key=lambda x: x[0])
-            data = '\n'.join(f' Variable value: X={x}\n{y}' for x, y in values)
-            string = (
-                '\n'
-                '-----------------------------------------\n'
-                ' RESULTS:\n'
-                '-----------------------------------------\n'
-                f'{setup}'
-                '\n'
-                f'{data}'
-                '-----------------------------------------\n'
-            )
-
-            filename = f'{setup.nodes}-x-{setup.tx_size}.txt'
-            with open(filename, 'w') as f:
-                f.write(string)
+        return organized
 
     def _print_tps(self, max_latency=4000):
+        records = deepcopy(self.records)
         organized = defaultdict(list)
-        for setup, result in self.records.items():
+        for setup, result in records.items():
             if result.mean_latency <= max_latency:
                 nodes = setup.nodes
-                setup.nodes = 'X'
-                setup.rate = '-'
-               
+                setup.nodes = 'x'
+                setup.rate = 'any'
+
                 new_point = all(nodes != x[0] for x in organized[setup])
                 highest_tps = False
                 for w, r in organized[setup]:
@@ -125,21 +132,13 @@ class LogAggregator:
                 if new_point or highest_tps:
                     organized[setup] += [(nodes, result)]
 
-        print(organized)
-        for setup, values in organized.items():
-            values.sort(key=lambda x: x[0])
-            data = '\n'.join(f' Variable value: X={x}\n{y}' for x, y in values)
-            string = (
-                '\n'
-                '-----------------------------------------\n'
-                ' RESULTS:\n'
-                '-----------------------------------------\n'
-                f'{setup}'
-                '\n'
-                f'{data}'
-                '-----------------------------------------\n'
-            )
+        return organized
 
-            filename = f'x-any-{setup.tx_size}.txt'
-            with open(filename, 'w') as f:
-                f.write(string)
+    def _print_robustness(self):
+        records = deepcopy(self.records)
+        organized = defaultdict(list)
+        for setup, result in records.items():
+            rate = setup.rate
+            setup.rate = 'x'
+            organized[setup] += [(rate, result)]
+        return organized

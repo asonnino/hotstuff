@@ -95,11 +95,11 @@ def remote(ctx):
         'rate': [35_000],
         'tx_size': 512,
         'duration': 300,
-        'runs': 4,
+        'runs': 1,
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 60_000,
+            'timeout_delay': 15_000,
             'sync_retry_delay': 500_000,
             'max_payload_size': 1_000,
             'min_block_delay': 100
@@ -133,15 +133,11 @@ def logs(ctx):
 
 
 @task
-def aggregate(ctx):
-    LogAggregator().print()
-
-
-@task
 def plot(ctx):
+    LogAggregator().print()
     try:
-        ploter = Ploter(glob('plot/*.txt'))
-        #ploter.plot_tps(ploter.tx_size)
-        ploter.plot_latency(ploter.nodes)
+        Ploter.plot_robustness(Ploter.nodes)
+        Ploter.plot_latency(Ploter.nodes)
+        Ploter.plot_tps(Ploter.tx_size)
     except PlotError as e:
         Print.error(BenchError('Failed to plot performance', e))
