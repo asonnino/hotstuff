@@ -147,7 +147,7 @@ pub fn vote() -> Vote {
 // Fixture.
 pub fn qc() -> QC {
     let mut keys = keys();
-    let (public_key, secret_key) = keys.pop().unwrap();
+    let (public_key, _) = keys.pop().unwrap();
     let qc = QC {
         hash: Digest::default(),
         view: 1,

@@ -15,7 +15,7 @@ use crypto::{Digest, PublicKey, SignatureService};
 use log::{debug, error, info, warn};
 use mempool::NodeMempool;
 use network::NetMessage;
-use serde::{Deserialize, Serialize};
+// use serde::{Deserialize, Serialize};
 use std::cmp::max;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -27,7 +27,7 @@ use std::collections::{HashMap, HashSet};
 // pub mod core_tests;
 
 pub type SeqNumber = u64; // For both round and view
-pub type HeightNumber = u8;  // height={1,2} in fallback chain, height=1 for sync block
+pub type HeightNumber = u8;  // height={1,2} in fallback chain, height=0 for sync block
 pub type Bool = u8;
 
 pub struct Fallback<Mempool> {
@@ -44,14 +44,15 @@ pub struct Fallback<Mempool> {
     commit_channel: Sender<Block>,
     round: SeqNumber,     // current round
     view: SeqNumber,       // current view
-    height: HeightNumber,   // current height
+    height: HeightNumber,    // current height, 0 not in fallback, 1 or 2 in fallback
     last_voted_round: SeqNumber,
     high_qc: QC,
+    last_committed_round: SeqNumber,
     fallback: Bool, // 0 if not in async fallback, 1 if in async fallback
     fallback_voted_round: HashMap<PublicKey, SeqNumber>,    // voted round number during fallback for each i
     fallback_voted_height: HashMap<PublicKey, HeightNumber>,  // voted height number during fallback for each i
-    fallback_high_qc: HashMap<PublicKey, QC>,  // highest QC during fallback for each i
     fallback_pending_blocks: HashMap<SeqNumber, HashMap<(PublicKey, HeightNumber), Block>>, // buffering the fallback block received when not enter fallback yet, indexed by view
+    fallback_qcs: HashMap<PublicKey, QC>,    // highest fallback QC by each node
     fallback_signed_qc_sender: HashMap<SeqNumber, HashSet<PublicKey>>,    // set of nodes that send height-2 signed QC
     fallback_signed_qc_weight: HashMap<SeqNumber, Stake>,    // weight of the above nodes
     fallback_randomness_share_sender: HashMap<SeqNumber, HashSet<PublicKey>>,    // set of nodes that send randomness share
@@ -80,7 +81,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         let aggregator = Aggregator::new(committee.clone());
         let mut fallback = 0;
         // If run VABA
-        if parameters.protocol == 1 {
+        if parameters.protocol == 2 {
             fallback = 1;
         }
         Self {
@@ -97,13 +98,14 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
             core_channel,
             round: 1,
             view: 1,
-            height: 1,
+            height: 0,
             last_voted_round: 0,
             high_qc: QC::genesis(),
+            last_committed_round: 0,
             fallback,
             fallback_voted_round: HashMap::new(),
             fallback_voted_height: HashMap::new(),
-            fallback_high_qc: HashMap::new(),
+            fallback_qcs: HashMap::new(),
             fallback_pending_blocks: HashMap::new(),
             fallback_signed_qc_sender: HashMap::new(),
             fallback_signed_qc_weight: HashMap::new(),
@@ -152,6 +154,18 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
     }
 
     // -- Start Safety Module --
+    // check if qc is nonfallback qc or endorsed fallback qc
+    fn valid_qc(&mut self, qc: &QC) -> bool {
+        if qc.fallback == 0 {
+            return true;
+        } else if qc.fallback == 1 {
+            match self.leader_elector.get_fallback_leader(qc.view) {
+                None => return false,
+                Some(leader) => return qc.proposer == leader,
+            }
+        }
+        false
+    }
     fn increase_last_voted_round(&mut self, target: SeqNumber) {
         self.last_voted_round = max(self.last_voted_round, target);
     }
@@ -160,17 +174,14 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         if block.fallback == 0 {
             // For non-fallback blocks
             // Check if we can vote for this block.
-            let safety_rule_1 = block.round > self.last_voted_round;
-            let mut safety_rule_2 = block.qc.round >= self.high_qc.round;
-            if let Some(ref tc) = block.tc {
-                safety_rule_2 |= block.qc.round >= *tc.high_qc_rounds().iter().max().expect("Empty TC");
-            }
+            let safety_rule_1 = block.round > self.last_voted_round && block.round == block.qc.round+1;
+            let safety_rule_2 = block.qc.round >= self.high_qc.round;
             if !(safety_rule_1 && safety_rule_2) {
                 return None;
             }
             // Ensure we won't vote for contradicting blocks.
             self.increase_last_voted_round(block.round);
-        } else {
+        } else if block.fallback == 1 {
             // For fallback blocks
             let voted_height = match self.fallback_voted_height.get(&block.author) {
                 Some(h) => h,
@@ -194,7 +205,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
                     match &block.tc {
                         None => return None,
                         Some(tc) => {
-                            let safety_rule_1 = (block.qc.view > self.high_qc.view) || (block.qc.view == self.high_qc.view && block.qc.round > self.high_qc.round);
+                            let safety_rule_1 = (block.qc.view > self.high_qc.view) || (block.qc.view == self.high_qc.view && block.qc.round >= self.high_qc.round);
                             let safety_rule_2 = (block.round == block.qc.round+1) && (block.view == tc.seq);
                             if !(safety_rule_1 && safety_rule_2) {
                                 return None;
@@ -221,7 +232,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
 
     // -- Start Pacemaker --
     fn update_high_qc(&mut self, qc: &QC) {
-        if qc.round > self.high_qc.round {
+        if qc.view > self.high_qc.view || (qc.view == self.high_qc.view && qc.round > self.high_qc.round) {
             self.high_qc = qc.clone();
         }
     }
@@ -230,14 +241,14 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
     fn init_fallback_state(&mut self) {
         self.height = 1;
         for (node, _) in &self.committee.authorities {
-            self.fallback_high_qc.clear();
             self.fallback_voted_height.insert(*node, 0);
             self.fallback_voted_round.insert(*node, 0);
+            self.fallback_qcs.insert(*node, QC::genesis());
         }
     }
 
     fn clean_fallback_state(&mut self, view: &SeqNumber) {
-        self.height = 1;
+        self.height = 0;
         // Cleanup the pending fallback blocks
         self.fallback_pending_blocks.retain(|v, _| v >= &view);
         self.fallback_signed_qc_sender.retain(|v, _| v >= &view);
@@ -273,7 +284,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
     #[async_recursion]
     async fn handle_vote(&mut self, vote: &Vote) -> ConsensusResult<()> {
         debug!("Processing {:?}", vote);
-        if vote.view < self.view || (vote.fallback == 0 && vote.round < self.round) || (vote.fallback == 1 && vote.height < self.height) {
+        if vote.view < self.view || (vote.fallback == 0 && vote.round < self.round) {
             return Ok(());
         }
 
@@ -284,25 +295,31 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         if let Some(qc) = self.aggregator.add_vote(vote.clone())? {
             debug!("Assembled {:?}", qc);
 
+            // Non-fallback QC
             if qc.fallback == 0 {
                 // Process the QC.
                 self.process_qc(&qc).await;
 
                 // Make a new block if we are the next leader and not in fallback
                 if self.fallback == 0 && self.name == self.leader_elector.get_leader(self.round) {
-                    self.generate_proposal(None).await?;
+                    self.generate_proposal(None, self.high_qc.clone()).await?;
                 }
             }
-            if qc.fallback == 1 {
+            // Fallback QC of my proposed block
+            if qc.fallback == 1 && qc.proposer == self.name {
+                if qc.height > self.fallback_qcs.get(&self.name).unwrap().height {
+                    self.fallback_qcs.insert(self.name, qc.clone());
+                }
                 if qc.height == 1 {
-                    if self.fallback == 1 && self.name == qc.proposer {
-                        self.generate_proposal(None).await?;
-                    }
+                    self.height = 2;
+                    self.generate_proposal(None, qc.clone()).await?;
                 }
                 if qc.height == 2 {
                     // sign and multicast height-2 QC
-                    let message = CoreMessage::SignedQC(SignedQC::new(qc, self.name, self.signature_service.clone()).await);
+                    let signed_qc = SignedQC::new(qc, self.name, self.signature_service.clone()).await;
+                    let message = CoreMessage::SignedQC(signed_qc.clone());
                     self.transmit(&message, None).await?;
+                    self.handle_signed_qc(signed_qc).await?;
                 }
             }
             
@@ -326,6 +343,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         // Enter the fallback
         if let Some(tc) = self.aggregator.add_timeout(timeout.clone())? {
             debug!("Assembled {:?}", tc);
+            debug!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", tc.seq);
 
             // Enter fallback
             self.fallback = 1;
@@ -341,7 +359,8 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
             // self.transmit(&message, None).await?;
 
             // Make a new block for its fallback chain
-            self.generate_proposal(Some(tc)).await?;
+            self.height = 1;
+            self.generate_proposal(Some(tc), self.high_qc.clone()).await?;
 
             self.process_pending_blocks().await?;
         }
@@ -357,20 +376,21 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         self.round = round + 1;
         debug!("Moved to round {}", self.round);
 
-        // Cleanup the vote aggregator.
-        self.aggregator.cleanup(&self.round);
+        // // Cleanup the vote aggregator.
+        // self.aggregator.cleanup(&self.round);
 
         // Schedule a new timer for this round.
         self.schedule_timer().await;
     }
 
-    #[async_recursion]
+    // #[async_recursion]
     async fn advance_view(&mut self, view: SeqNumber) {
-        if view < self.view {
+        debug!("advance_view: self view {}, new view {}", self.view, view);
+        if view <= self.view {
             return;
         }
         self.view = view;
-        debug!("Moved to view {}", self.view);
+        debug!("-------------------------------------------------------- Enter view {} --------------------------------------------------------", view);
 
         // Cleanup the vote aggregator.
         self.aggregator.cleanup_async(&self.view, &self.round);
@@ -381,14 +401,14 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
     // -- End Pacemaker --
 
     #[async_recursion]
-    async fn generate_proposal(&mut self, tc: Option<TC>) -> ConsensusResult<()> {
+    async fn generate_proposal(&mut self, tc: Option<TC>, qc: QC) -> ConsensusResult<()> {
         // Make a new block.
         let block = Block::new(
-            self.high_qc.clone(),
+            qc.clone(),
             tc,
             self.name,
             self.view,
-            self.high_qc.round+1,   // The chain always has consecutive round numbers
+            qc.round+1,   // The chain always has consecutive round numbers
             self.height,
             self.fallback,
             /* payload */ self.mempool_driver.get().await,
@@ -422,17 +442,15 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
 
     async fn process_qc(&mut self, qc: &QC) {
         // Fallback QC only handled after the fallback
-        if qc.fallback == 1 && (qc.view >= self.view || qc.proposer != self.leader_elector.get_leader_async(qc.view)) {
-            return;
+        if !self.valid_qc(qc) {
+            return
         }
         self.advance_round(qc.round).await;
         self.update_high_qc(qc);
     }
 
     #[async_recursion]
-    async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
-        debug!("Processing {:?}", block);
-
+    async fn commit(&mut self, block: &Block) -> ConsensusResult<()> {
         // Let's see if we have the last three ancestors of the block, that is:
         //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
         // If we don't, the synchronizer asks for them to other nodes. It will
@@ -449,30 +467,89 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         // Store the block only if we have already processed all its ancestors.
         self.store_block(block).await?;
 
+        if b0.round <= self.last_committed_round {
+            return Ok(());
+        }
+
         // The chain should have consecutive round numbers by construction.
         let mut consecutive_rounds = b0.round + 1 == b1.round;
         consecutive_rounds &= b1.round + 1 == block.round;
-        ensure!(consecutive_rounds == true, ConsensusError::NonConsecutiveRounds{rd1: b0.round, rd2: b1.round, rd3: block.round});
+        ensure!(consecutive_rounds || block.qc == QC::genesis(), ConsensusError::NonConsecutiveRounds{rd1: b0.round, rd2: b1.round, rd3: block.round});
         
         // The new commit rule requires blocks of the same view.
-        let mut commit_rule = b0.view == b1.view;
-        commit_rule &= b1.view == block.view;
-        if commit_rule {
+        let same_view = b0.view == b1.view;
+        let endorsed = self.valid_qc(&b1.qc) && self.valid_qc(&block.qc);
+        debug!("check commit b0 view {} b1 view {}, b0 qc {:?}, b1 qc {:?}", b0.view, b1.view, b1.qc, block.qc);
+        if same_view && endorsed {
             if !b0.payload.is_empty() {
                 info!("Committed {}", b0);
             }
+            self.last_committed_round = b0.round;
             debug!("Committed {:?}", b0);
+            debug!("QC1 {:?} QC2 {:?}", b1.qc, block.qc); 
             self.mempool_driver.garbage_collect(&b0).await;
             if let Err(e) = self.commit_channel.send(b0.clone()).await {
                 warn!("Failed to send block through the commit channel: {}", e);
             }
         }
 
+        Ok(())
+    }
+
+    #[async_recursion]
+    async fn print_chain(&mut self, block: &Block) -> ConsensusResult<()> {
+        debug!("-------------------------------------------------------- printing chain start --------------------------------------------------------");
+        let mut current_block = block.clone();
+        while current_block.qc != QC::genesis() {
+            let parent = match self.synchronizer.get_previous_block(&current_block).await? {
+                Some(b) => b,
+                None => {
+                    debug!("Processing of {} suspended: missing parent", current_block.digest());
+                    break;
+                }
+            };
+            debug!("{:?}", current_block);
+            current_block = parent;
+        }
+        debug!("{:?}", current_block);
+        debug!("-------------------------------------------------------- printing chain end --------------------------------------------------------");
+        Ok(())
+    }
+
+    #[async_recursion]
+    async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
+
+        self.print_chain(block).await?;
+
+        self.commit(block).await?;
+
         // Ensure the block's round is as expected.
         // This check is important: it prevents bad leaders from producing blocks
         // far in the future that may cause overflow on the round number.
-        if block.round != self.round || block.view != self.view || block.fallback != self.fallback {
+        if block.fallback == 0 && block.round != self.round {
             return Ok(());
+        }
+        if block.fallback == 1 && block.view != self.view {
+            return Ok(());
+        }
+
+        // See if we can propose a fallback block extending the fallback QC
+        if block.qc.fallback == 1 && (block.qc.view == self.view && block.qc.height >= self.height) {
+            if block.qc.height > self.fallback_qcs.get(&block.qc.proposer).unwrap().height {
+                self.fallback_qcs.insert(block.qc.proposer, block.qc.clone());
+            }
+            self.height = block.qc.height+1;
+            if block.qc.height == 1 {
+                if self.fallback == 1 {
+                    self.height = 2;
+                    self.generate_proposal(None, block.qc.clone()).await?;
+                }
+            }
+            if block.qc.height == 2 {
+                // sign and multicast height-2 QC
+                let message = CoreMessage::SignedQC(SignedQC::new(block.qc.clone(), self.name, self.signature_service.clone()).await);
+                self.transmit(&message, None).await?;
+            }
         }
 
         // See if we can vote for this block.
@@ -490,6 +567,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
                 self.transmit(&message, Some(next_leader)).await?;
             }
         }
+
         Ok(())
     }
 
@@ -564,35 +642,43 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
     // daniel: New handlers
     // When receiving 2f+1 height-2 fallback QC, send randomness share
     async fn handle_signed_qc(&mut self, signed_qc: SignedQC) -> ConsensusResult<()> {
+        let set = self.fallback_signed_qc_sender.entry(signed_qc.qc.view).or_insert(HashSet::new());
+        if set.contains(&signed_qc.author) {
+            return Ok(());
+        }
+
         if signed_qc.qc.fallback == 0 || signed_qc.qc.height != 2 || signed_qc.qc.view < self.view {
             return Ok(());
         }
         signed_qc.verify(&self.committee)?;
-        let set = self.fallback_signed_qc_sender.entry(signed_qc.qc.view).or_insert(HashSet::new());
+        
+        set.insert(signed_qc.author);
         let weight = self.fallback_signed_qc_weight.entry(signed_qc.qc.view).or_insert(0);
-        // Ensure it is the first time this authority sends height-2 QC.
-        ensure!(
-            set.insert(signed_qc.author),
-            ConsensusError::AuthorityReuse(signed_qc.author)
-        );
+        
         *weight += self.committee.stake(&signed_qc.author);
         if *weight >= self.committee.quorum_threshold() {
             *weight = 0; // Only send randomness share once
             // Multicast the randomness share
             let randomness_share = RandomnessShare::new(signed_qc.qc.view, self.name, self.signature_service.clone()).await;
-            let message = CoreMessage::RandomnessShare(randomness_share);
+            let message = CoreMessage::RandomnessShare(randomness_share.clone());
             self.transmit(&message, None).await?;
+            self.handle_randomness_share(randomness_share).await?;
         }
         Ok(())
     }
 
-    async fn handle_rs(&mut self, randomness_share: RandomnessShare) -> ConsensusResult<()> {
-        if randomness_share.seq < self.view {
-            return Ok(());
+    async fn handle_randomness_share(&mut self, randomness_share: RandomnessShare) -> ConsensusResult<()> {
+        if self.fallback_random_coin.contains_key(&randomness_share.seq) {
+            return Ok(())
         }
-        randomness_share.verify(&self.committee)?;
 
         let set = self.fallback_randomness_share_sender.entry(randomness_share.seq).or_insert(HashSet::new());
+        if randomness_share.seq < self.view || set.contains(&randomness_share.author) {
+            return Ok(());
+        }
+
+        randomness_share.verify(&self.committee)?;
+
         let weight = self.fallback_randomness_share_weight.entry(randomness_share.seq).or_insert(0);
         let shares = self.fallback_randomness_shares.entry(randomness_share.seq).or_insert(Vec::new());
         // Ensure it is the first time this authority sends randomness share.
@@ -606,52 +692,61 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
             *weight = 0; // Only send random coin once
             // Multicast the random coin
             let random_coin = RandomCoin {seq: randomness_share.seq, votes: shares.to_vec()};
-            let view = random_coin.seq;
-            let message = CoreMessage::RandomCoin(random_coin);
+            let message = CoreMessage::RandomCoin(random_coin.clone());
             self.transmit(&message, None).await?;
-
-            if self.fallback == 1 {
-                let fallback_leader = self.leader_elector.get_leader_async(randomness_share.seq);
-                if let Some(voted_round) = self.fallback_voted_round.get(&fallback_leader) {
-                    self.last_voted_round = max(self.last_voted_round, *voted_round);
-                }
-            }
-            // Exit fallback
-            self.fallback = 0;
-            self.advance_view(view+1);
+            self.handle_random_coin(random_coin.clone()).await?;
         }
         Ok(())
     }
 
-    async fn handle_rc(&mut self, random_coin: RandomCoin) -> ConsensusResult<()> {
-        if random_coin.seq < self.view {
+    async fn handle_random_coin(&mut self, random_coin: RandomCoin) -> ConsensusResult<()> {
+        if random_coin.seq < self.view || self.fallback_random_coin.contains_key(&random_coin.seq) {
             return Ok(())
         }
+        
         let view = random_coin.seq;
-        let message = CoreMessage::RandomCoin(random_coin);
+        self.fallback_random_coin.insert(view, random_coin.clone());
+        let message = CoreMessage::RandomCoin(random_coin.clone());
         self.transmit(&message, None).await?;
 
+        self.leader_elector.add_random_coin(random_coin);
+
         if self.fallback == 1 {
-            let fallback_leader = self.leader_elector.get_leader_async(view);
+            let fallback_leader = self.leader_elector.get_fallback_leader(view).unwrap();
             if let Some(voted_round) = self.fallback_voted_round.get(&fallback_leader) {
                 self.last_voted_round = max(self.last_voted_round, *voted_round);
             }
+            let qc = self.fallback_qcs.get(&fallback_leader).unwrap().clone();
+            self.process_qc(&qc).await;
         }
         // Exit fallback
         self.fallback = 0;
-        self.advance_view(view+1);
+        self.advance_view(view+1).await;
+        if self.name == self.leader_elector.get_leader(self.round) {
+            self.generate_proposal(None, self.high_qc.clone())
+                .await
+                .expect("Failed to send the first block after fallback");
+        }
         Ok(())
     }
 
     pub async fn run(&mut self) {
         // Upon booting, generate the very first block (if we are the leader).
         // Also, schedule a timer in case we don't hear from the leader.
-        self.schedule_timer().await;
-        if self.name == self.leader_elector.get_leader(self.round) {
-            self.generate_proposal(None)
+        if self.fallback == 0 {
+            self.schedule_timer().await;
+            if self.name == self.leader_elector.get_leader(self.round) {
+                self.generate_proposal(None, self.high_qc.clone())
+                    .await
+                    .expect("Failed to send the first block");
+            }
+        } else if self.fallback == 1 {
+            self.height = 1;
+            self.generate_proposal(None, self.high_qc.clone())
                 .await
                 .expect("Failed to send the first block");
         }
+        
 
         // This is the main loop: it processes incoming blocks and votes,
         // and receive timeout notifications from our Timeout Manager.
@@ -664,8 +759,8 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
                         CoreMessage::Timeout(timeout) => self.handle_timeout(&timeout).await,
                         CoreMessage::TC(tc) => self.handle_tc(tc).await,
                         CoreMessage::SignedQC(signed_qc) => self.handle_signed_qc(signed_qc).await,
-                        CoreMessage::RandomnessShare(rs) => self.handle_rs(rs).await,
-                        CoreMessage::RandomCoin(rc) => self.handle_rc(rc).await,
+                        CoreMessage::RandomnessShare(randomness_share) => self.handle_randomness_share(randomness_share).await,
+                        CoreMessage::RandomCoin(random_coin) => self.handle_random_coin(random_coin).await,
                         CoreMessage::LoopBack(block) => self.process_block(&block).await,
                         CoreMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await
                     }

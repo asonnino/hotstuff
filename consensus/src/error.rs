@@ -63,6 +63,9 @@ pub enum ConsensusError {
         round: SeqNumber,
     },
 
+    #[error("Invalid block/vote/qc height")]
+    InvalidHeight,
+
     #[error("Invalid payload")]
     InvalidPayload,
 

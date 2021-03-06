@@ -105,6 +105,7 @@ class NodeParameters:
 
         self.timeout_delay = json['consensus']['timeout_delay'] 
         self.protocol = json['consensus']['protocol']
+        self.crash = json['consensus']['crash']
         self.json = json
 
     def print(self, filename):

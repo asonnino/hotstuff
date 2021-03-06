@@ -77,7 +77,11 @@ class LocalBench:
             rate_share = ceil(self.rate / nodes)
             timeout = self.node_parameters.timeout_delay
             client_logs = [PathMaker.client_log_file(i) for i in range(nodes)]
+            counter = 0
             for addr, log_file in zip(addresses, client_logs):
+                counter += 1
+                if self.node_parameters.crash == 1 and counter == nodes:
+                    break
                 cmd = CommandMaker.run_client(
                     addr,
                     self.size,
@@ -93,11 +97,19 @@ class LocalBench:
                 Print.info('Running HotStuff with Async Fallback')
             if protocol == 2:
                 Print.info('Running Chained-VABA')
+            if self.node_parameters.crash == 1:
+                Print.info('Crash 1 node')
+            else:
+                Print.info('No failure')
 
             # Run the nodes.
             dbs = [PathMaker.db_path(i) for i in range(nodes)]
             node_logs = [PathMaker.node_log_file(i) for i in range(nodes)]
+            counter = 0
             for key_file, db, log_file in zip(key_files, dbs, node_logs):
+                counter += 1
+                if self.node_parameters.crash == 1 and counter == nodes:
+                    break
                 cmd = CommandMaker.run_node(
                     key_file,
                     PathMaker.committee_file(),

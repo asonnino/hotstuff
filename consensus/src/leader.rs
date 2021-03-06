@@ -1,16 +1,36 @@
+use crate::messages::RandomCoin;
 use crate::config::Committee;
 use crate::core::SeqNumber;
 use crypto::PublicKey;
+use std::collections::HashMap;
 
-pub type LeaderElector = RRLeaderElector;
+// pub type LeaderElector = RRLeaderElector;
+pub type LeaderElector = RandomLeaderElector;
 
-pub struct RRLeaderElector {
+// pub struct RRLeaderElector {
+//     committee: Committee,
+// }
+
+// impl RRLeaderElector {
+//     pub fn new(committee: Committee) -> Self {
+//         Self { committee }
+//     }
+
+//     pub fn get_leader(&self, round: SeqNumber) -> PublicKey {
+//         let mut keys: Vec<_> = self.committee.authorities.keys().cloned().collect();
+//         keys.sort();
+//         keys[round as usize % self.committee.size()]
+//     }
+// }
+
+pub struct RandomLeaderElector {
     committee: Committee,
+    random_coins: HashMap<SeqNumber, RandomCoin>,
 }
 
-impl RRLeaderElector {
+impl RandomLeaderElector {
     pub fn new(committee: Committee) -> Self {
-        Self { committee }
+        Self { committee, random_coins: HashMap::new() }
     }
 
     pub fn get_leader(&self, round: SeqNumber) -> PublicKey {
@@ -19,10 +39,17 @@ impl RRLeaderElector {
         keys[round as usize % self.committee.size()]
     }
 
+    pub fn add_random_coin(&mut self, random_coin: RandomCoin) {
+        self.random_coins.insert(random_coin.seq, random_coin);
+    }
+
     // daniel: round robin for now, need to implement common random coin
-    pub fn get_leader_async(&self, view: SeqNumber) -> PublicKey {
+    pub fn get_fallback_leader(&self, view: SeqNumber) -> Option<PublicKey> {
+        if !self.random_coins.contains_key(&view) {
+            return None;
+        }
         let mut keys: Vec<_> = self.committee.authorities.keys().cloned().collect();
         keys.sort();
-        keys[view as usize % self.committee.size()]
+        Some(keys[view as usize % self.committee.size()])
     }
 }

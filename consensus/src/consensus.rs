@@ -11,6 +11,7 @@ use mempool::NodeMempool;
 use network::{NetReceiver, NetSender};
 use store::Store;
 use tokio::sync::mpsc::{channel, Sender};
+use tokio::time::{Duration, sleep};
 
 #[cfg(test)]
 #[path = "tests/consensus_tests.rs"]
@@ -63,6 +64,9 @@ impl Consensus {
             parameters.sync_retry_delay,
         )
         .await;
+
+        sleep(Duration::from_millis(parameters.timeout_delay)).await;
+
 
         match parameters.protocol {
             0 => {  // Run HotStuff

@@ -106,7 +106,7 @@ impl Synchronizer {
         }
     }
 
-    async fn get_previous_block(&mut self, block: &Block) -> ConsensusResult<Option<Block>> {
+    pub async fn get_previous_block(&mut self, block: &Block) -> ConsensusResult<Option<Block>> {
         if block.qc == QC::genesis() {
             return Ok(Some(Block::genesis()));
         }
