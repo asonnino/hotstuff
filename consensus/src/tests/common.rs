@@ -15,10 +15,30 @@ pub fn keys() -> Vec<(PublicKey, SecretKey)> {
     (0..4).map(|_| generate_keypair(&mut rng)).collect()
 }
 
+pub fn fallback_keys() -> Vec<(PublicKey, SecretKey)> {
+    let mut rng = StdRng::from_seed([1; 32]);
+    (0..4).map(|_| generate_keypair(&mut rng)).collect()
+}
+
 // Fixture.
 pub fn committee() -> Committee {
     Committee::new(
         keys()
+            .into_iter()
+            .enumerate()
+            .map(|(i, (name, _))| {
+                let address = format!("127.0.0.1:{}", i).parse().unwrap();
+                let stake = 1;
+                (name, stake, address)
+            })
+            .collect(),
+        /* epoch */ 1,
+    )
+}
+
+pub fn fallback_committee() -> Committee {
+    Committee::new(
+        fallback_keys()
             .into_iter()
             .enumerate()
             .map(|(i, (name, _))| {
@@ -135,13 +155,13 @@ impl PartialEq for Timeout {
 // Fixture.
 pub fn block() -> Block {
     let (public_key, secret_key) = keys().pop().unwrap();
-    Block::new_from_key(QC::genesis(), public_key, 1, 1, 1, 0, Vec::new(), &secret_key)
+    Block::new_from_key(QC::genesis(), public_key, 0, 1, 0, 0, Vec::new(), &secret_key)
 }
 
 // Fixture.
 pub fn vote() -> Vote {
     let (public_key, secret_key) = keys().pop().unwrap();
-    Vote::new_from_key(block().digest(), 1, 1, 1, 0, block().author, public_key, &secret_key)
+    Vote::new_from_key(block().digest(), 0, 1, 0, 0, block().author, public_key, &secret_key)
 }
 
 // Fixture.
@@ -150,9 +170,9 @@ pub fn qc() -> QC {
     let (public_key, _) = keys.pop().unwrap();
     let qc = QC {
         hash: Digest::default(),
-        view: 1,
+        view: 0,
         round: 1,
-        height: 1,
+        height: 0,
         fallback: 0,
         proposer: public_key,
         votes: Vec::new(),
@@ -178,9 +198,9 @@ pub fn chain(keys: Vec<(PublicKey, SecretKey)>) -> Vec<Block> {
             let block = Block::new_from_key(
                 latest_qc.clone(),
                 *public_key,
-                1,
+                0,
                 1 + i as SeqNumber,
-                1,
+                0,
                 0,
                 Vec::new(),
                 secret_key,

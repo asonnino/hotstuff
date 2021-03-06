@@ -22,9 +22,9 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::{Duration, sleep};
 use std::collections::{HashMap, HashSet};
 
-// #[cfg(test)]
-// #[path = "tests/core_tests.rs"]
-// pub mod core_tests;
+#[cfg(test)]
+#[path = "tests/fallback_tests.rs"]
+pub mod fallback_tests;
 
 pub type SeqNumber = u64; // For both round and view
 pub type HeightNumber = u8;  // height={1,2} in fallback chain, height=0 for sync block
@@ -47,7 +47,7 @@ pub struct Fallback<Mempool> {
     height: HeightNumber,    // current height, 0 not in fallback, 1 or 2 in fallback
     last_voted_round: SeqNumber,
     high_qc: QC,
-    last_committed_round: SeqNumber,
+    last_committed_round: SeqNumber,    // round of last committed block, initially -1
     fallback: Bool, // 0 if not in async fallback, 1 if in async fallback
     fallback_voted_round: HashMap<PublicKey, SeqNumber>,    // voted round number during fallback for each i
     fallback_voted_height: HashMap<PublicKey, HeightNumber>,  // voted height number during fallback for each i
@@ -97,11 +97,11 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
             commit_channel,
             core_channel,
             round: 1,
-            view: 1,
+            view: 0,
             height: 0,
             last_voted_round: 0,
             high_qc: QC::genesis(),
-            last_committed_round: 0,
+            last_committed_round: u64::MAX, // initially -1
             fallback,
             fallback_voted_round: HashMap::new(),
             fallback_voted_height: HashMap::new(),
@@ -138,6 +138,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         message: &CoreMessage,
         to: Option<PublicKey>,
     ) -> ConsensusResult<()> {
+        sleep(Duration::from_millis(self.parameters.network_delay)).await;
         let addresses = if let Some(to) = to {
             debug!("Sending {:?} to {}", message, to);
             vec![self.committee.address(&to)?]
@@ -243,7 +244,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         for (node, _) in &self.committee.authorities {
             self.fallback_voted_height.insert(*node, 0);
             self.fallback_voted_round.insert(*node, 0);
-            self.fallback_qcs.insert(*node, QC::genesis());
+            self.fallback_qcs.insert(*node, self.high_qc.clone());
         }
     }
 
@@ -275,7 +276,6 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         )
         .await;
         debug!("Created {:?}", timeout);
-        self.schedule_timer().await;
         let message = CoreMessage::Timeout(timeout.clone());
         self.transmit(&message, None).await?;
         self.handle_timeout(&timeout).await
@@ -307,7 +307,8 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
             }
             // Fallback QC of my proposed block
             if qc.fallback == 1 && qc.proposer == self.name {
-                if qc.height > self.fallback_qcs.get(&self.name).unwrap().height {
+                let fallback_high_qc = self.fallback_qcs.get(&self.name).unwrap();
+                if qc.view > fallback_high_qc.view || (qc.view == fallback_high_qc.view && qc.height > fallback_high_qc.height) {
                     self.fallback_qcs.insert(self.name, qc.clone());
                 }
                 if qc.height == 1 {
@@ -343,7 +344,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         // Enter the fallback
         if let Some(tc) = self.aggregator.add_timeout(timeout.clone())? {
             debug!("Assembled {:?}", tc);
-            debug!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", tc.seq);
+            info!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", tc.seq);
 
             // Enter fallback
             self.fallback = 1;
@@ -385,12 +386,12 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
 
     // #[async_recursion]
     async fn advance_view(&mut self, view: SeqNumber) {
-        debug!("advance_view: self view {}, new view {}", self.view, view);
+        debug!("advance_view: previous view {} with leader {:?}, new view {}", self.view, self.leader_elector.get_fallback_leader(self.view), view);
         if view <= self.view {
             return;
         }
         self.view = view;
-        debug!("-------------------------------------------------------- Enter view {} --------------------------------------------------------", view);
+        info!("-------------------------------------------------------- Enter view {} --------------------------------------------------------", view);
 
         // Cleanup the vote aggregator.
         self.aggregator.cleanup_async(&self.view, &self.round);
@@ -467,7 +468,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         // Store the block only if we have already processed all its ancestors.
         self.store_block(block).await?;
 
-        if b0.round <= self.last_committed_round {
+        if b0.round <= self.last_committed_round && self.last_committed_round != u64::MAX {
             return Ok(());
         }
 
@@ -518,8 +519,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
 
     #[async_recursion]
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
-
-        self.print_chain(block).await?;
+        debug!("{:?}", self.print_chain(block).await?);
 
         self.commit(block).await?;
 
@@ -535,7 +535,8 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
 
         // See if we can propose a fallback block extending the fallback QC
         if block.qc.fallback == 1 && (block.qc.view == self.view && block.qc.height >= self.height) {
-            if block.qc.height > self.fallback_qcs.get(&block.qc.proposer).unwrap().height {
+            let fallback_high_qc = self.fallback_qcs.get(&block.qc.proposer).unwrap();
+            if block.qc.view > fallback_high_qc.view || (block.qc.view == fallback_high_qc.view && block.qc.height > fallback_high_qc.height) {
                 self.fallback_qcs.insert(block.qc.proposer, block.qc.clone());
             }
             self.height = block.qc.height+1;
@@ -722,6 +723,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         // Exit fallback
         self.fallback = 0;
         self.advance_view(view+1).await;
+        self.schedule_timer().await;
         if self.name == self.leader_elector.get_leader(self.round) {
             self.generate_proposal(None, self.high_qc.clone())
                 .await

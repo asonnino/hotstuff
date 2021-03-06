@@ -19,7 +19,7 @@ pub struct Block {
     pub qc: QC,
     pub tc: Option<TC>,
     pub author: PublicKey,
-    pub view: SeqNumber,   // increment by 1 after every async fallback, initially 1
+    pub view: SeqNumber,   // increment by 1 after every async fallback, initially 0
     pub round: SeqNumber,
     pub height: HeightNumber,   // for async block height={1,2}, for sync block height=0
     pub fallback: Bool,  // 1 if async block; 0 if sync block
@@ -390,7 +390,7 @@ impl Hash for Timeout {
 
 impl fmt::Debug for Timeout {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "TV(author {}, view {}, highqc {:?})", self.author, self.seq, self.high_qc)
+        write!(f, "TV(author {}, view/round {}, highqc {:?})", self.author, self.seq, self.high_qc)
     }
 }
 
@@ -437,7 +437,7 @@ impl TC {
 
 impl fmt::Debug for TC {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "TC(view {}, highqc_rounds {:?})", self.seq, self.high_qc_rounds())
+        write!(f, "TC(view/round {}, highqc_rounds {:?})", self.seq, self.high_qc_rounds())
     }
 }
 

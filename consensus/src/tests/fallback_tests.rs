@@ -1,10 +1,10 @@
 use super::*;
-use crate::common::{chain, committee, keys, MockMempool};
+use crate::common::{chain, fallback_committee, fallback_keys, MockMempool};
 use crypto::SecretKey;
 use std::fs;
 use tokio::sync::mpsc::channel;
 
-async fn core(
+async fn fallback(
     name: PublicKey,
     secret: SecretKey,
     store_path: &str,
@@ -20,20 +20,20 @@ async fn core(
     let signature_service = SignatureService::new(secret);
     let _ = fs::remove_dir_all(store_path);
     let store = Store::new(store_path).unwrap();
-    let leader_elector = LeaderElector::new(committee());
+    let leader_elector = LeaderElector::new(fallback_committee());
     let mempool_driver = MempoolDriver::new(MockMempool, tx_core.clone(), store.clone());
     let synchronizer = Synchronizer::new(
         name,
-        committee(),
+        fallback_committee(),
         store.clone(),
         /* network_channel */ tx_network.clone(),
         /* core_channel */ tx_core.clone(),
         parameters.sync_retry_delay,
     )
     .await;
-    let mut core = Core::new(
+    let mut fallback = Fallback::new(
         name,
-        committee(),
+        fallback_committee(),
         parameters,
         signature_service,
         store,
@@ -45,15 +45,15 @@ async fn core(
         /* commit_channel */ tx_commit,
     );
     tokio::spawn(async move {
-        core.run().await;
+        fallback.run().await;
     });
     (tx_core, rx_network, rx_commit)
 }
 
 fn leader_keys(round: SeqNumber) -> (PublicKey, SecretKey) {
-    let leader_elector = LeaderElector::new(committee());
+    let leader_elector = LeaderElector::new(fallback_committee());
     let leader = leader_elector.get_leader(round);
-    keys()
+    fallback_keys()
         .into_iter()
         .find(|(public_key, _)| *public_key == leader)
         .unwrap()
@@ -63,12 +63,12 @@ fn leader_keys(round: SeqNumber) -> (PublicKey, SecretKey) {
 async fn handle_proposal() {
     // Make a block and the vote we expect to receive.
     let block = chain(vec![leader_keys(1)]).pop().unwrap();
-    let (public_key, secret_key) = keys().pop().unwrap();
+    let (public_key, secret_key) = fallback_keys().pop().unwrap();
     let vote = Vote::new_from_key(block.digest(), block.view, block.round, block.height, block.fallback, block.author, public_key, &secret_key);
 
     // Run a core instance.
-    let store_path = ".db_test_handle_proposal";
-    let (tx_core, mut rx_network, _rx_commit) = core(public_key, secret_key, store_path).await;
+    let store_path = ".db_test_handle_proposal_fallback";
+    let (tx_core, mut rx_network, _rx_commit) = fallback(public_key, secret_key, store_path).await;
 
     // Send a block to the core.
     let message = CoreMessage::Propose(block.clone());
@@ -82,7 +82,7 @@ async fn handle_proposal() {
                 _ => assert!(false),
             }
             let (next_leader, _) = leader_keys(2);
-            let address = committee().address(&next_leader).unwrap();
+            let address = fallback_committee().address(&next_leader).unwrap();
             assert_eq!(recipient, vec![address]);
         }
         _ => assert!(false),
@@ -98,7 +98,7 @@ async fn generate_proposal() {
     // Make a block, votes, and QC.
     let block = Block::new_from_key(QC::genesis(), leader, 1, 1, 0, 0, Vec::new(), &leader_key);
     let hash = block.digest();
-    let votes: Vec<_> = keys()
+    let votes: Vec<_> = fallback_keys()
         .iter()
         .map(|(public_key, secret_key)| {
             Vote::new_from_key(hash.clone(), block.view, block.round, block.height, block.fallback, block.author, *public_key, &secret_key)
@@ -119,9 +119,9 @@ async fn generate_proposal() {
     };
 
     // Run a core instance.
-    let store_path = ".db_test_generate_proposal";
+    let store_path = ".db_test_generate_proposal_fallback";
     let (tx_core, mut rx_network, _rx_commit) =
-        core(next_leader, next_leader_key, store_path).await;
+        fallback(next_leader, next_leader_key, store_path).await;
 
     // Send all votes to the core.
     for vote in votes.clone() {
@@ -139,7 +139,7 @@ async fn generate_proposal() {
                 }
                 _ => assert!(false),
             }
-            let mut addresses = committee().broadcast_addresses(&next_leader);
+            let mut addresses = fallback_committee().broadcast_addresses(&next_leader);
             addresses.sort();
             recipients.sort();
             assert_eq!(recipients, addresses);
@@ -155,9 +155,9 @@ async fn commit_block() {
     let chain = chain(leaders);
 
     // Run a core instance.
-    let store_path = ".db_test_commit_block";
-    let (public_key, secret_key) = keys().pop().unwrap();
-    let (tx_core, _rx_network, mut rx_commit) = core(public_key, secret_key, store_path).await;
+    let store_path = ".db_test_commit_block_fallback";
+    let (public_key, secret_key) = fallback_keys().pop().unwrap();
+    let (tx_core, _rx_network, mut rx_commit) = fallback(public_key, secret_key, store_path).await;
 
     // Send a 3-chain to the core.
     for block in chain.clone() {
@@ -176,11 +176,11 @@ async fn commit_block() {
 async fn local_timeout_round() {
     // Make the timeout vote we expect.
     let (public_key, secret_key) = leader_keys(3);
-    let timeout = Timeout::new_from_key(QC::genesis(), 1, public_key, &secret_key);
+    let timeout = Timeout::new_from_key(QC::genesis(), 0, public_key, &secret_key);
 
     // Run a core instance.
-    let store_path = ".db_test_local_timeout_round";
-    let (_tx_core, mut rx_network, _rx_commit) = core(public_key, secret_key, store_path).await;
+    let store_path = ".db_test_local_timeout_round_fallback";
+    let (_tx_core, mut rx_network, _rx_commit) = fallback(public_key, secret_key, store_path).await;
 
     // Ensure the following operation happen in the right order.
     match rx_network.recv().await {
@@ -189,7 +189,7 @@ async fn local_timeout_round() {
                 CoreMessage::Timeout(t) => assert_eq!(t, timeout),
                 _ => assert!(false),
             }
-            let mut addresses = committee().broadcast_addresses(&public_key);
+            let mut addresses = fallback_committee().broadcast_addresses(&public_key);
             addresses.sort();
             recipients.sort();
             assert_eq!(recipients, addresses);

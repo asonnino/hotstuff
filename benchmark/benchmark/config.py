@@ -93,6 +93,7 @@ class NodeParameters:
             inputs += [json['consensus']['timeout_delay']]
             inputs += [json['consensus']['sync_retry_delay']]
             inputs += [json['consensus']['min_block_delay']]
+            inputs += [json['consensus']['network_delay']]
             inputs += [json['consensus']['protocol']]
             inputs += [json['mempool']['queue_capacity']]
             inputs += [json['mempool']['max_payload_size']]

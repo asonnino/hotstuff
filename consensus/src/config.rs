@@ -11,6 +11,7 @@ pub type EpochNumber = u128;
 pub struct Parameters {
     pub timeout_delay: u64,
     pub sync_retry_delay: u64,
+    pub network_delay: u64,
     pub min_block_delay: u64,
     pub protocol: u8,
 }
@@ -21,6 +22,7 @@ impl Default for Parameters {
             timeout_delay: 5000,
             sync_retry_delay: 10_000,
             min_block_delay: 100,
+            network_delay: 100,
             protocol: 0
         }
     }

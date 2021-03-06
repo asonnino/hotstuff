@@ -79,11 +79,6 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         commit_channel: Sender<Block>,
     ) -> Self {
         let aggregator = Aggregator::new(committee.clone());
-        let mut fallback = 0;
-        // If run VABA
-        if parameters.protocol == 1 {
-            fallback = 1;
-        }
         Self {
             name,
             committee,
@@ -97,11 +92,11 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             commit_channel,
             core_channel,
             round: 1,
-            view: 1,
-            height: 1,
+            view: 0,
+            height: 0,
             last_voted_round: 0,
             high_qc: QC::genesis(),
-            fallback,
+            fallback: 0,
             timer: Timer::new(),
             aggregator,
         }
@@ -127,6 +122,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         message: &CoreMessage,
         to: Option<PublicKey>,
     ) -> ConsensusResult<()> {
+        sleep(Duration::from_millis(self.parameters.network_delay)).await;
         let addresses = if let Some(to) = to {
             debug!("Sending {:?} to {}", message, to);
             vec![self.committee.address(&to)?]
@@ -183,7 +179,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         )
         .await;
         debug!("Created {:?}", timeout);
-        self.schedule_timer().await;
+        // self.schedule_timer().await; // daniel: No need to reset the timer for the same round
         let message = CoreMessage::Timeout(timeout.clone());
         self.transmit(&message, None).await?;
         self.handle_timeout(&timeout).await
@@ -297,6 +293,26 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     }
 
     #[async_recursion]
+    async fn print_chain(&mut self, block: &Block) -> ConsensusResult<()> {
+        debug!("-------------------------------------------------------- printing chain start --------------------------------------------------------");
+        let mut current_block = block.clone();
+        while current_block.qc != QC::genesis() {
+            let parent = match self.synchronizer.get_previous_block(&current_block).await? {
+                Some(b) => b,
+                None => {
+                    debug!("Processing of {} suspended: missing parent", current_block.digest());
+                    break;
+                }
+            };
+            debug!("{:?}", current_block);
+            current_block = parent;
+        }
+        debug!("{:?}", current_block);
+        debug!("-------------------------------------------------------- printing chain end --------------------------------------------------------");
+        Ok(())
+    }
+
+    #[async_recursion]
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
         debug!("Processing {:?}", block);
 
@@ -330,6 +346,8 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
                 warn!("Failed to send block through the commit channel: {}", e);
             }
         }
+
+        debug!("{:?}", self.print_chain(block).await?);
 
         // Ensure the block's round is as expected.
         // This check is important: it prevents bad leaders from producing blocks
