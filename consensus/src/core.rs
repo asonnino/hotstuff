@@ -18,14 +18,13 @@ use std::cmp::max;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::{Duration, sleep};
-// use std::collections::HashMap;
 
 #[cfg(test)]
 #[path = "tests/core_tests.rs"]
 pub mod core_tests;
 
 pub type SeqNumber = u64; // For both round and view
-pub type HeightNumber = u8;  // height={1,2} in fallback chain, height=1 for sync block
+pub type HeightNumber = u8;  // height={1,2} in fallback chain, height=0 for sync block
 pub type Bool = u8;
 
 #[derive(Serialize, Deserialize, Debug)]

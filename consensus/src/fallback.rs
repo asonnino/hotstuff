@@ -79,11 +79,6 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         commit_channel: Sender<Block>,
     ) -> Self {
         let aggregator = Aggregator::new(committee.clone());
-        let mut fallback = 0;
-        // If run VABA
-        if parameters.protocol == 2 {
-            fallback = 1;
-        }
         Self {
             name,
             committee,
@@ -102,7 +97,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
             last_voted_round: 0,
             high_qc: QC::genesis(),
             last_committed_round: u64::MAX, // initially -1
-            fallback,
+            fallback: 0,
             fallback_voted_round: HashMap::new(),
             fallback_voted_height: HashMap::new(),
             fallback_qcs: HashMap::new(),
@@ -295,7 +290,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         if let Some(qc) = self.aggregator.add_vote(vote.clone())? {
             debug!("Assembled {:?}", qc);
 
-            // Non-fallback QC
+            // Process non-fallback QC directly.
             if qc.fallback == 0 {
                 // Process the QC.
                 self.process_qc(&qc).await;
@@ -307,23 +302,24 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
             }
             // Fallback QC of my proposed block
             if qc.fallback == 1 && qc.proposer == self.name {
+                // Update the highest fallback QC
                 let fallback_high_qc = self.fallback_qcs.get(&self.name).unwrap();
                 if qc.view > fallback_high_qc.view || (qc.view == fallback_high_qc.view && qc.height > fallback_high_qc.height) {
                     self.fallback_qcs.insert(self.name, qc.clone());
                 }
+                // Propose height-2 fallback block
                 if qc.height == 1 {
                     self.height = 2;
                     self.generate_proposal(None, qc.clone()).await?;
                 }
+                // Sign and multicast height-2 QC
                 if qc.height == 2 {
-                    // sign and multicast height-2 QC
                     let signed_qc = SignedQC::new(qc, self.name, self.signature_service.clone()).await;
                     let message = CoreMessage::SignedQC(signed_qc.clone());
                     self.transmit(&message, None).await?;
                     self.handle_signed_qc(signed_qc).await?;
                 }
             }
-            
         }
         Ok(())
     }
@@ -355,6 +351,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
             // Initialize fallback states
             self.init_fallback_state();
 
+            // TC is attached in the fallback block, no need to broadcast
             // // Broadcast the TC.
             // let message = CoreMessage::TC(tc.clone());
             // self.transmit(&message, None).await?;
@@ -479,15 +476,14 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         
         // The new commit rule requires blocks of the same view.
         let same_view = b0.view == b1.view;
+        // For fallback blocks, they need to be proposed by the fallback leader.
         let endorsed = self.valid_qc(&b1.qc) && self.valid_qc(&block.qc);
-        debug!("check commit b0 view {} b1 view {}, b0 qc {:?}, b1 qc {:?}", b0.view, b1.view, b1.qc, block.qc);
         if same_view && endorsed {
             if !b0.payload.is_empty() {
                 info!("Committed {}", b0);
             }
             self.last_committed_round = b0.round;
             debug!("Committed {:?}", b0);
-            debug!("QC1 {:?} QC2 {:?}", b1.qc, block.qc); 
             self.mempool_driver.garbage_collect(&b0).await;
             if let Err(e) = self.commit_channel.send(b0.clone()).await {
                 warn!("Failed to send block through the commit channel: {}", e);
@@ -604,7 +600,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
             return Ok(());
         }
 
-        // Not in fallback for now, loopback when later enter the fallback
+        // Not in fallback, process the fallback blocks when later enter the fallback
         // It is necessary to receive 2f+1 timeout messages with QCs to update the high_qc
         if block.fallback == 1 && self.fallback == 0 {
             if block.height == 1 || block.height == 2 {
@@ -631,7 +627,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         Ok(())
     }
 
-    // With async fallback, do not handle TC directly.
+    // With async fallback, do not handle TC directly. Need to receive 2f+1 Timeout to update the high QC.
     async fn handle_tc(&mut self, _: TC) -> ConsensusResult<()> {
         // self.advance_round(tc.seq).await;
         // if self.name == self.leader_elector.get_leader(self.round) {
@@ -640,9 +636,10 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         Ok(())
     }
 
-    // daniel: New handlers
+    // daniel: New handlers. TODO: implement shared randomness
     // When receiving 2f+1 height-2 fallback QC, send randomness share
     async fn handle_signed_qc(&mut self, signed_qc: SignedQC) -> ConsensusResult<()> {
+        // Already receive from the sender.
         let set = self.fallback_signed_qc_sender.entry(signed_qc.qc.view).or_insert(HashSet::new());
         if set.contains(&signed_qc.author) {
             return Ok(());
@@ -656,6 +653,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         set.insert(signed_qc.author);
         let weight = self.fallback_signed_qc_weight.entry(signed_qc.qc.view).or_insert(0);
         
+        // Collected 2f+1 height-2 fallback QC, send randomness share
         *weight += self.committee.stake(&signed_qc.author);
         if *weight >= self.committee.quorum_threshold() {
             *weight = 0; // Only send randomness share once
@@ -682,13 +680,10 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
 
         let weight = self.fallback_randomness_share_weight.entry(randomness_share.seq).or_insert(0);
         let shares = self.fallback_randomness_shares.entry(randomness_share.seq).or_insert(Vec::new());
-        // Ensure it is the first time this authority sends randomness share.
-        ensure!(
-            set.insert(randomness_share.author),
-            ConsensusError::AuthorityReuse(randomness_share.author)
-        );
+        set.insert(randomness_share.author);
         shares.push((randomness_share.author, randomness_share.clone()));
         *weight += self.committee.stake(&randomness_share.author);
+        // Collected enough shares, send random coin
         if *weight >= self.committee.random_coin_threshold() {
             *weight = 0; // Only send random coin once
             // Multicast the random coin
@@ -704,6 +699,8 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         if random_coin.seq < self.view || self.fallback_random_coin.contains_key(&random_coin.seq) {
             return Ok(())
         }
+
+        random_coin.verify(&self.committee)?;
         
         let view = random_coin.seq;
         self.fallback_random_coin.insert(view, random_coin.clone());
@@ -735,20 +732,12 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
     pub async fn run(&mut self) {
         // Upon booting, generate the very first block (if we are the leader).
         // Also, schedule a timer in case we don't hear from the leader.
-        if self.fallback == 0 {
-            self.schedule_timer().await;
-            if self.name == self.leader_elector.get_leader(self.round) {
-                self.generate_proposal(None, self.high_qc.clone())
-                    .await
-                    .expect("Failed to send the first block");
-            }
-        } else if self.fallback == 1 {
-            self.height = 1;
+        self.schedule_timer().await;
+        if self.name == self.leader_elector.get_leader(self.round) {
             self.generate_proposal(None, self.high_qc.clone())
                 .await
                 .expect("Failed to send the first block");
         }
-        
 
         // This is the main loop: it processes incoming blocks and votes,
         // and receive timeout notifications from our Timeout Manager.

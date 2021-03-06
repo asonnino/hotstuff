@@ -503,37 +503,30 @@ pub struct RandomCoin {
     pub votes: Vec<(PublicKey, RandomnessShare)>,
 }
 
-// impl RandomCoin {
-//     pub fn genesis() -> Self {
-//         RandomCoin::default()
-//     }
-    
-//     pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
-//         // Ensure the QC has a quorum.
-//         let mut weight = 0;
-//         let mut used = HashSet::new();
-//         for (name, _) in self.votes.iter() {
-//             ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
-//             let voting_rights = committee.stake(name);
-//             ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
-//             used.insert(*name);
-//             weight += voting_rights;
-//         }
-//         ensure!(
-//             weight >= committee.random_coin_threshold(),
-//             ConsensusError::RandomCoinRequiresQuorum
-//         );
+impl RandomCoin {
+    pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
+        // Ensure the QC has a quorum.
+        let mut weight = 0;
+        let mut used = HashSet::new();
+        for (name, _) in self.votes.iter() {
+            ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
+            let voting_rights = committee.stake(name);
+            ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
+            used.insert(*name);
+            weight += voting_rights;
+        }
+        ensure!(
+            weight >= committee.random_coin_threshold(),
+            ConsensusError::RandomCoinRequiresQuorum
+        );
 
-//         // Check the signatures.
-//         for (author, share) in &self.votes {
-//             let mut hasher = Sha512::new();
-//             hasher.update(self.seq.to_le_bytes());
-//             let digest = Digest(hasher.finalize().as_slice()[..32].try_into().unwrap());
-//             share.signature.verify(&digest, &author)?;
-//         }
-//         Ok(())
-//     }
-// }
+        // Check the random shares.
+        for (_, share) in &self.votes {
+            share.verify(committee)?;
+        }
+        Ok(())
+    }
+}
 
 impl fmt::Debug for RandomCoin {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
