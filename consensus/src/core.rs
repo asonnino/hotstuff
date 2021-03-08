@@ -131,11 +131,12 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
 
     async fn make_vote(&mut self, block: &Block) -> Option<Vote> {
         // Check if we can vote for this block.
-        // TODO [issue #25]: The unlock condition is too brutal.
         let safety_rule_1 = block.round > self.last_voted_round;
-        let mut safety_rule_2 = block.qc.round >= self.high_qc.round;
+        let mut safety_rule_2 = block.qc.round + 1 == block.round;
         if let Some(ref tc) = block.tc {
-            safety_rule_2 |= block.qc.round >= *tc.high_qc_rounds().iter().max().expect("Empty TC");
+            let mut can_extend = tc.round + 1 == block.round;
+            can_extend &= block.qc.round >= *tc.high_qc_rounds().iter().max().expect("Empty TC");
+            safety_rule_2 |= can_extend;
         }
         if !(safety_rule_1 && safety_rule_2) {
             return None;
