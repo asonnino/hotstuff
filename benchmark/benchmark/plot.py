@@ -65,6 +65,7 @@ class Ploter:
         plt.ylabel(y_label[0])
         plt.legend(loc='upper right')
         ax = plt.gca()
+        ax.xaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
         ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
         if len(y_label) > 1:
             secaxy = ax.secondary_yaxis(
