@@ -193,7 +193,7 @@ impl Core {
             self.process_own_payload(&digest, payload).await?;
             Ok(vec![digest])
         } else {
-            let digest_len = Digest::default().len();
+            let digest_len = Digest::default().size();
             let digests = self.queue.iter().take(max / digest_len).cloned().collect();
             for x in &digests {
                 self.queue.remove(x);
