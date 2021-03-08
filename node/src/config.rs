@@ -42,6 +42,7 @@ pub trait Export: Serialize + DeserializeOwned {
 pub struct Parameters {
     pub consensus: ConsensusParameters,
     pub mempool: MempoolParameters,
+    pub protocol: u8,
 }
 
 impl Export for Parameters {}

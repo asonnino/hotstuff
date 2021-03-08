@@ -4,24 +4,7 @@ use crate::core::SeqNumber;
 use crypto::PublicKey;
 use std::collections::HashMap;
 
-// pub type LeaderElector = RRLeaderElector;
 pub type LeaderElector = RandomLeaderElector;
-
-// pub struct RRLeaderElector {
-//     committee: Committee,
-// }
-
-// impl RRLeaderElector {
-//     pub fn new(committee: Committee) -> Self {
-//         Self { committee }
-//     }
-
-//     pub fn get_leader(&self, round: SeqNumber) -> PublicKey {
-//         let mut keys: Vec<_> = self.committee.authorities.keys().cloned().collect();
-//         keys.sort();
-//         keys[round as usize % self.committee.size()]
-//     }
-// }
 
 pub struct RandomLeaderElector {
     committee: Committee,

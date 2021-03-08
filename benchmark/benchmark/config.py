@@ -94,10 +94,11 @@ class NodeParameters:
             inputs += [json['consensus']['sync_retry_delay']]
             inputs += [json['consensus']['min_block_delay']]
             inputs += [json['consensus']['network_delay']]
-            inputs += [json['consensus']['protocol']]
             inputs += [json['mempool']['queue_capacity']]
             inputs += [json['mempool']['max_payload_size']]
             inputs += [json['mempool']['min_block_delay']]
+            inputs += [json['protocol']]
+            inputs += [json['crash']]
         except KeyError as e:
             raise ConfigError(f'Malformed parameters: missing key {e}')
 
@@ -105,8 +106,9 @@ class NodeParameters:
             raise ConfigError('Invalid parameters type')
 
         self.timeout_delay = json['consensus']['timeout_delay'] 
-        self.protocol = json['consensus']['protocol']
-        self.crash = json['consensus']['crash']
+        self.network_delay = json['consensus']['network_delay'] 
+        self.protocol = json['protocol']
+        self.crash = json['crash']
         self.json = json
 
     def print(self, filename):

@@ -32,6 +32,7 @@ fn spawn_nodes(
                     store,
                     mempool,
                     tx_commit,
+                    Protocol::HotStuff,
                 )
                 .await
                 .unwrap();

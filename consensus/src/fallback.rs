@@ -6,8 +6,7 @@ use crate::mempool::MempoolDriver;
 use crate::messages::{Block, Timeout, Vote, QC, TC, SignedQC, RandomnessShare, RandomCoin};
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
-use crate::core::CoreMessage;
-
+use crate::core::{CoreMessage, SeqNumber, HeightNumber, Bool};
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use crypto::Hash as _;
@@ -15,7 +14,6 @@ use crypto::{Digest, PublicKey, SignatureService};
 use log::{debug, error, info, warn};
 use mempool::NodeMempool;
 use network::NetMessage;
-// use serde::{Deserialize, Serialize};
 use std::cmp::max;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -25,10 +23,6 @@ use std::collections::{HashMap, HashSet};
 #[cfg(test)]
 #[path = "tests/fallback_tests.rs"]
 pub mod fallback_tests;
-
-pub type SeqNumber = u64; // For both round and view
-pub type HeightNumber = u8;  // height={1,2} in fallback chain, height=0 for sync block
-pub type Bool = u8;
 
 pub struct Fallback<Mempool> {
     name: PublicKey,
@@ -182,14 +176,14 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
             let voted_height = match self.fallback_voted_height.get(&block.author) {
                 Some(h) => h,
                 None => {
-                    debug!("Receiving block from {} outside the committee", block.author);
+                    warn!("Receiving block from {} outside the committee", block.author);
                     return None;
                 }
             };
             let voted_round = match self.fallback_voted_round.get(&block.author) {
                 Some(r) => r,
                 None => {
-                    debug!("Receiving block from {} outside the committee", block.author);
+                    warn!("Receiving block from {} outside the committee", block.author);
                     return None;
                 }
             };
@@ -351,11 +345,6 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
             // Initialize fallback states
             self.init_fallback_state();
 
-            // TC is attached in the fallback block, no need to broadcast
-            // // Broadcast the TC.
-            // let message = CoreMessage::TC(tc.clone());
-            // self.transmit(&message, None).await?;
-
             // Make a new block for its fallback chain
             self.height = 1;
             self.generate_proposal(Some(tc), self.high_qc.clone()).await?;
@@ -373,9 +362,6 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         self.timer.cancel(self.round).await;
         self.round = round + 1;
         debug!("Moved to round {}", self.round);
-
-        // // Cleanup the vote aggregator.
-        // self.aggregator.cleanup(&self.round);
 
         // Schedule a new timer for this round.
         self.schedule_timer().await;
@@ -587,12 +573,6 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         // Process the QC. This may allow us to advance round.
         self.process_qc(&block.qc).await;
 
-        // // Process the TC (if any). This may also allow us to advance view.
-        // if let Some(ref tc) = block.tc {
-        //     tc.verify(&self.committee)?;
-        //     self.advance_view(tc.seq).await;
-        // }
-
         // Let's see if we have the block's data. If we don't, the mempool
         // will get it and then make us resume processing this block.
         if !self.mempool_driver.verify(block).await? {
@@ -627,12 +607,8 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         Ok(())
     }
 
-    // With async fallback, do not handle TC directly. Need to receive 2f+1 Timeout to update the high QC.
+    // With async fallback, do not handle TC directly. The reason is that any node needs to receive 2f+1 Timeout to update the high QC.
     async fn handle_tc(&mut self, _: TC) -> ConsensusResult<()> {
-        // self.advance_round(tc.seq).await;
-        // if self.name == self.leader_elector.get_leader(self.round) {
-        //     self.generate_proposal(Some(tc)).await?;
-        // }
         Ok(())
     }
 

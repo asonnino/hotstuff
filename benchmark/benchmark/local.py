@@ -80,7 +80,7 @@ class LocalBench:
             counter = 0
             for addr, log_file in zip(addresses, client_logs):
                 counter += 1
-                if self.node_parameters.crash == 1 and counter == nodes:
+                if counter > nodes - self.node_parameters.crash:
                     break
                 cmd = CommandMaker.run_client(
                     addr,
@@ -90,17 +90,18 @@ class LocalBench:
                 )
                 self._background_run(cmd, log_file)
             
-            protocol = self.node_parameters.protocol
-            if protocol == 0:
+            if self.node_parameters.protocol == 0:
                 Print.info('Running HotStuff')
-            if protocol == 1:
+            elif self.node_parameters.protocol == 1:
                 Print.info('Running HotStuff with Async Fallback')
-            if protocol == 2:
+            elif self.node_parameters.protocol == 2:
                 Print.info('Running Chained-VABA')
-            if self.node_parameters.crash == 1:
-                Print.info('Crash 1 node')
             else:
-                Print.info('No failure')
+                Print.info('Wrong protocol type!')
+
+            Print.info(f'Crash {self.node_parameters.crash} nodes')
+            Print.info(f'Timeout {self.node_parameters.timeout_delay} ms, Network delay {self.node_parameters.network_delay} ms')
+
 
             # Run the nodes.
             dbs = [PathMaker.db_path(i) for i in range(nodes)]
@@ -108,7 +109,7 @@ class LocalBench:
             counter = 0
             for key_file, db, log_file in zip(key_files, dbs, node_logs):
                 counter += 1
-                if self.node_parameters.crash == 1 and counter == nodes:
+                if counter > nodes - self.node_parameters.crash:
                     break
                 cmd = CommandMaker.run_node(
                     key_file,

@@ -178,7 +178,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         )
         .await;
         debug!("Created {:?}", timeout);
-        // self.schedule_timer().await; // daniel: No need to reset the timer for the same round
+        self.schedule_timer().await;
         let message = CoreMessage::Timeout(timeout.clone());
         self.transmit(&message, None).await?;
         self.handle_timeout(&timeout).await

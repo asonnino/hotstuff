@@ -8,12 +8,25 @@ pub type Stake = u32;
 pub type EpochNumber = u128;
 
 #[derive(Serialize, Deserialize)]
+pub enum Protocol {
+    HotStuff,
+    HotStuffWithAsyncFallback,
+    ChainedVABA,
+    Others,
+}
+
+impl Default for Protocol {
+    fn default() -> Self {
+        Protocol::HotStuff
+    }
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct Parameters {
     pub timeout_delay: u64,
     pub sync_retry_delay: u64,
     pub network_delay: u64,
     pub min_block_delay: u64,
-    pub protocol: u8,
 }
 
 impl Default for Parameters {
@@ -23,7 +36,6 @@ impl Default for Parameters {
             sync_retry_delay: 10_000,
             min_block_delay: 100,
             network_delay: 100,
-            protocol: 0
         }
     }
 }

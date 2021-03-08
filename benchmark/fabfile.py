@@ -14,7 +14,7 @@ from aws.remote import Bench, BenchError
 @task
 def local(ct):
     bench_params = {
-        'nodes': 4,
+        'nodes': 7,
         'size': 512,
         'rate': 1000,
         'duration': 20,
@@ -24,15 +24,15 @@ def local(ct):
             'timeout_delay': 100,
             'sync_retry_delay': 10_000,
             'min_block_delay': 0,
-            'network_delay': 100,
-            'protocol': 1,  # 0 for HotStuff, 1 for async fallback, 2 for chained-VABA
-            'crash': 0  # 1 for crash 1 node, 0 for no fault 
+            'network_delay': 100
         },
         'mempool': {
             'queue_capacity': 10_000,
             'max_payload_size': 100_000,
             'min_block_delay': 0
-        }
+        },
+        'protocol': 1, # 0 HotStuff, 1 HotStuffWithAsyncFallback, 2 ChainedVABA
+        'crash': 0  # crash f nodes from the beginning
     }
     try:
         ret = LocalBench(bench_params, node_params).run(debug=False).result()

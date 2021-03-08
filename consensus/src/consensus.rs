@@ -1,4 +1,4 @@
-use crate::config::{Committee, Parameters};
+use crate::config::{Committee, Parameters, Protocol};
 use crate::core::Core;
 use crate::fallback::Fallback;
 use crate::error::ConsensusResult;
@@ -28,6 +28,7 @@ impl Consensus {
         store: Store,
         mempool: Mempool,
         commit_channel: Sender<Block>,
+        protocol: Protocol,
     ) -> ConsensusResult<()> {
         let (tx_core, rx_core) = channel(1000);
         let (tx_network, rx_network) = channel(1000);
@@ -68,8 +69,8 @@ impl Consensus {
         sleep(Duration::from_millis(parameters.timeout_delay)).await;
 
 
-        match parameters.protocol {
-            0 => {  // Run HotStuff
+        match protocol {
+            Protocol::HotStuff => {  // Run HotStuff
                 let mut core = Core::new(
                     name,
                     committee,
@@ -87,7 +88,7 @@ impl Consensus {
                     core.run().await;
                 });
             },
-            1 => {  // Run HotStuff with Async Fallback
+            Protocol::HotStuffWithAsyncFallback => {  // Run HotStuff with Async Fallback
                 let mut hotstuff_with_fallback = Fallback::new(
                     name,
                     committee,
