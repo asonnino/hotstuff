@@ -24,7 +24,7 @@ impl Digest {
         self.0.to_vec()
     }
 
-    pub fn len(&self) -> usize {
+    pub fn size(&self) -> usize {
         self.0.len()
     }
 }
