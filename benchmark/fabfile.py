@@ -13,7 +13,7 @@ from aws.remote import Bench, BenchError
 
 
 @task
-def local(ct):
+def local(ctx):
     bench_params = {
         'nodes': 4,
         'rate': 1_000,
