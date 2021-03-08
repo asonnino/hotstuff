@@ -3,6 +3,7 @@ from collections import defaultdict
 from statistics import mean, stdev
 from glob import glob
 from copy import deepcopy
+from os.path import join
 import os
 
 from benchmark.utils import PathMaker
@@ -68,14 +69,13 @@ class Result:
 
 class LogAggregator:
     def __init__(self):
-        filenames = glob(PathMaker.result_file(r'*', r'*', r'*'))
         data = ''
-        for filename in filenames:
+        for filename in glob(join(PathMaker.results_path(), '*.txt')):
             with open(filename, 'r') as f:
                 data += f.read()
 
         records = defaultdict(list)
-        for chunk in data.replace(',', '').split('RESULTS')[1:]:
+        for chunk in data.replace(',', '').split('SUMMARY')[1:]:
             if chunk:
                 records[Setup.from_str(chunk)] += [Result.from_str(chunk)]
 
@@ -103,7 +103,6 @@ class LogAggregator:
                     f'{data}'
                     '-----------------------------------------\n'
                 )
-
                 filename = PathMaker.agg_file(
                     setup.nodes, setup.rate, setup.tx_size
                 )

@@ -5,6 +5,7 @@ use crate::front::Front;
 use async_trait::async_trait;
 use consensus::{NodeMempool, PayloadStatus};
 use crypto::{Digest, PublicKey, SignatureService};
+use log::info;
 use network::{NetReceiver, NetSender};
 use std::convert::TryInto;
 use store::Store;
@@ -34,6 +35,19 @@ impl Mempool {
         signature_service: SignatureService,
         store: Store,
     ) -> MempoolResult<Self> {
+        info!(
+            "Mempool queue capacity set to {} payloads",
+            parameters.queue_capacity
+        );
+        info!(
+            "Mempool max payload size set to {} B",
+            parameters.max_payload_size
+        );
+        info!(
+            "Mempool min block delay set to {} ms",
+            parameters.min_block_delay
+        );
+
         let (tx_network, rx_network) = channel(1000);
         let (tx_core, rx_core) = channel(1000);
         let (tx_consensus, rx_consensus) = channel(1000);

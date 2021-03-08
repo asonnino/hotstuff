@@ -38,7 +38,7 @@ class LogParser:
                 results = p.map(self._parse_nodes, nodes)
         except (ValueError, IndexError) as e:
             raise ParseError(f'Failed to parse node logs: {e}')
-        self.payload, proposals, commits, sizes, self.samples, timeouts, \
+        proposals, commits, sizes, self.samples, timeouts, self.configs\
             = zip(*results)
         self.proposals = self._merge_results([x.items() for x in proposals])
         self.commits = self._merge_results([x.items() for x in commits])
@@ -87,8 +87,6 @@ class LogParser:
         if search(r'panic', log) is not None:
             raise ParseError('Client(s) panicked')
 
-        payload = int(search(r'Max payload size: (\d+)', log).group(1))
-
         tmp = findall(r'\[(.*Z) .* Created B\d+\(([^ ]+)\)', log)
         tmp = [(d, self._to_posix(t)) for t, d in tmp]
         proposals = self._merge_results([tmp])
@@ -106,7 +104,26 @@ class LogParser:
         tmp = findall(r'.* INFO .* Timeout', log)
         timeouts = len(tmp)
 
-        return payload, proposals, commits, sizes, samples, timeouts
+        configs = {
+            'consensus': {
+                'max_payload_size': int(
+                    search(r'Consensus max payload size .* (\d+)', log).group(1)
+                ),
+                'min_block_delay': int(
+                    search(r'Consensus min block delay .* (\d+)', log).group(1)
+                ),
+            },
+            'mempool': {
+                'max_payload_size': int(
+                    search(r'Mempool max payload size .* (\d+)', log).group(1)
+                ),
+                'min_block_delay': int(
+                    search(r'Mempool min block delay .* (\d+)', log).group(1)
+                ),
+            }
+        }
+
+        return proposals, commits, sizes, samples, timeouts, configs
 
     def _to_posix(self, string):
         x = datetime.fromisoformat(string.replace('Z', '+00:00'))
@@ -154,17 +171,29 @@ class LogParser:
         consensus_tps, consensus_bps, _ = self._consensus_throughput()
         end_to_end_tps, end_to_end_bps, duration = self._end_to_end_throughput()
         end_to_end_latency = self._end_to_end_latency() * 1000
+
+        consensus_max_payload_size = self.configs[0]['consensus']['max_payload_size']
+        consensus_min_block_delay = self.configs[0]['consensus']['min_block_delay']
+        mempool_max_payload_size = self.configs[0]['mempool']['max_payload_size']
+        mempool_min_block_delay = self.configs[0]['mempool']['min_block_delay']
+
         return (
             '\n'
             '-----------------------------------------\n'
-            ' RESULTS:\n'
+            ' SUMMARY:\n'
             '-----------------------------------------\n'
+            ' + CONFIG:\n'
             f' Committee size: {self.committee_size} nodes\n'
-            f' Max payload size: {self.payload[0]:,} B \n'
-            f' Transaction size: {self.size[0]:,} B \n'
             f' Input rate: {sum(self.rate):,} tx/s\n'
+            f' Transaction size: {self.size[0]:,} B\n'
             f' Execution time: {round(duration):,} s\n'
             '\n'
+            f' Consensus max payloads size: {consensus_max_payload_size:,} B\n'
+            f' Consensus min block delay: {consensus_min_block_delay:,} ms\n'
+            f' Mempool max payloads size: {mempool_max_payload_size:,} B\n'
+            f' Mempool min block delay: {mempool_min_block_delay:,} ms\n'
+            '\n'
+            ' + RESULTS:\n'
             f' Consensus TPS: {round(consensus_tps):,} tx/s\n'
             f' Consensus BPS: {round(consensus_bps):,} B/s\n'
             f' Consensus latency: {round(consensus_latency):,} ms\n'

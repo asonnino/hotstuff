@@ -2,7 +2,6 @@ from re import findall, search
 import matplotlib.pyplot as plt
 from matplotlib.ticker import StrMethodFormatter
 from glob import glob
-from os.path import join
 
 from benchmark.utils import PathMaker
 

@@ -92,10 +92,10 @@ def install(ctx):
 def remote(ctx):
     bench_params = {
         'nodes': [4],
-        'rate': [20_000],
+        'rate': [5_000, 10_000, 15_000, 20_000, 25_000],
         'tx_size': 512,
         'duration': 300,
-        'runs': 2,
+        'runs': 5,
     }
     node_params = {
         'consensus': {
