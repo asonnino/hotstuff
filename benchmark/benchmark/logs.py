@@ -101,7 +101,7 @@ class LogParser:
         tmp = findall(r'Payload ([^ ]+) contains (\d+) sample', log)
         samples = {d: int(s) for d, s in tmp if d in commits}
 
-        tmp = findall(r'.* INFO .* Timeout', log)
+        tmp = findall(r'.* WARN .* Timeout', log)
         timeouts = len(tmp)
 
         configs = {
