@@ -1,4 +1,4 @@
-<img width="400" src="./.assets/chain.png" alt="HotStuff Chain" />
+# HotStuff
 
 ---
 
