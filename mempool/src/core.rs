@@ -5,7 +5,9 @@ use crate::messages::{Payload, PayloadMaker, Transaction};
 use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
-use log::{debug, error, info, warn};
+#[cfg(feature = "benchmark")]
+use log::info;
+use log::{debug, error, warn};
 use network::NetMessage;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -51,7 +53,6 @@ impl Core {
     ) -> Self {
         let queue = HashSet::with_capacity(parameters.queue_capacity);
         let payload_maker = PayloadMaker::new(name, signature_service, parameters.max_payload_size);
-        info!("Max payload size: {} B", parameters.max_payload_size);
         Self {
             name,
             committee,

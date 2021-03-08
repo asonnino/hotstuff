@@ -1,10 +1,9 @@
 from re import findall, search
-from glob import glob
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator, StrMethodFormatter
-from os.path import join
-from statistics import mean
-import sys
+from matplotlib.ticker import StrMethodFormatter
+from glob import glob
+
+from benchmark.utils import PathMaker
 
 
 class PlotError(Exception):
@@ -13,10 +12,8 @@ class PlotError(Exception):
 
 class Ploter:
     def __init__(self, filenames):
-        ok = isinstance(filenames, list) and filenames \
-            and all(isinstance(x, str) for x in filenames)
-        if not ok:
-            raise PlotError('Invalid input arguments')
+        if not filenames:
+            raise PlotError('No data to plot')
 
         self.results = []
         try:
@@ -49,13 +46,6 @@ class Ploter:
         size = int(search(r'Transaction size: (\d+)', data).group(1))
         return x * 10**6 / size
 
-    def nodes(self, data):
-        x = search(r'Committee size: (\d+)', data).group(1)
-        return f'{x} nodes'
-
-    def tx_size(self, data):
-        return search(r'Transaction size: .*', data).group(0)
-
     def _plot(self, x_label, y_label, y_axis, z_axis, filename):
         plt.figure()
         for result in self.results:
@@ -69,13 +59,13 @@ class Ploter:
                 marker='o', label=z_axis(result), linestyle='dotted'
             )
 
+        plt.xlim(xmin=0)
         plt.ylim(bottom=0)
         plt.xlabel(x_label)
         plt.ylabel(y_label[0])
         plt.legend(loc='upper right')
         ax = plt.gca()
-        #ax.ticklabel_format(useOffset=False, style='plain')
-        #ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        ax.xaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
         ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
         if len(y_label) > 1:
             secaxy = ax.secondary_yaxis(
@@ -84,17 +74,44 @@ class Ploter:
             secaxy.set_ylabel(y_label[1])
             secaxy.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
 
-        plt.savefig(f'{filename}.pdf', bbox_inches='tight')
-        plt.savefig(f'{filename}.png', bbox_inches='tight')
+        for x in ['pdf', 'png']:
+            plt.savefig(PathMaker.plot_file(filename, x), bbox_inches='tight')
 
-    def plot_tps(self, z_axis):
+    @staticmethod
+    def nodes(data):
+        x = search(r'Committee size: (\d+)', data).group(1)
+        return f'{x} nodes'
+
+    @staticmethod
+    def tx_size(data):
+        return search(r'Transaction size: .*', data).group(0)
+
+    @classmethod
+    def plot_robustness(cls, z_axis):
         assert hasattr(z_axis, '__call__')
-        x_label = 'Committee size'
+        x_label = 'Input rate (tx/s)'
         y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
-        self._plot(x_label, y_label, self._tps, z_axis, 'tps')
 
-    def plot_latency(self, z_axis):
+        files = glob(PathMaker.agg_file(r'[0-9]*', 'x', r'*'))
+        ploter = cls(files)
+        ploter._plot(x_label, y_label, ploter._tps, z_axis, 'robustness')
+
+    @classmethod
+    def plot_latency(cls, z_axis):
         assert hasattr(z_axis, '__call__')
         x_label = 'Throughput (tx/s)'
         y_label = ['Latency (ms)']
-        self._plot(x_label, y_label, self._latency, z_axis, 'latency')
+
+        files = glob(PathMaker.agg_file(r'[0-9]*', 'any', r'*'))
+        ploter = cls(files)
+        ploter._plot(x_label, y_label, ploter._latency, z_axis, 'latency')
+
+    @classmethod
+    def plot_tps(cls, z_axis):
+        assert hasattr(z_axis, '__call__')
+        x_label = 'Committee size'
+        y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
+
+        files = glob(PathMaker.agg_file('x', 'any', r'*'))
+        ploter = cls(files)
+        ploter._plot(x_label, y_label, ploter._tps, z_axis, 'tps')

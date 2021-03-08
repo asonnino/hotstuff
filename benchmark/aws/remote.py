@@ -137,7 +137,6 @@ class Bench:
         # Cleanup all local configuration files.
         cmd = CommandMaker.cleanup()
         subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
-        sleep(0.5)  # Removing the store may take time.
 
         # Recompile the latest code.
         cmd = CommandMaker.compile().split()
@@ -241,7 +240,7 @@ class Bench:
 
         # Parse logs and return the parser.
         Print.info('Parsing logs and computing performance...')
-        return LogParser.process('./logs')
+        return LogParser.process(PathMaker.logs_path())
 
     def run(self, bench_parameters_dict, node_parameters_dict, debug=False):
         assert isinstance(debug, bool)
@@ -251,12 +250,6 @@ class Bench:
             node_parameters = NodeParameters(node_parameters_dict)
         except ConfigError as e:
             raise BenchError('Invalid nodes or bench parameters', e)
-
-        try:
-            cmd = f'mkdir -p {PathMaker.results_path()}'
-            subprocess.run(cmd.split(), check=True)
-        except subprocess.SubprocessError as e:
-            raise BenchError('Failed to create results folder', e)
 
         # Select which hosts to use.
         selected_hosts = self._select_hosts(bench_parameters)
@@ -292,12 +285,9 @@ class Bench:
                         self._run_single(
                             hosts, r, bench_parameters, node_parameters, debug
                         )
-                        self._logs(hosts).print(
-                            join(
-                                PathMaker.results_path(),
-                                bench_parameters.result_filename(n, r)
-                            )
-                        )
+                        self._logs(hosts).print(PathMaker.result_file(
+                            n, r, bench_parameters.tx_size
+                        ))
                     except (subprocess.SubprocessError, GroupException, ParseError) as e:
                         self.kill(hosts=hosts)
                         if isinstance(e, GroupException):
