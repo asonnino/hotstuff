@@ -8,7 +8,7 @@
     "repo": {
         "name": "hotstuff",
         "url": "https://github.com/asonnino/hotstuff.git",
-        "branch": "test"
+        "branch": "main"
     },
     "instances": {
         "type": "m5d.8xlarge",
