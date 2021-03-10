@@ -3,6 +3,7 @@ use crate::common::{committee, keys, payload};
 use crate::config::Parameters;
 use bytes::Bytes;
 use crypto::Hash as _;
+use crypto::PublicKey;
 use futures::future::try_join_all;
 use futures::sink::SinkExt as _;
 use std::fs;
@@ -37,7 +38,7 @@ async fn end_to_end() {
                     Mempool::new(name, committee, parameters, signature_service, store).unwrap();
                 sleep(Duration::from_millis(100)).await;
                 let digest = vec![payload().digest().to_vec()];
-                match mempool.verify(&digest).await {
+                match mempool.verify(&digest, PublicKey::default()).await {
                     PayloadStatus::Accept => assert!(true),
                     _ => assert!(false),
                 }

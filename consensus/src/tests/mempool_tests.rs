@@ -2,6 +2,7 @@ use super::*;
 use crate::common::{block, keys, MockMempool};
 use crate::messages::{Block, QC};
 use async_trait::async_trait;
+use crypto::PublicKey;
 use rand::rngs::StdRng;
 use rand::RngCore as _;
 use rand::SeedableRng as _;
@@ -15,7 +16,7 @@ impl NodeMempool for MockMempoolWait {
         Vec::default()
     }
 
-    async fn verify(&mut self, payload: &[Vec<u8>]) -> PayloadStatus {
+    async fn verify(&mut self, payload: &[Vec<u8>], _author: PublicKey) -> PayloadStatus {
         PayloadStatus::Wait(payload.to_vec())
     }
 

@@ -2,6 +2,7 @@ use crate::core::{CoreMessage, RoundNumber};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::messages::Block;
 use async_trait::async_trait;
+use crypto::PublicKey;
 use futures::future::try_join_all;
 use futures::future::FutureExt as _;
 use futures::stream::futures_unordered::FuturesUnordered;
@@ -31,7 +32,7 @@ pub trait NodeMempool: Send + Sync {
     /// return Accept if the block can be processed right away, Wait(missing_values)
     /// if the block should be processed when missing_value is the storage, or
     /// Reject if the payload is invalid and the block should be dropped.
-    async fn verify(&mut self, payload: &[Vec<u8>]) -> PayloadStatus;
+    async fn verify(&mut self, payload: &[Vec<u8>], author: PublicKey) -> PayloadStatus;
 
     /// Consensus calls this method upon commit a block. The mempool can use the
     /// knowledge that a block is committed to clean up its internal state.
@@ -101,7 +102,7 @@ impl<Mempool: 'static + NodeMempool> MempoolDriver<Mempool> {
     }
 
     pub async fn verify(&mut self, block: &Block) -> ConsensusResult<bool> {
-        match self.mempool.verify(&block.payload).await {
+        match self.mempool.verify(&block.payload, block.author).await {
             PayloadStatus::Accept => Ok(true),
             PayloadStatus::Reject => bail!(ConsensusError::InvalidPayload),
             PayloadStatus::Wait(missing) => {

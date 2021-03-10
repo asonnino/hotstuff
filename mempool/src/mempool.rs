@@ -19,7 +19,11 @@ pub mod mempool_tests;
 #[derive(Debug)]
 pub enum ConsensusMessage {
     Get(usize, oneshot::Sender<MempoolResult<Vec<Digest>>>),
-    Verify(Vec<Digest>, oneshot::Sender<MempoolResult<Vec<Digest>>>),
+    Verify(
+        Vec<Digest>,
+        PublicKey,
+        oneshot::Sender<MempoolResult<Vec<Digest>>>,
+    ),
     Cleanup(Vec<Digest>),
 }
 
@@ -119,14 +123,14 @@ impl NodeMempool for Mempool {
             .collect()
     }
 
-    async fn verify(&mut self, payload: &[Vec<u8>]) -> PayloadStatus {
+    async fn verify(&mut self, payload: &[Vec<u8>], author: PublicKey) -> PayloadStatus {
         if payload.is_empty() {
             return PayloadStatus::Accept;
         }
 
         let (sender, receiver) = oneshot::channel();
         let message = match payload.iter().map(|x| x[..].try_into()).collect() {
-            Ok(x) => ConsensusMessage::Verify(x, sender),
+            Ok(x) => ConsensusMessage::Verify(x, author, sender),
             Err(_) => return PayloadStatus::Reject,
         };
         self.channel

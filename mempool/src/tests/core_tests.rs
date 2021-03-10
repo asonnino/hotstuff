@@ -1,5 +1,6 @@
 use super::*;
 use crate::common::{committee, keys, payload};
+use crypto::PublicKey;
 use std::fs;
 use std::time::Duration;
 use tokio::sync::mpsc::channel;
@@ -111,7 +112,8 @@ async fn verify_existing_payload() {
 
     // Verify a payload.
     let (sender, receiver) = oneshot::channel();
-    let message = ConsensusMessage::Verify(vec![payload().digest()], sender);
+    let author = PublicKey::default();
+    let message = ConsensusMessage::Verify(vec![payload().digest()], author, sender);
     tx_consensus.send(message).await.unwrap();
     let result = receiver.await.unwrap();
     assert!(result.unwrap().is_empty());
@@ -126,7 +128,8 @@ async fn test_verify_missing_payload() {
     // Verify a payload.
     let (sender, receiver) = oneshot::channel();
     let digests = vec![payload().digest()];
-    let message = ConsensusMessage::Verify(digests.clone(), sender);
+    let (author, _) = keys().pop().unwrap();
+    let message = ConsensusMessage::Verify(digests.clone(), author, sender);
     tx_consensus.send(message).await.unwrap();
     let result = receiver.await.unwrap();
     assert_eq!(result.unwrap(), digests);

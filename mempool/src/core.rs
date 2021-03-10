@@ -202,7 +202,11 @@ impl Core {
         }
     }
 
-    async fn verify_payload(&mut self, digests: Vec<Digest>) -> MempoolResult<Vec<Digest>> {
+    async fn verify_payload(
+        &mut self,
+        digests: Vec<Digest>,
+        author: PublicKey,
+    ) -> MempoolResult<Vec<Digest>> {
         let mut missing = Vec::new();
         for digest in digests {
             if self.store.read(digest.to_vec()).await?.is_none() {
@@ -211,7 +215,8 @@ impl Core {
                     base64::encode(&digest.to_vec())
                 );
                 let message = CoreMessage::PayloadRequest(digest.clone(), self.name);
-                self.transmit(&message, None).await?;
+                // TODO: We need to broadcast the request if it fails the first time.
+                self.transmit(&message, Some(author)).await?;
                 missing.push(digest);
             }
         }
@@ -247,8 +252,8 @@ impl Core {
                             log(result.as_ref().map(|_| &()));
                             let _ = sender.send(result);
                         },
-                        ConsensusMessage::Verify(digests, sender) => {
-                            let result = self.verify_payload(digests).await;
+                        ConsensusMessage::Verify(digests, author, sender) => {
+                            let result = self.verify_payload(digests, author).await;
                             log(result.as_ref().map(|_| &()));
                             let _ = sender.send(result);
                         },

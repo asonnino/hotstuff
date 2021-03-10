@@ -10,7 +10,8 @@ use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
 use log::{debug, error};
 use network::NetMessage;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::time::{SystemTime, UNIX_EPOCH};
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
@@ -34,13 +35,13 @@ impl Synchronizer {
     ) -> Self {
         let (tx_inner, mut rx_inner): (_, Receiver<Block>) = channel(1000);
         let mut timer = Timer::new();
-        timer.schedule(sync_retry_delay, true).await;
+        timer.schedule(5u64, true).await;
 
         let store_copy = store.clone();
         tokio::spawn(async move {
             let mut waiting = FuturesUnordered::new();
             let mut pending = HashSet::new();
-            let mut requests = HashSet::new();
+            let mut requests = HashMap::new();
             loop {
                 tokio::select! {
                     Some(block) = rx_inner.recv() => {
@@ -48,7 +49,13 @@ impl Synchronizer {
                             let previous = block.previous().clone();
                             let fut = Self::waiter(store_copy.clone(), previous.clone(), block);
                             waiting.push(fut);
-                            if requests.insert(previous.clone()) {
+
+                            if !requests.contains_key(&previous){
+                                let now = SystemTime::now()
+                                    .duration_since(UNIX_EPOCH)
+                                    .expect("Failed to measure duration")
+                                    .as_millis();
+                                requests.insert(previous.clone(), now);
                                 Self::transmit(previous, &name, &committee, &network_channel).await;
                             }
                         }
@@ -68,12 +75,16 @@ impl Synchronizer {
                     },
                     Some(_) = timer.notifier.recv() => {
                         // This implements the 'perfect point to point link' abstraction.
-                        for digest in &requests {
-                            Self::transmit(digest.clone(), &name, &committee, &network_channel).await;
+                        for (digest, timestamp) in &requests {
+                            let now = SystemTime::now()
+                                .duration_since(UNIX_EPOCH)
+                                .expect("Failed to measure duration")
+                                .as_millis();
+                            if timestamp + (sync_retry_delay as u128) < now {
+                                Self::transmit(digest.clone(), &name, &committee, &network_channel).await;
+                            }
                         }
-                        timer
-                            .schedule(sync_retry_delay, true)
-                            .await;
+                        timer.schedule(5u64, true).await;
                     },
                     else => break,
                 }

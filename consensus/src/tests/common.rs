@@ -195,7 +195,7 @@ impl NodeMempool for MockMempool {
         vec![payload.to_vec()]
     }
 
-    async fn verify(&mut self, _payload: &[Vec<u8>]) -> PayloadStatus {
+    async fn verify(&mut self, _payload: &[Vec<u8>], _author: PublicKey) -> PayloadStatus {
         PayloadStatus::Accept
     }
 

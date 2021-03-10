@@ -100,15 +100,15 @@ def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
         'nodes': [4],
-        'rate': [35_000],
+        'rate': [30_000],
         'tx_size': 512,
         'duration': 300,
-        'runs': 5,
+        'runs': 3,
     }
     node_params = {
         'consensus': {
             'timeout_delay': 30_000,
-            'sync_retry_delay': 500_000,
+            'sync_retry_delay': 100_000,
             'max_payload_size': 1_000,
             'min_block_delay': 100
         },
@@ -119,7 +119,7 @@ def remote(ctx):
         }
     }
     try:
-        Bench(ctx).run(bench_params, node_params, debug=False)
+        Bench(ctx).run(bench_params, node_params, debug=True)
     except BenchError as e:
         Print.error(e)
 
