@@ -2,11 +2,11 @@ use crate::config::{Committee, Parameters};
 use crate::core::Core;
 use crate::error::ConsensusResult;
 use crate::leader::LeaderElector;
-use crate::mempool::MempoolDriver;
+use crate::mempool::{MempoolDriver, NodeMempool};
 use crate::messages::Block;
 use crate::synchronizer::Synchronizer;
 use crypto::{PublicKey, SignatureService};
-use mempool::NodeMempool;
+use log::info;
 use network::{NetReceiver, NetSender};
 use store::Store;
 use tokio::sync::mpsc::{channel, Sender};
@@ -27,6 +27,23 @@ impl Consensus {
         mempool: Mempool,
         commit_channel: Sender<Block>,
     ) -> ConsensusResult<()> {
+        info!(
+            "Consensus timeout delay set to {} ms",
+            parameters.timeout_delay
+        );
+        info!(
+            "Consensus synchronizer retry delay set to {} ms",
+            parameters.sync_retry_delay
+        );
+        info!(
+            "Consensus max payload size set to {} B",
+            parameters.max_payload_size
+        );
+        info!(
+            "Consensus min block delay set to {} ms",
+            parameters.min_block_delay
+        );
+
         let (tx_core, rx_core) = channel(1000);
         let (tx_network, rx_network) = channel(1000);
 

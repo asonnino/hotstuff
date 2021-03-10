@@ -1,15 +1,19 @@
 from os.path import join
 
+from benchmark.utils import PathMaker
+
 
 class CommandMaker:
 
     @staticmethod
     def cleanup():
-        return 'rm -r .db-* ; rm .*.json'
+        return (
+            f'rm -r .db-* ; rm .*.json ; mkdir -p {PathMaker.results_path()}'
+        )
 
     @staticmethod
     def clean_logs():
-        return 'rm -r logs ; mkdir -p logs'
+        return f'rm -r {PathMaker.logs_path()} ; mkdir -p {PathMaker.logs_path()}'
 
     @staticmethod
     def compile():
@@ -31,15 +35,14 @@ class CommandMaker:
                 f'--store {store} --parameters {parameters}')
 
     @staticmethod
-    def run_client(address, txs, size, rate, timeout, nodes=[]):
+    def run_client(address, size, rate, timeout, nodes=[]):
         assert isinstance(address, str)
-        assert isinstance(txs, int)
         assert isinstance(size, int) and size > 0
         assert isinstance(rate, int) and rate >= 0
-        assert isinstance(nodes, list) 
+        assert isinstance(nodes, list)
         assert all(isinstance(x, str) for x in nodes)
         nodes = f'--nodes {" ".join(nodes)}' if nodes else ''
-        return (f'./client {address} --transactions {txs} --size {size} '
+        return (f'./client {address} --size {size} '
                 f'--rate {rate} --timeout {timeout} {nodes}')
 
     @staticmethod

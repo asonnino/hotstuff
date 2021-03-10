@@ -5,7 +5,6 @@ mod core;
 mod front;
 mod mempool;
 mod messages;
-mod simple;
 
 #[cfg(test)]
 #[path = "tests/common.rs"]
@@ -13,5 +12,5 @@ mod common;
 
 pub use crate::config::{Committee, Parameters};
 pub use crate::error::MempoolError;
-pub use crate::mempool::{NodeMempool, PayloadStatus};
-pub use crate::simple::SimpleMempool;
+pub use crate::mempool::Mempool;
+pub use crate::messages::Payload;

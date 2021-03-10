@@ -1,16 +1,19 @@
 use crate::config::{Committee, Parameters};
 use crate::error::{MempoolError, MempoolResult};
+use crate::mempool::ConsensusMessage;
 use crate::messages::{Payload, PayloadMaker, Transaction};
-use crate::simple::ConsensusMessage;
 use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
+#[cfg(feature = "benchmark")]
+use log::info;
 use log::{debug, error, warn};
 use network::NetMessage;
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::HashSet;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::time::{sleep, Duration};
 
 #[cfg(test)]
 #[path = "tests/core_tests.rs"]
@@ -31,7 +34,7 @@ pub struct Core {
     consensus_channel: Receiver<ConsensusMessage>,
     client_channel: Receiver<Transaction>,
     network_channel: Sender<NetMessage>,
-    queue: VecDeque<Digest>,
+    queue: HashSet<Digest>,
     payload_maker: PayloadMaker,
 }
 
@@ -48,7 +51,7 @@ impl Core {
         client_channel: Receiver<Transaction>,
         network_channel: Sender<NetMessage>,
     ) -> Self {
-        let queue = VecDeque::with_capacity(parameters.queue_capacity);
+        let queue = HashSet::with_capacity(parameters.queue_capacity);
         let payload_maker = PayloadMaker::new(name, signature_service, parameters.max_payload_size);
         Self {
             name,
@@ -64,8 +67,7 @@ impl Core {
         }
     }
 
-    async fn store_payload(&mut self, digest: &Digest, payload: &Payload) -> MempoolResult<()> {
-        let key = digest.to_vec();
+    async fn store_payload(&mut self, key: Vec<u8>, payload: &Payload) -> MempoolResult<()> {
         let value = bincode::serialize(payload).expect("Failed to serialize payload");
         self.store
             .write(key, value)
@@ -93,6 +95,37 @@ impl Core {
         Ok(())
     }
 
+    async fn process_own_payload(
+        &mut self,
+        digest: &Digest,
+        payload: Payload,
+    ) -> MempoolResult<()> {
+        let bytes = digest.to_vec();
+
+        #[cfg(feature = "benchmark")]
+        info!(
+            "Payload {} contains {} B",
+            base64::encode(&bytes),
+            payload.size()
+        );
+
+        #[cfg(feature = "benchmark")]
+        if payload.sample_txs > 0 {
+            info!(
+                "Payload {} contains {} sample tx(s)",
+                base64::encode(&bytes),
+                payload.sample_txs
+            );
+        }
+
+        // Store the payload.
+        self.store_payload(bytes, &payload).await?;
+
+        // Share the payload with all other nodes.
+        let message = CoreMessage::Payload(payload);
+        self.transmit(&message, None).await
+    }
+
     async fn handle_transaction(&mut self, transaction: Transaction) -> MempoolResult<()> {
         // Drop the transaction if our mempool is full.
         ensure!(
@@ -104,11 +137,11 @@ impl Core {
         // we will add to the queue.
         if let Some(payload) = self.payload_maker.add(transaction).await {
             let digest = payload.digest();
-            self.store_payload(&digest, &payload).await?;
-            self.queue.push_front(digest);
-            // Share this new payload with all other nodes.
-            let message = CoreMessage::Payload(payload);
-            self.transmit(&message, None).await?;
+            self.process_own_payload(&digest, payload).await?;
+            self.queue.insert(digest);
+
+            // Wait for the minimum block delay.
+            sleep(Duration::from_millis(self.parameters.min_block_delay)).await;
         }
         Ok(())
     }
@@ -132,9 +165,12 @@ impl Core {
         payload.signature.verify(&digest, &author)?;
 
         // Store payload.
-        // NOTE: A bad node may make us store a lot of crap. There is no limit
-        // to how many payload they can send us, and we will store them all.
-        self.store_payload(&digest, &payload).await?;
+        // TODO [issue #18]: A bad node may make us store a lot of junk. There is no
+        // limit to how many payloads they can send us, and we will store them all.
+        self.store_payload(digest.to_vec(), &payload).await?;
+
+        // Add the payload to the queue.
+        self.queue.insert(digest);
         Ok(())
     }
 
@@ -147,31 +183,44 @@ impl Core {
         Ok(())
     }
 
-    async fn get_payload(&mut self) -> MempoolResult<Vec<u8>> {
-        if let Some(digest) = self.queue.pop_back() {
-            Ok(digest.to_vec())
-        } else {
+    async fn get_payload(&mut self, max: usize) -> MempoolResult<Vec<Digest>> {
+        if self.queue.is_empty() {
             let payload = self.payload_maker.make().await;
             if payload.size() == 0 {
-                return Ok(Vec::default());
+                return Ok(Vec::new());
             }
             let digest = payload.digest();
-            self.store_payload(&digest, &payload).await?;
-            let message = CoreMessage::Payload(payload);
-            self.transmit(&message, None).await?;
-            Ok(digest.to_vec())
+            self.process_own_payload(&digest, payload).await?;
+            Ok(vec![digest])
+        } else {
+            let digest_len = Digest::default().size();
+            let digests = self.queue.iter().take(max / digest_len).cloned().collect();
+            for x in &digests {
+                self.queue.remove(x);
+            }
+            Ok(digests)
         }
     }
 
-    async fn verify_payload(&mut self, digest: Digest) -> MempoolResult<bool> {
-        match self.store.read(digest.to_vec()).await? {
-            Some(_) => Ok(true),
-            None => {
-                debug!("Requesting sync for payload {:?}", &digest.to_vec()[..8]);
-                let message = CoreMessage::PayloadRequest(digest, self.name);
+    async fn verify_payload(&mut self, digests: Vec<Digest>) -> MempoolResult<Vec<Digest>> {
+        let mut missing = Vec::new();
+        for digest in digests {
+            if self.store.read(digest.to_vec()).await?.is_none() {
+                debug!(
+                    "Requesting sync for payload {}",
+                    base64::encode(&digest.to_vec())
+                );
+                let message = CoreMessage::PayloadRequest(digest.clone(), self.name);
                 self.transmit(&message, None).await?;
-                Ok(false)
+                missing.push(digest);
             }
+        }
+        Ok(missing)
+    }
+
+    fn cleanup(&mut self, digests: Vec<Digest>) {
+        for x in &digests {
+            self.queue.remove(x);
         }
     }
 
@@ -193,16 +242,17 @@ impl Core {
                 },
                 Some(message) = self.consensus_channel.recv() => {
                     match message {
-                        ConsensusMessage::Get(sender) => {
-                            let result = self.get_payload().await;
+                        ConsensusMessage::Get(max, sender) => {
+                            let result = self.get_payload(max).await;
                             log(result.as_ref().map(|_| &()));
                             let _ = sender.send(result);
                         },
-                        ConsensusMessage::Verify(digest, sender) => {
-                            let result = self.verify_payload(digest).await;
+                        ConsensusMessage::Verify(digests, sender) => {
+                            let result = self.verify_payload(digests).await;
                             log(result.as_ref().map(|_| &()));
                             let _ = sender.send(result);
-                        }
+                        },
+                        ConsensusMessage::Cleanup(digests) => self.cleanup(digests),
                     }
                     Ok(())
                 },

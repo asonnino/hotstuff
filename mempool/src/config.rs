@@ -8,6 +8,7 @@ use std::net::SocketAddr;
 pub struct Parameters {
     pub queue_capacity: usize,
     pub max_payload_size: usize,
+    pub min_block_delay: u64,
 }
 
 impl Default for Parameters {
@@ -15,6 +16,7 @@ impl Default for Parameters {
         Self {
             queue_capacity: 10_000,
             max_payload_size: 100_000,
+            min_block_delay: 100,
         }
     }
 }

@@ -66,8 +66,11 @@ async fn main() {
             let store_path = subm.value_of("store").unwrap();
             match Node::new(committee_file, key_file, store_path, parameters_file).await {
                 Ok(mut node) => {
-                    // Sink the commit channel.
-                    while node.commit.recv().await.is_some() {}
+                    tokio::spawn(async move {
+                        node.analyze_block().await;
+                    })
+                    .await
+                    .expect("Failed to analyze committed blocks");
                 }
                 Err(e) => error!("{}", e),
             }

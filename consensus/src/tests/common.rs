@@ -1,10 +1,10 @@
 use crate::config::Committee;
 use crate::core::RoundNumber;
-use crate::messages::{Block, Vote, QC};
+use crate::mempool::{NodeMempool, PayloadStatus};
+use crate::messages::{Block, Timeout, Vote, QC};
 use async_trait::async_trait;
 use crypto::Hash as _;
 use crypto::{generate_keypair, Digest, PublicKey, SecretKey, Signature};
-use mempool::{NodeMempool, PayloadStatus};
 use rand::rngs::StdRng;
 use rand::RngCore as _;
 use rand::SeedableRng as _;
@@ -45,11 +45,12 @@ impl Block {
         qc: QC,
         author: PublicKey,
         round: RoundNumber,
-        payload: Vec<u8>,
+        payload: Vec<Vec<u8>>,
         secret: &SecretKey,
     ) -> Self {
         let block = Block {
             qc,
+            tc: None,
             author,
             round,
             payload,
@@ -85,6 +86,33 @@ impl Vote {
 }
 
 impl PartialEq for Vote {
+    fn eq(&self, other: &Self) -> bool {
+        self.digest() == other.digest()
+    }
+}
+
+impl Timeout {
+    pub fn new_from_key(
+        high_qc: QC,
+        round: RoundNumber,
+        author: PublicKey,
+        secret: &SecretKey,
+    ) -> Self {
+        let timeout = Self {
+            high_qc,
+            round,
+            author,
+            signature: Signature::default(),
+        };
+        let signature = Signature::new(&timeout.digest(), &secret);
+        Self {
+            signature,
+            ..timeout
+        }
+    }
+}
+
+impl PartialEq for Timeout {
     fn eq(&self, other: &Self) -> bool {
         self.digest() == other.digest()
     }
@@ -160,16 +188,16 @@ pub struct MockMempool;
 
 #[async_trait]
 impl NodeMempool for MockMempool {
-    async fn get(&mut self) -> Vec<u8> {
+    async fn get(&mut self, _max: usize) -> Vec<Vec<u8>> {
         let mut rng = StdRng::from_seed([0; 32]);
         let mut payload = [0u8; 32];
         rng.fill_bytes(&mut payload);
-        payload.to_vec()
+        vec![payload.to_vec()]
     }
 
-    async fn verify(&mut self, _payload: &[u8]) -> PayloadStatus {
+    async fn verify(&mut self, _payload: &[Vec<u8>]) -> PayloadStatus {
         PayloadStatus::Accept
     }
 
-    async fn garbage_collect(&mut self, _payload: &[u8]) {}
+    async fn garbage_collect(&mut self, _payload: &[Vec<u8>]) {}
 }

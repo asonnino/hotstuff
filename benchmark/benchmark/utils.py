@@ -34,14 +34,38 @@ class PathMaker:
         return f'.db-{i}'
 
     @staticmethod
+    def logs_path():
+        return './logs'
+
+    @staticmethod
     def node_log_file(i):
         assert isinstance(i, int) and i >= 0
-        return f'logs/node-{i}.log'
+        return f'{PathMaker.logs_path()}/node-{i}.log'
 
     @staticmethod
     def client_log_file(i):
         assert isinstance(i, int) and i >= 0
-        return f'logs/client-{i}.log'
+        return f'{PathMaker.logs_path()}/client-{i}.log'
+
+    @staticmethod
+    def results_path():
+        return './results'
+
+    @staticmethod
+    def result_file(nodes, rate, tx_size):
+        return f'{PathMaker.results_path()}/bench-{nodes}-{rate}-{tx_size}.txt'
+
+    @staticmethod
+    def plots_path():
+        return './plots'
+
+    @staticmethod
+    def agg_file(nodes, rate, tx_size):
+        return f'{PathMaker.plots_path()}/agg-{nodes}-{rate}-{tx_size}.txt'
+
+    @staticmethod
+    def plot_file(name, ext):
+        return f'{PathMaker.plots_path()}/{name}.{ext}'
 
 
 class Color:

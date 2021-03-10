@@ -23,6 +23,10 @@ impl Digest {
     pub fn to_vec(&self) -> Vec<u8> {
         self.0.to_vec()
     }
+
+    pub fn size(&self) -> usize {
+        self.0.len()
+    }
 }
 
 impl fmt::Debug for Digest {

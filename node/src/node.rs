@@ -3,7 +3,7 @@ use crate::config::{Committee, Parameters, Secret};
 use consensus::{Block, Consensus, ConsensusError};
 use crypto::SignatureService;
 use log::info;
-use mempool::{MempoolError, SimpleMempool};
+use mempool::{Mempool, MempoolError};
 use store::{Store, StoreError};
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver};
@@ -37,7 +37,7 @@ impl Node {
         store_path: &str,
         parameters: Option<&str>,
     ) -> Result<Self, NodeError> {
-        let (tx_commit, rx_commit) = channel(100);
+        let (tx_commit, rx_commit) = channel(1000);
 
         // Read the committee and secret key from file.
         let committee = Committee::read(committee_file)?;
@@ -58,7 +58,7 @@ impl Node {
         let signature_service = SignatureService::new(secret_key);
 
         // Make a new mempool.
-        let mempool = SimpleMempool::new(
+        let mempool = Mempool::new(
             name,
             committee.mempool,
             parameters.mempool,
@@ -72,7 +72,7 @@ impl Node {
             committee.consensus,
             parameters.consensus,
             signature_service,
-            store,
+            store.clone(),
             mempool,
             /* commit_channel */ tx_commit,
         )
@@ -84,5 +84,11 @@ impl Node {
 
     pub fn print_key_file(filename: &str) -> Result<(), NodeError> {
         Secret::new().write(filename)
+    }
+
+    pub async fn analyze_block(&mut self) {
+        while let Some(_block) = self.commit.recv().await {
+            // This is where we can further process committed block.
+        }
     }
 }

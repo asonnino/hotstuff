@@ -47,6 +47,9 @@ pub enum ConsensusError {
     #[error("Received QC without a quorum")]
     QCRequiresQuorum,
 
+    #[error("Received TC without a quorum")]
+    TCRequiresQuorum,
+
     #[error("Malformed block {0}")]
     MalformedBlock(Digest),
 

@@ -4,7 +4,7 @@ from itertools import repeat
 from multiprocessing import Pool
 from os.path import join
 from re import findall, search
-from statistics import mean, stdev
+from statistics import mean, median_grouped, stdev
 
 from benchmark.utils import Print
 
@@ -20,131 +20,187 @@ class LogParser:
         assert all(isinstance(x, str) for y in inputs for x in y)
         assert all(x for x in inputs)
 
-        # Ensure the benchmark run without errors.
-        self._verify(clients, nodes)
-
         self.committee_size = len(nodes)
 
         # Parse the clients logs.
         try:
-            results = [self._parse_clients(x) for x in clients]
+            with Pool() as p:
+                results = p.map(self._parse_clients, clients)
         except (ValueError, IndexError) as e:
-            raise ParseError(f'Failed to parse client log: {e}')
-        self.txs, self.size, self.rate, self.start, self.end = zip(*results)
+            raise ParseError(f'Failed to parse client logs: {e}')
+        self.size, self.rate, self.start, misses, self.sent_samples \
+            = zip(*results)
+        self.misses = sum(misses)
 
         # Parse the nodes logs.
         try:
             with Pool() as p:
                 results = p.map(self._parse_nodes, nodes)
         except (ValueError, IndexError) as e:
-            raise ParseError(f'Failed to parse node log: {e}')
-        proposals, commits = zip(*results)
-        self.proposals = {k: v for x in proposals for k, v in x.items()}
-        self.commits = {k: v for x in commits for k, v in x.items()}
+            raise ParseError(f'Failed to parse node logs: {e}')
+        proposals, commits, sizes, self.samples, timeouts, self.configs\
+            = zip(*results)
+        self.proposals = self._merge_results([x.items() for x in proposals])
+        self.commits = self._merge_results([x.items() for x in commits])
+        self.sizes = {
+            k: v for x in sizes for k, v in x.items() if k in self.commits
+        }
+        self.timeouts = max(timeouts)
 
         # Check whether clients missed their target rate.
-        status = [findall(r'rate too high', x) for x in clients]
-        miss = sum(len(x) for x in status)
-        if miss != 0:
-            Print.warn(f'Clients missed their target rate {miss:,} time(s)')
-
-        # Check whether all (non-empty) blocks created are committed.
-        if len(self.proposals) != len(self.commits):
-            raise ParseError('Nodes did not commit all non-empty block(s)')
-
-    def _verify(self, clients, nodes):
-        # Ensure all clients managed to submit their share of txs.
-        status = [search(r'Finished', x) for x in clients]
-        if sum(x is not None for x in status) != len(clients):
-            raise ParseError('Client(s) failed to send all their txs')
-
-        with Pool() as p:
-            # Ensure no node panicked.
-            status = p.starmap(search, zip(repeat(r'panic'), nodes))
-            if any(x is not None for x in status):
-                raise ParseError('Node(s) panicked')
-
-            # Ensure no transactions have been dropped.
-            status = p.starmap(search, zip(
-                repeat(r'dropping transaction'), nodes)
+        if self.misses != 0:
+            Print.warn(
+                f'Clients missed their target rate {self.misses:,} time(s)'
             )
-            if any(x is not None for x in status):
-                raise ParseError('Transactions dropped (mempool buffer full)')
+
+        # Check whether the nodes timed out.
+        # Note that nodes are expected to time out once at the beginning.
+        if self.timeouts > 1:
+            Print.warn(f'Nodes timed out {self.timeouts:,} time(s)')
+
+    def _merge_results(self, input):
+        merged = {}
+        for x in input:
+            for k, v in x:
+                if not k in merged or merged[k] > v:
+                    merged[k] = v
+        return merged
 
     def _parse_clients(self, log):
-        txs = int(search(r'(Number of transactions:) (\d+)', log).group(2))
-        size = int(search(r'(Transactions size:) (\d+)', log).group(2))
-        rate = int(search(r'(Transactions rate:) (\d+)', log).group(2))
+        if search(r'Error', log) is not None:
+            raise ParseError('Client(s) panicked')
 
-        tmp = search(r'([-:.T0123456789]*Z) (.*) (Start)', log).group(1)
-        start = self._parse_timestamp(tmp)
-        tmp = search(r'([-:.T0123456789]*Z) (.*) (Finished)', log).group(1)
-        end = self._parse_timestamp(tmp)
+        size = int(search(r'Transactions size: (\d+)', log).group(1))
+        rate = int(search(r'Transactions rate: (\d+)', log).group(1))
 
-        return txs, size, rate, start, end
+        tmp = search(r'\[(.*Z) .* Start ', log).group(1)
+        start = self._to_posix(tmp)
+
+        misses = len(findall(r'rate too high', log))
+
+        tmp = findall(r'\[(.*Z) .* sample transaction', log)
+        samples = [self._to_posix(x) for x in tmp]
+
+        return size, rate, start, misses, samples
 
     def _parse_nodes(self, log):
-        def parse(lines):
-            rounds = [int(search(r'(B)(\d+)', x).group(2)) for x in lines]
-            times = [search(r'[-:.T0123456789]*Z', x).group(0) for x in lines]
-            times = [self._parse_timestamp(x) for x in times]
-            return rounds, times
+        if search(r'panic', log) is not None:
+            raise ParseError('Client(s) panicked')
 
-        lines = findall(r'.* Created non-empty B\d+', log)
-        rounds, times = parse(lines)
-        proposals = {r: t for r, t in zip(rounds, times)}
+        tmp = findall(r'\[(.*Z) .* Created B\d+\(([^ ]+)\)', log)
+        tmp = [(d, self._to_posix(t)) for t, d in tmp]
+        proposals = self._merge_results([tmp])
 
-        lines = findall(r'.* Committed B\d+', log)
-        rounds, times = parse(lines)
-        commits = {r: t for r, t in zip(rounds, times) if r in proposals}
+        tmp = findall(r'\[(.*Z) .* Committed B\d+\(([^ ]+)\)', log)
+        tmp = [(d, self._to_posix(t)) for t, d in tmp]
+        commits = self._merge_results([tmp])
 
-        return proposals, commits
+        tmp = findall(r'Payload ([^ ]+) contains (\d+) B', log)
+        sizes = {d: int(s) for d, s in tmp}
 
-    def _parse_timestamp(self, string):
+        tmp = findall(r'Payload ([^ ]+) contains (\d+) sample', log)
+        samples = {d: int(s) for d, s in tmp if d in commits}
+
+        tmp = findall(r'.* WARN .* Timeout', log)
+        timeouts = len(tmp)
+
+        configs = {
+            'consensus': {
+                'max_payload_size': int(
+                    search(r'Consensus max payload size .* (\d+)', log).group(1)
+                ),
+                'min_block_delay': int(
+                    search(r'Consensus min block delay .* (\d+)', log).group(1)
+                ),
+            },
+            'mempool': {
+                'max_payload_size': int(
+                    search(r'Mempool max payload size .* (\d+)', log).group(1)
+                ),
+                'min_block_delay': int(
+                    search(r'Mempool min block delay .* (\d+)', log).group(1)
+                ),
+            }
+        }
+
+        return proposals, commits, sizes, samples, timeouts, configs
+
+    def _to_posix(self, string):
         x = datetime.fromisoformat(string.replace('Z', '+00:00'))
         return datetime.timestamp(x)
 
-    def consensus_throughput(self):
+    def _consensus_throughput(self):
+        if not self.commits:
+            return 0, 0, 0
         start, end = min(self.proposals.values()), max(self.commits.values())
         duration = end - start
-        tps = sum(self.txs) / duration
-        bps = tps * self.size[0]
+        bytes = sum(self.sizes.values())
+        bps = bytes / duration
+        tps = bps / self.size[0]
         return tps, bps, duration
 
-    def consensus_latency(self):
-        latency = [c - self.proposals[r] for r, c in self.commits.items()]
-        avg = mean(latency) if latency else 0
-        std = stdev(latency) if len(latency) > 1 else 0
-        return avg, std
+    def _consensus_latency(self):
+        latency = [c - self.proposals[d] for d, c in self.commits.items()]
+        return mean(latency) if latency else 0
 
-    def end_to_end_throughput(self):
+    def _end_to_end_throughput(self):
+        if not self.commits:
+            return 0, 0, 0
         start, end = min(self.start), max(self.commits.values())
         duration = end - start
-        tps = sum(self.txs) / duration
-        bps = tps * self.size[0]
+        bytes = sum(self.sizes.values())
+        bps = bytes / duration
+        tps = bps / self.size[0]
         return tps, bps, duration
 
+    def _end_to_end_latency(self):
+        latency = []
+        for start_times, samples in zip(self.sent_samples, self.samples):
+            start_times.sort()
+
+            end_times = []
+            for digest, occurrences in samples.items():
+                tmp = self.commits[digest]
+                end_times += [tmp] * occurrences
+
+            latency += [x - y for x, y in zip(end_times, start_times)]
+        return mean(latency) if latency else 0
+
     def result(self):
-        consensus_latency = self.consensus_latency()[0] * 1000
-        consensus_tps, consensus_bps, _ = self.consensus_throughput()
-        end_to_end_tps, end_to_end_bps, duration = self.end_to_end_throughput()
+        consensus_latency = self._consensus_latency() * 1000
+        consensus_tps, consensus_bps, _ = self._consensus_throughput()
+        end_to_end_tps, end_to_end_bps, duration = self._end_to_end_throughput()
+        end_to_end_latency = self._end_to_end_latency() * 1000
+
+        consensus_max_payload_size = self.configs[0]['consensus']['max_payload_size']
+        consensus_min_block_delay = self.configs[0]['consensus']['min_block_delay']
+        mempool_max_payload_size = self.configs[0]['mempool']['max_payload_size']
+        mempool_min_block_delay = self.configs[0]['mempool']['min_block_delay']
+
         return (
             '\n'
             '-----------------------------------------\n'
-            ' RESULTS:\n'
+            ' SUMMARY:\n'
             '-----------------------------------------\n'
+            ' + CONFIG:\n'
             f' Committee size: {self.committee_size} nodes\n'
-            f' Number of transactions: {sum(self.txs):,} txs\n'
-            f' Transaction size: {self.size[0]:,} B \n'
-            f' Transaction rate: {sum(self.rate):,} tx/s\n'
+            f' Input rate: {sum(self.rate):,} tx/s\n'
+            f' Transaction size: {self.size[0]:,} B\n'
             f' Execution time: {round(duration):,} s\n'
             '\n'
+            f' Consensus max payloads size: {consensus_max_payload_size:,} B\n'
+            f' Consensus min block delay: {consensus_min_block_delay:,} ms\n'
+            f' Mempool max payloads size: {mempool_max_payload_size:,} B\n'
+            f' Mempool min block delay: {mempool_min_block_delay:,} ms\n'
+            '\n'
+            ' + RESULTS:\n'
             f' Consensus TPS: {round(consensus_tps):,} tx/s\n'
             f' Consensus BPS: {round(consensus_bps):,} B/s\n'
             f' Consensus latency: {round(consensus_latency):,} ms\n'
             '\n'
             f' End-to-end TPS: {round(end_to_end_tps):,} tx/s\n'
             f' End-to-end BPS: {round(end_to_end_bps):,} B/s\n'
+            f' End-to-end latency: {round(end_to_end_latency):,} ms\n'
             '-----------------------------------------\n'
         )
 
@@ -167,69 +223,3 @@ class LogParser:
                 nodes += [f.read()]
 
         return cls(clients, nodes)
-
-
-class LogAggregator:
-    def __init__(self, filenames):
-        ok = isinstance(filenames, list) and filenames \
-            and all(isinstance(x, str) for x in filenames)
-        if not ok:
-            raise ParseError('Invalid input arguments')
-
-        # Load result files.
-        self.raw_results = {}
-        try:
-            for filename in filenames:
-                x = int(search(r'\d+', filename).group(0))
-                with open(filename, 'r') as f:
-                    self.raw_results[x] = f.read()
-        except (OSError, ValueError) as e:
-            raise ParseError(f'Failed to load logs: {e}')
-
-        # Aggregate results.
-        self.aggregated_results = []
-        for x, data in sorted(self.raw_results.items()):
-            ret = self._aggregate(data)
-            mean_tps, std_tps, mean_latency, std_latency = ret
-            self.aggregated_results += [(
-                f' Variable value: X={x}\n'
-                f'  + Average TPS: {round(mean_tps):,} tx/s\n'
-                f'  + Std TPS: {round(std_tps):,} tx/s\n'
-                f'  + Average latency: {round(mean_latency):,} ms\n'
-                f'  + Std latency: {round(std_latency):,} ms\n'
-            )]
-
-    def _aggregate(self, data):
-        data = data.replace(',', '')
-
-        tps = [int(x) for x in findall(r'End-to-end TPS: (\d+)', data)]
-        mean_tps = mean(tps)
-        std_tps = stdev(tps) if len(tps) > 1 else 0
-
-        latency = [int(x) for x in findall(r'Consensus latency: (\d+)', data)]
-        mean_latency = mean(latency)
-        std_latency = stdev(latency) if len(latency) > 1 else 0
-
-        return mean_tps, std_tps, mean_latency, std_latency
-
-    def result(self):
-        aggregated_results = '\n'.join(self.aggregated_results)
-        raw_results = ''.join(self.raw_results.values())
-        return (
-            '\n'
-            '-----------------------------------------\n'
-            ' AGGREGATED RESULTS:\n'
-            '-----------------------------------------\n'
-            f'{aggregated_results}'
-            '-----------------------------------------\n'
-            '\n\n\n RAW DATA:\n\n\n'
-            f'{raw_results}'
-        )
-
-    def print(self, filename):
-        assert isinstance(filename, str)
-        try:
-            with open(filename, 'w') as f:
-                f.write(self.result())
-        except OSError as e:
-            raise ParseError(f'Failed to print aggregated results: {e}')

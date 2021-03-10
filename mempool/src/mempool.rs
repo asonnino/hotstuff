@@ -1,24 +1,155 @@
+use crate::config::{Committee, Parameters};
+use crate::core::Core;
+use crate::error::MempoolResult;
+use crate::front::Front;
 use async_trait::async_trait;
+use consensus::{NodeMempool, PayloadStatus};
+use crypto::{Digest, PublicKey, SignatureService};
+use log::info;
+use network::{NetReceiver, NetSender};
+use std::convert::TryInto;
+use store::Store;
+use tokio::sync::mpsc::{channel, Sender};
+use tokio::sync::oneshot;
 
-pub enum PayloadStatus {
-    Accept,
-    Reject,
-    Wait(Vec<u8>),
+#[cfg(test)]
+#[path = "tests/mempool_tests.rs"]
+pub mod mempool_tests;
+
+#[derive(Debug)]
+pub enum ConsensusMessage {
+    Get(usize, oneshot::Sender<MempoolResult<Vec<Digest>>>),
+    Verify(Vec<Digest>, oneshot::Sender<MempoolResult<Vec<Digest>>>),
+    Cleanup(Vec<Digest>),
+}
+
+pub struct Mempool {
+    channel: Sender<ConsensusMessage>,
+}
+
+impl Mempool {
+    pub fn new(
+        name: PublicKey,
+        committee: Committee,
+        parameters: Parameters,
+        signature_service: SignatureService,
+        store: Store,
+    ) -> MempoolResult<Self> {
+        info!(
+            "Mempool queue capacity set to {} payloads",
+            parameters.queue_capacity
+        );
+        info!(
+            "Mempool max payload size set to {} B",
+            parameters.max_payload_size
+        );
+        info!(
+            "Mempool min block delay set to {} ms",
+            parameters.min_block_delay
+        );
+
+        let (tx_network, rx_network) = channel(1000);
+        let (tx_core, rx_core) = channel(1000);
+        let (tx_consensus, rx_consensus) = channel(1000);
+        let (tx_client, rx_client) = channel(1000);
+
+        // Run the front end that receives client transactions.
+        let address = committee.front_address(&name).map(|mut x| {
+            x.set_ip("0.0.0.0".parse().unwrap());
+            x
+        })?;
+
+        let front = Front::new(address, tx_client);
+        tokio::spawn(async move {
+            front.run().await;
+        });
+
+        // Run the mempool network sender and receiver.
+        let address = committee.mempool_address(&name).map(|mut x| {
+            x.set_ip("0.0.0.0".parse().unwrap());
+            x
+        })?;
+        let network_receiver = NetReceiver::new(address, tx_core);
+        tokio::spawn(async move {
+            network_receiver.run().await;
+        });
+
+        let mut network_sender = NetSender::new(rx_network);
+        tokio::spawn(async move {
+            network_sender.run().await;
+        });
+
+        // Run the core.
+        let mut core = Core::new(
+            name,
+            committee,
+            parameters,
+            signature_service,
+            store,
+            /* core_channel */ rx_core,
+            /* consensus_channel */ rx_consensus,
+            /* client_channel */ rx_client,
+            /* network_channel */ tx_network,
+        );
+        tokio::spawn(async move {
+            core.run().await;
+        });
+
+        Ok(Self {
+            channel: tx_consensus,
+        })
+    }
 }
 
 #[async_trait]
-pub trait NodeMempool: Send + Sync {
-    /// Consensus calls this method whenever it needs to create a new block.
-    /// The mempool needs to promptly provide a payload.
-    async fn get(&mut self) -> Vec<u8>;
+impl NodeMempool for Mempool {
+    async fn get(&mut self, max: usize) -> Vec<Vec<u8>> {
+        let (sender, receiver) = oneshot::channel();
+        let message = ConsensusMessage::Get(max, sender);
+        self.channel
+            .send(message)
+            .await
+            .expect("Failed to send message through consensus channel");
+        receiver
+            .await
+            .expect("Failed to receive payload from core")
+            .unwrap_or_default()
+            .iter()
+            .map(|x| x.to_vec())
+            .collect()
+    }
 
-    /// Consensus calls this method when receiving a new block. The mempool should
-    /// return Accept if the block can be processed right away, Wait(missing_value)
-    /// if the block should be processed when missing_value is the storage, or
-    /// Reject if the payload is invalid and the block should be dropped.
-    async fn verify(&mut self, payload: &[u8]) -> PayloadStatus;
+    async fn verify(&mut self, payload: &[Vec<u8>]) -> PayloadStatus {
+        if payload.is_empty() {
+            return PayloadStatus::Accept;
+        }
 
-    /// Consensus calls this method upon commit a block. The mempool can use the
-    /// knowledge that a block is committed to clean up its internal state.
-    async fn garbage_collect(&mut self, payload: &[u8]);
+        let (sender, receiver) = oneshot::channel();
+        let message = match payload.iter().map(|x| x[..].try_into()).collect() {
+            Ok(x) => ConsensusMessage::Verify(x, sender),
+            Err(_) => return PayloadStatus::Reject,
+        };
+        self.channel
+            .send(message)
+            .await
+            .expect("Failed to send message through consensus channel");
+        match receiver.await.expect("Failed to receive payload from core") {
+            Ok(missing) if missing.is_empty() => PayloadStatus::Accept,
+            Ok(missing) => PayloadStatus::Wait(missing.iter().map(|x| x.to_vec()).collect()),
+            Err(_) => PayloadStatus::Reject,
+        }
+    }
+
+    async fn garbage_collect(&mut self, payload: &[Vec<u8>]) {
+        let digests = payload
+            .iter()
+            .map(|x| x[..].try_into())
+            .collect::<Result<_, _>>()
+            .expect("Invalid payload");
+        let message = ConsensusMessage::Cleanup(digests);
+        self.channel
+            .send(message)
+            .await
+            .expect("Failed to send message through consensus channel");
+    }
 }
