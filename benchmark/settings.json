@@ -1,5 +1,5 @@
 {
-    "key_path": "/Users/asonnino/.ssh/aws",
+    "key_path": "/absolute/key/path",
     "ports": {
         "consensus": 8000,
         "mempool": 7000,
@@ -8,10 +8,11 @@
     "repo": {
         "name": "hotstuff",
         "url": "https://github.com/asonnino/hotstuff.git",
-        "branch": "main"
+        "branch": "optimistic-sync"
     },
     "instances": {
         "type": "m5d.8xlarge",
         "regions": ["us-east-1", "eu-north-1", "ap-southeast-2", "us-west-1", "ap-northeast-1"]
     }
 }
+
