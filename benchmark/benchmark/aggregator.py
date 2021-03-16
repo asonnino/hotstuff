@@ -18,7 +18,7 @@ class Setup:
     def __str__(self):
         return (
             f' Committee size: {self.nodes} nodes\n'
-            f' Input rate: {self.rate} txs\n'
+            f' Input rate: {self.rate} tx/s\n'
             f' Transaction size: {self.tx_size} B\n'
         )
 
@@ -123,7 +123,7 @@ class LogAggregator:
 
         return organized
 
-    def _print_tps(self, max_latency=4000):
+    def _print_tps(self, max_latency=2000):
         records = deepcopy(self.records)
         organized = defaultdict(list)
         for setup, result in records.items():

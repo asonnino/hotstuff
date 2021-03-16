@@ -1,5 +1,4 @@
 from fabric import task
-from glob import glob
 
 from benchmark.local import LocalBench
 from benchmark.logs import ParseError, LogParser
@@ -8,8 +7,6 @@ from benchmark.utils import Print
 from benchmark.plot import Ploter, PlotError
 from aws.instance import InstanceManager
 from aws.remote import Bench, BenchError
-
-# NOTE: Also requires tmux: brew install tmux
 
 
 @task
@@ -99,11 +96,11 @@ def install(ctx):
 def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
-        'nodes': [4],
-        'rate': [30_000],
+        'nodes': [30],
+        'rate': [40_000, 50_000, 60_000],
         'tx_size': 512,
         'duration': 300,
-        'runs': 3,
+        'runs': 2,
     }
     node_params = {
         'consensus': {
@@ -119,7 +116,7 @@ def remote(ctx):
         }
     }
     try:
-        Bench(ctx).run(bench_params, node_params, debug=True)
+        Bench(ctx).run(bench_params, node_params, debug=False)
     except BenchError as e:
         Print.error(e)
 

@@ -1,10 +1,9 @@
 from datetime import datetime
 from glob import glob
-from itertools import repeat
 from multiprocessing import Pool
 from os.path import join
 from re import findall, search
-from statistics import mean, median_grouped, stdev
+from statistics import mean
 
 from benchmark.utils import Print
 

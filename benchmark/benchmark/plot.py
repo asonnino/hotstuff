@@ -1,4 +1,4 @@
-from re import findall, search
+from re import findall, search, split
 import matplotlib.pyplot as plt
 from matplotlib.ticker import StrMethodFormatter
 from glob import glob
@@ -46,7 +46,7 @@ class Ploter:
         size = int(search(r'Transaction size: (\d+)', data).group(1))
         return x * 10**6 / size
 
-    def _plot(self, x_label, y_label, y_axis, z_axis, filename):
+    def _plot(self, x_label, y_label, y_axis, z_axis, type):
         plt.figure()
         for result in self.results:
             y_values, y_err = y_axis(result)
@@ -58,12 +58,14 @@ class Ploter:
                 x_values, y_values, yerr=y_err,  # uplims=True, lolims=True,
                 marker='o', label=z_axis(result), linestyle='dotted'
             )
+            #if type == 'latency':
+            #    plt.yscale('log')
 
         plt.xlim(xmin=0)
         plt.ylim(bottom=0)
         plt.xlabel(x_label)
         plt.ylabel(y_label[0])
-        plt.legend(loc='upper right')
+        plt.legend(loc='upper left')
         ax = plt.gca()
         ax.xaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
         ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
@@ -75,8 +77,13 @@ class Ploter:
             secaxy.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
 
         for x in ['pdf', 'png']:
-            plt.savefig(PathMaker.plot_file(filename, x), bbox_inches='tight')
+            plt.savefig(PathMaker.plot_file(type, x), bbox_inches='tight')
 
+    @staticmethod
+    def natural_keys(text):
+        def try_cast(text): return int(text) if text.isdigit() else text
+        return [try_cast(c) for c in split('(\d+)', text)]
+        
     @staticmethod
     def nodes(data):
         x = search(r'Committee size: (\d+)', data).group(1)
@@ -93,6 +100,7 @@ class Ploter:
         y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
 
         files = glob(PathMaker.agg_file(r'[0-9]*', 'x', r'*'))
+        files.sort(key=cls.natural_keys)
         ploter = cls(files)
         ploter._plot(x_label, y_label, ploter._tps, z_axis, 'robustness')
 
@@ -103,6 +111,7 @@ class Ploter:
         y_label = ['Latency (ms)']
 
         files = glob(PathMaker.agg_file(r'[0-9]*', 'any', r'*'))
+        files.sort(key=cls.natural_keys)
         ploter = cls(files)
         ploter._plot(x_label, y_label, ploter._latency, z_axis, 'latency')
 
@@ -113,5 +122,6 @@ class Ploter:
         y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
 
         files = glob(PathMaker.agg_file('x', 'any', r'*'))
+        files.sort(key=cls.natural_keys)
         ploter = cls(files)
         ploter._plot(x_label, y_label, ploter._tps, z_axis, 'tps')
