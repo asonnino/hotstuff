@@ -97,7 +97,7 @@ def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
         'nodes': [30],
-        'rate': [40_000, 50_000, 60_000],
+        'rate': [60_000],
         'tx_size': 512,
         'duration': 300,
         'runs': 2,
@@ -128,7 +128,7 @@ def plot(ctx):
     try:
         Ploter.plot_robustness(Ploter.nodes)
         Ploter.plot_latency(Ploter.nodes)
-        Ploter.plot_tps(Ploter.tx_size)
+        Ploter.plot_tps(Ploter.max_latency)
     except PlotError as e:
         Print.error(BenchError('Failed to plot performance', e))
 
