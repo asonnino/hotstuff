@@ -4,7 +4,7 @@ from os.path import basename, join, splitext
 from time import sleep
 
 from benchmark.commands import CommandMaker
-from benchmark.config import Key, LocalCommittee, NodeParameters, BenchParameters, ConfigError
+from benchmark.config import Key, TSSKey, LocalCommittee, NodeParameters, BenchParameters, ConfigError
 from benchmark.logs import LogParser, ParseError
 from benchmark.utils import Print, BenchError, PathMaker
 
@@ -66,8 +66,20 @@ class LocalBench:
                 subprocess.run(cmd, check=True)
                 keys += [Key.from_file(filename)]
 
+            # Generate threshold signature files.
+            cmd = './node threshold_keys'
+            for i in range(nodes):
+                cmd += ' --filename ' + PathMaker.threshold_key_file(i)
+            # print(cmd)
+            cmd = cmd.split()
+            subprocess.run(cmd, capture_output=True, check=True)
+
             names = [x.name for x in keys]
-            committee = LocalCommittee(names, self.BASE_PORT)
+            tss_keys = []
+            for i in range(nodes):
+                tss_keys += [TSSKey.from_file(PathMaker.threshold_key_file(i))]
+            ids = [x.id for x in tss_keys]
+            committee = LocalCommittee(names, ids, self.BASE_PORT)
             committee.print(PathMaker.committee_file())
 
             self.node_parameters.print(PathMaker.parameters_file())
@@ -106,13 +118,15 @@ class LocalBench:
             # Run the nodes.
             dbs = [PathMaker.db_path(i) for i in range(nodes)]
             node_logs = [PathMaker.node_log_file(i) for i in range(nodes)]
+            threshold_key_files = [PathMaker.threshold_key_file(i) for i in range(nodes)]
             counter = 0
-            for key_file, db, log_file in zip(key_files, dbs, node_logs):
+            for key_file, threshold_key_file, db, log_file in zip(key_files, threshold_key_files, dbs, node_logs):
                 counter += 1
                 if counter > nodes - self.node_parameters.crash:
                     break
                 cmd = CommandMaker.run_node(
                     key_file,
+                    threshold_key_file,
                     PathMaker.committee_file(),
                     db,
                     PathMaker.parameters_file(),

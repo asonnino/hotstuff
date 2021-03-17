@@ -29,6 +29,11 @@ class PathMaker:
         return f'.node-{i}.json'
 
     @staticmethod
+    def threshold_key_file(i):
+        assert isinstance(i, int) and i >= 0
+        return f'.node-tss-{i}.json'
+        
+    @staticmethod
     def db_path(i):
         assert isinstance(i, int) and i >= 0
         return f'.db-{i}'

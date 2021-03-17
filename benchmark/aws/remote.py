@@ -174,7 +174,11 @@ class Bench:
         rate_share = ceil(bench_parameters.rate / committee.size())
         timeout = node_parameters.timeout_delay
         client_logs = [PathMaker.client_log_file(i) for i in range(len(hosts))]
+        counter = 0
         for host, addr, log_file in zip(hosts, addresses, client_logs):
+            counter += 1
+            if counter > committee.size() - node_parameters.crash:
+                break
             cmd = CommandMaker.run_client(
                 addr,
                 bench_parameters.size,
@@ -188,7 +192,11 @@ class Bench:
         key_files = [PathMaker.key_file(i) for i in range(len(hosts))]
         dbs = [PathMaker.db_path(i) for i in range(len(hosts))]
         node_logs = [PathMaker.node_log_file(i) for i in range(len(hosts))]
+        counter = 0
         for host, key_file, db, log_file in zip(hosts, key_files, dbs, node_logs):
+            counter += 1
+            if counter > committee.size() - node_parameters.crash:
+                break
             cmd = CommandMaker.run_node(
                 key_file,
                 PathMaker.committee_file(),
