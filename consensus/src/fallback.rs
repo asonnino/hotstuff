@@ -18,7 +18,9 @@ use std::cmp::max;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::{Duration, sleep};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, BTreeMap};
+use threshold_crypto::PublicKeySet;
+use std::convert::TryInto;
 
 #[cfg(test)]
 #[path = "tests/fallback_tests.rs"]
@@ -30,6 +32,7 @@ pub struct Fallback<Mempool> {
     parameters: Parameters,
     store: Store,
     signature_service: SignatureService,
+    pk_set: PublicKeySet,   // the set of tss pk
     leader_elector: LeaderElector,
     mempool_driver: MempoolDriver<Mempool>,
     synchronizer: Synchronizer,
@@ -51,7 +54,7 @@ pub struct Fallback<Mempool> {
     fallback_signed_qc_weight: HashMap<SeqNumber, Stake>,    // weight of the above nodes
     fallback_randomness_share_sender: HashMap<SeqNumber, HashSet<PublicKey>>,    // set of nodes that send randomness share
     fallback_randomness_share_weight: HashMap<SeqNumber, Stake>,    // weight of the above nodes
-    fallback_randomness_shares: HashMap<SeqNumber, Vec<(PublicKey, RandomnessShare)>>,    // set of nodes that send randomness share
+    fallback_randomness_shares: HashMap<SeqNumber, Vec<RandomnessShare>>,    // set of nodes that send randomness share
     fallback_random_coin: HashMap<SeqNumber, RandomCoin>,   // random coin of each fallback
     timer: Timer<SeqNumber>,
     aggregator: Aggregator,
@@ -64,6 +67,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         committee: Committee,
         parameters: Parameters,
         signature_service: SignatureService,
+        pk_set: PublicKeySet,
         store: Store,
         leader_elector: LeaderElector,
         mempool_driver: MempoolDriver<Mempool>,
@@ -78,6 +82,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
             committee,
             parameters,
             signature_service,
+            pk_set,
             store,
             leader_elector,
             mempool_driver,
@@ -652,21 +657,34 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
             return Ok(());
         }
 
-        randomness_share.verify(&self.committee)?;
+        randomness_share.verify(&self.committee, &self.pk_set)?;
 
         let weight = self.fallback_randomness_share_weight.entry(randomness_share.seq).or_insert(0);
         let shares = self.fallback_randomness_shares.entry(randomness_share.seq).or_insert(Vec::new());
         set.insert(randomness_share.author);
-        shares.push((randomness_share.author, randomness_share.clone()));
+        shares.push(randomness_share.clone());
+
         *weight += self.committee.stake(&randomness_share.author);
         // Collected enough shares, send random coin
         if *weight >= self.committee.random_coin_threshold() {
             *weight = 0; // Only send random coin once
-            // Multicast the random coin
-            let random_coin = RandomCoin {seq: randomness_share.seq, votes: shares.to_vec()};
-            let message = CoreMessage::RandomCoin(random_coin.clone());
-            self.transmit(&message, None).await?;
-            self.handle_random_coin(random_coin.clone()).await?;
+            let mut sigs = BTreeMap::new();
+            // Check the random shares.
+            for share in shares.clone() {
+                sigs.insert(self.committee.id(share.author.clone()), share.signature_share.clone());
+            }
+            if let Ok(sig) = self.pk_set.combine_signatures(sigs.iter()) {
+                let id = usize::from_be_bytes((&sig.to_bytes()[0..8]).try_into().unwrap()) % self.committee.size();
+                let mut keys: Vec<_> = self.committee.authorities.keys().cloned().collect();
+                keys.sort();
+                let leader = keys[id];
+                debug!("Random coin of view {} elects leader id {}", randomness_share.seq, id);
+                // Multicast the random coin
+                let random_coin = RandomCoin {seq: randomness_share.seq, leader, shares: shares.to_vec()};
+                self.handle_random_coin(random_coin.clone()).await?;
+            } else {
+                error!("Wrong random coin shares!");
+            }
         }
         Ok(())
     }
@@ -676,7 +694,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
             return Ok(())
         }
 
-        random_coin.verify(&self.committee)?;
+        random_coin.verify(&self.committee, &self.pk_set)?;
         
         let view = random_coin.seq;
         self.fallback_random_coin.insert(view, random_coin.clone());

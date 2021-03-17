@@ -29,7 +29,7 @@ pub fn committee() -> Committee {
             .map(|(i, (name, _))| {
                 let address = format!("127.0.0.1:{}", i).parse().unwrap();
                 let stake = 1;
-                (name, stake, address)
+                (name, 0, stake, address)
             })
             .collect(),
         /* epoch */ 1,
@@ -44,7 +44,7 @@ pub fn fallback_committee() -> Committee {
             .map(|(i, (name, _))| {
                 let address = format!("127.0.0.1:{}", i).parse().unwrap();
                 let stake = 1;
-                (name, stake, address)
+                (name, 0, stake, address)
             })
             .collect(),
         /* epoch */ 1,

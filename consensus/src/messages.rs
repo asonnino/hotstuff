@@ -5,9 +5,10 @@ use crypto::{Digest, Hash, PublicKey, Signature, SignatureService};
 use ed25519_dalek::Digest as _;
 use ed25519_dalek::Sha512;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashSet, BTreeMap};
 use std::convert::TryInto;
 use std::fmt;
+use threshold_crypto::{SignatureShare, PublicKeySet};
 
 #[cfg(test)]
 #[path = "tests/messages_tests.rs"]
@@ -448,7 +449,7 @@ impl fmt::Debug for TC {
 pub struct RandomnessShare {
     pub seq: SeqNumber, // view
     pub author: PublicKey,
-    pub signature: Signature,
+    pub signature_share: SignatureShare,
 }
 
 impl RandomnessShare {
@@ -457,27 +458,29 @@ impl RandomnessShare {
         author: PublicKey,
         mut signature_service: SignatureService,
     ) -> Self {
-        let timeout = Self {
+        let mut hasher = Sha512::new();
+        hasher.update(seq.to_le_bytes());
+        let digest = Digest(hasher.finalize().as_slice()[..32].try_into().unwrap());
+        let signature_share = signature_service.request_tss_signature(digest).await.unwrap();
+        Self {
             seq,
             author,
-            signature: Signature::default(),
-        };
-        let signature = signature_service.request_signature(timeout.digest()).await;
-        Self {
-            signature,
-            ..timeout
+            signature_share,
         }
     }
 
-    pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
+    pub fn verify(&self, committee: &Committee, pk_set: &PublicKeySet) -> ConsensusResult<()> {
         // Ensure the authority has voting rights.
         ensure!(
             committee.stake(&self.author) > 0,
             ConsensusError::UnknownAuthority(self.author)
         );
-
+        let tss_pk = pk_set.public_key_share(committee.id(self.author));
         // Check the signature.
-        self.signature.verify(&self.digest(), &self.author)?;
+        ensure!(
+            tss_pk.verify(&self.signature_share, &self.digest()),
+            ConsensusError::InvalidThresholdSignature(self.author)
+        );
 
         Ok(())
     }
@@ -493,26 +496,28 @@ impl Hash for RandomnessShare {
 
 impl fmt::Debug for RandomnessShare {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "RandomnessShare (author {}, view {})", self.author, self.seq)
+        write!(f, "RandomnessShare (author {}, view {}, sig share {:?})", self.author, self.seq, self.signature_share)
     }
 }
 
 #[derive(Clone, Serialize, Deserialize, Default)]
 pub struct RandomCoin {
     pub seq: SeqNumber, // view
-    pub votes: Vec<(PublicKey, RandomnessShare)>,
+    pub leader: PublicKey,  // elected leader of the view
+    pub shares: Vec<RandomnessShare>,
 }
 
 impl RandomCoin {
-    pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
+    pub fn verify(&self, committee: &Committee,  pk_set: &PublicKeySet) -> ConsensusResult<()> {
         // Ensure the QC has a quorum.
         let mut weight = 0;
         let mut used = HashSet::new();
-        for (name, _) in self.votes.iter() {
-            ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
-            let voting_rights = committee.stake(name);
-            ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
-            used.insert(*name);
+        for share in self.shares.iter() {
+            let name = share.author;
+            ensure!(!used.contains(&name), ConsensusError::AuthorityReuse(name));
+            let voting_rights = committee.stake(&name);
+            ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(name));
+            used.insert(name);
             weight += voting_rights;
         }
         ensure!(
@@ -520,16 +525,28 @@ impl RandomCoin {
             ConsensusError::RandomCoinRequiresQuorum
         );
 
+        let mut sigs = BTreeMap::new();
         // Check the random shares.
-        for (_, share) in &self.votes {
-            share.verify(committee)?;
+        for share in &self.shares {
+            share.verify(committee, pk_set)?;
+            sigs.insert(committee.id(share.author), share.signature_share.clone());
         }
+        if let Ok(sig) = pk_set.combine_signatures(sigs.iter()) {
+            let id = usize::from_be_bytes((&sig.to_bytes()[0..8]).try_into().unwrap()) % committee.size();
+            let mut keys: Vec<_> = committee.authorities.keys().cloned().collect();
+            keys.sort();
+            let leader = keys[id];
+            ensure!(leader == self.leader, ConsensusError::RandomCoinWithWrongLeader);
+        } else {
+            ensure!(true, ConsensusError::RandomCoinWithWrongShares);
+        }
+
         Ok(())
     }
 }
 
 impl fmt::Debug for RandomCoin {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "RandomCoin(view {})", self.seq)
+        write!(f, "RandomCoin(view {}, leader {})", self.seq, self.leader)
     }
 }

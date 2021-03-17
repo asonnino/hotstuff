@@ -21,7 +21,7 @@ impl Default for Parameters {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Authority {
     pub name: PublicKey,
     pub front_address: SocketAddr,
@@ -30,7 +30,7 @@ pub struct Authority {
 
 pub type EpochNumber = u128;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Committee {
     pub authorities: HashMap<PublicKey, Authority>,
     pub epoch: EpochNumber,

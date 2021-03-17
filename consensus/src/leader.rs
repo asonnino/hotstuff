@@ -31,8 +31,6 @@ impl RandomLeaderElector {
         if !self.random_coins.contains_key(&view) {
             return None;
         }
-        let mut keys: Vec<_> = self.committee.authorities.keys().cloned().collect();
-        keys.sort();
-        Some(keys[view as usize % self.committee.size()])
+        Some(self.random_coins.get(&view).unwrap().leader)
     }
 }

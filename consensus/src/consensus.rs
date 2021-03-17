@@ -12,6 +12,7 @@ use network::{NetReceiver, NetSender};
 use store::Store;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::time::{Duration, sleep};
+use threshold_crypto::PublicKeySet;
 
 #[cfg(test)]
 #[path = "tests/consensus_tests.rs"]
@@ -25,6 +26,7 @@ impl Consensus {
         committee: Committee,
         parameters: Parameters,
         signature_service: SignatureService,
+        pk_set: PublicKeySet,   // The set of tss public keys
         store: Store,
         mempool: Mempool,
         commit_channel: Sender<Block>,
@@ -94,6 +96,7 @@ impl Consensus {
                     committee,
                     parameters,
                     signature_service,
+                    pk_set,
                     store,
                     leader_elector,
                     mempool_driver,

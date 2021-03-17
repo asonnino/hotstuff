@@ -38,6 +38,15 @@ pub enum ConsensusError {
     #[error("Invalid signature")]
     InvalidSignature(#[from] CryptoError),
 
+    #[error("Invalid threshold signature from {0}")]
+    InvalidThresholdSignature(PublicKey),
+
+    #[error("Random coin with wrong leader")]
+    RandomCoinWithWrongLeader,
+
+    #[error("Random coin with wrong shares")]
+    RandomCoinWithWrongShares,
+
     #[error("Received more than one vote from {0}")]
     AuthorityReuse(PublicKey),
 

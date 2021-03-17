@@ -40,27 +40,29 @@ impl Default for Parameters {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Authority {
     pub name: PublicKey,
+    pub id: usize,  // id of the node in the tss public key share set
     pub stake: Stake,
     pub address: SocketAddr,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Committee {
     pub authorities: HashMap<PublicKey, Authority>,
     pub epoch: EpochNumber,
 }
 
 impl Committee {
-    pub fn new(info: Vec<(PublicKey, Stake, SocketAddr)>, epoch: EpochNumber) -> Self {
+    pub fn new(info: Vec<(PublicKey, usize, Stake, SocketAddr)>, epoch: EpochNumber) -> Self {
         Self {
             authorities: info
                 .into_iter()
-                .map(|(name, stake, address)| {
+                .map(|(name, id, stake, address)| {
                     let authority = Authority {
                         name,
+                        id,
                         stake,
                         address,
                     };
@@ -79,18 +81,20 @@ impl Committee {
         self.authorities.get(&name).map_or_else(|| 0, |x| x.stake)
     }
 
+    pub fn id(&self, name: PublicKey) -> usize {
+        self.authorities.get(&name).unwrap().id
+    }
+
     pub fn quorum_threshold(&self) -> Stake {
         // If N = 3f + 1 + k (0 <= k < 3)
         // then (2 N + 3) / 3 = 2f + 1 + (2k + 2)/3 = 2f + 1 + k = N - f
         let total_votes: Stake = self.authorities.values().map(|x| x.stake).sum();
-        2 * total_votes / 3 + 1
+        2 * ((total_votes - 1) / 3) + 1
     }
 
     pub fn random_coin_threshold(&self) -> Stake {
-        // If N = 3f + 1 + k (0 <= k < 3)
-        // then (2 N + 3) / 3 = 2f + 1 + (2k + 2)/3 = 2f + 1 + k = N - f
         let total_votes: Stake = self.authorities.values().map(|x| x.stake).sum();
-        2 * total_votes / 3 + 1
+        (total_votes - 1) / 3 + 1
     }
 
     pub fn address(&self, name: &PublicKey) -> ConsensusResult<SocketAddr> {

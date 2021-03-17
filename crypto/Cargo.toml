@@ -11,3 +11,4 @@ ed25519-dalek = { version = "1.0.1", features = ["batch"] }
 serde = { version = "1.0", features = ["derive"] }
 rand = "0.7.3"
 base64 = "0.13.0"
+threshold_crypto = { version = "0.4", git = "https://github.com/poanetwork/threshold_crypto" }

@@ -3,6 +3,7 @@ use crate::common::{chain, fallback_committee, fallback_keys, MockMempool};
 use crypto::SecretKey;
 use std::fs;
 use tokio::sync::mpsc::channel;
+use threshold_crypto::SecretKeySet;
 
 async fn fallback(
     name: PublicKey,
@@ -17,7 +18,7 @@ async fn fallback(
         timeout_delay: 100,
         ..Parameters::default()
     };
-    let signature_service = SignatureService::new(secret);
+    let signature_service = SignatureService::new(secret, None);
     let _ = fs::remove_dir_all(store_path);
     let store = Store::new(store_path).unwrap();
     let leader_elector = LeaderElector::new(fallback_committee());
@@ -31,11 +32,18 @@ async fn fallback(
         parameters.sync_retry_delay,
     )
     .await;
+    let size = fallback_committee().size();
+    let threshold = (size - 1) / 3 + 1;
+    let mut rng = rand::thread_rng();
+    let sk_set = SecretKeySet::random(threshold, &mut rng);
+    let pk_set = sk_set.public_keys();
+    
     let mut fallback = Fallback::new(
         name,
         fallback_committee(),
         parameters,
         signature_service,
+        pk_set,
         store,
         leader_elector,
         mempool_driver,
