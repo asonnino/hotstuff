@@ -27,7 +27,7 @@ consensus = { path = "../consensus" }
 mempool = { path = "../mempool" }
 
 [features]
-benchmark = ["mempool/benchmark"]
+benchmark = ["consensus/benchmark", "mempool/benchmark"]
 
 [[bin]]         
 name = "client"   

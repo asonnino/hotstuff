@@ -3,7 +3,7 @@ use futures::stream::StreamExt as _;
 use std::collections::HashMap;
 use std::hash::Hash;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio::time::{Duration, sleep};
+use tokio::time::{sleep, Duration};
 
 #[cfg(test)]
 #[path = "tests/timer_tests.rs"]

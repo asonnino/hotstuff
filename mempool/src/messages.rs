@@ -88,7 +88,7 @@ impl PayloadMaker {
             true => Some(self.make().await),
             false => None,
         };
-        
+
         #[cfg(feature = "benchmark")]
         if tx.iter().all(|x| *x == 5u8) {
             // Count the number of sample transactions in the payload.

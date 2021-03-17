@@ -3,7 +3,7 @@ use crate::config::{Committee, Parameters, Secret};
 use consensus::{Block, Consensus, ConsensusError, Protocol};
 use crypto::{SignatureService, SecretShare};
 use log::{info, warn};
-use mempool::{MempoolError, SimpleMempool};
+use mempool::{Mempool, MempoolError};
 use store::{Store, StoreError};
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver};
@@ -74,7 +74,7 @@ impl Node {
         };
 
         // Make a new mempool.
-        let mempool = SimpleMempool::new(
+        let mempool = Mempool::new(
             name,
             committee.mempool,
             parameters.mempool,

@@ -21,6 +21,7 @@ base64 = "0.13.0"
 crypto = { path = "../crypto" }
 store = { path = "../store" }
 network = { path = "../network" }
+consensus = { path = "../consensus" }
 
 [dev-dependencies]
 rand = "0.7.3"

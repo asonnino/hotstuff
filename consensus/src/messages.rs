@@ -24,7 +24,7 @@ pub struct Block {
     pub round: SeqNumber,
     pub height: HeightNumber,   // for async block height={1,2}, for sync block height=0
     pub fallback: Bool,  // 1 if async block; 0 if sync block
-    pub payload: Vec<u8>,
+    pub payload: Vec<Vec<u8>>,
     pub signature: Signature,
 }
 
@@ -37,7 +37,7 @@ impl Block {
         round: SeqNumber,
         height: HeightNumber,
         fallback: Bool,
-        payload: Vec<u8>,
+        payload: Vec<Vec<u8>>,
         mut signature_service: SignatureService,
     ) -> Self {
         let mut block = Self {
@@ -103,7 +103,9 @@ impl Hash for Block {
         hasher.update(self.round.to_le_bytes());
         hasher.update(self.height.to_le_bytes());
         hasher.update(&self.fallback.to_le_bytes());
-        hasher.update(&self.payload);
+        for x in &self.payload {
+            hasher.update(x);
+        }
         hasher.update(&self.qc.hash);
         Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }
@@ -120,7 +122,7 @@ impl fmt::Debug for Block {
             self.round,
             self.height,
             self.qc,
-            self.payload.len(),
+            self.payload.iter().map(|x| x.len()).sum::<usize>(),
             self.fallback
         )
     }
@@ -128,7 +130,7 @@ impl fmt::Debug for Block {
 
 impl fmt::Display for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "B{}({})", self.round, base64::encode(&self.payload))
+        write!(f, "B{}", self.round)
     }
 }
 

@@ -1,10 +1,10 @@
 use crate::config::Committee;
 use crate::core::{SeqNumber, HeightNumber, Bool};
+use crate::mempool::{NodeMempool, PayloadStatus};
 use crate::messages::{Block, Timeout, Vote, QC};
 use async_trait::async_trait;
 use crypto::Hash as _;
 use crypto::{generate_keypair, Digest, PublicKey, SecretKey, Signature};
-use mempool::{NodeMempool, PayloadStatus};
 use rand::rngs::StdRng;
 use rand::RngCore as _;
 use rand::SeedableRng as _;
@@ -68,7 +68,7 @@ impl Block {
         round: SeqNumber,
         height: HeightNumber,
         fallback: Bool,
-        payload: Vec<u8>,
+        payload: Vec<Vec<u8>>,
         secret: &SecretKey,
     ) -> Self {
         let block = Block {
@@ -234,16 +234,16 @@ pub struct MockMempool;
 
 #[async_trait]
 impl NodeMempool for MockMempool {
-    async fn get(&mut self) -> Vec<u8> {
+    async fn get(&mut self, _max: usize) -> Vec<Vec<u8>> {
         let mut rng = StdRng::from_seed([0; 32]);
         let mut payload = [0u8; 32];
         rng.fill_bytes(&mut payload);
-        payload.to_vec()
+        vec![payload.to_vec()]
     }
 
-    async fn verify(&mut self, _payload: &[u8]) -> PayloadStatus {
+    async fn verify(&mut self, _payload: &[Vec<u8>]) -> PayloadStatus {
         PayloadStatus::Accept
     }
 
-    async fn garbage_collect(&mut self, _payload: &[u8]) {}
+    async fn garbage_collect(&mut self, _payload: &[Vec<u8>]) {}
 }

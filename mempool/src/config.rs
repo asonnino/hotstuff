@@ -16,7 +16,7 @@ impl Default for Parameters {
         Self {
             queue_capacity: 10_000,
             max_payload_size: 100_000,
-            min_block_delay: 100
+            min_block_delay: 100,
         }
     }
 }

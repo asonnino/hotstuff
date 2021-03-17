@@ -2,7 +2,8 @@ from fabric import task
 from glob import glob
 
 from benchmark.local import LocalBench
-from benchmark.logs import ParseError, LogParser, LogAggregator
+from benchmark.logs import ParseError, LogParser
+from benchmark.aggregator import LogAggregator
 from benchmark.utils import Print
 from benchmark.plot import Ploter, PlotError
 from aws.instance import InstanceManager
@@ -15,20 +16,21 @@ from aws.remote import Bench, BenchError
 def local(ct):
     bench_params = {
         'nodes': 4,
-        'size': 512,
-        'rate': 1000,
+        'rate': 1_000,
+        'tx_size': 512,
         'duration': 20,
     }
     node_params = {
         'consensus': {
             'timeout_delay': 100,
             'sync_retry_delay': 10_000,
+            'max_payload_size': 500,
             'min_block_delay': 0,
             'network_delay': 100
         },
         'mempool': {
             'queue_capacity': 10_000,
-            'max_payload_size': 100_000,
+            'max_payload_size': 15_000,
             'min_block_delay': 0
         },
         'protocol': 1, # 0 HotStuff, 1 HotStuffWithAsyncFallback, 2 ChainedVABA
@@ -92,17 +94,18 @@ def install(ctx):
 @task
 def remote(ctx):
     bench_params = {
-        'nodes': [20],
-        'size': 512,
-        'rate': 15_000,
+        'nodes': [4],
+        'rate': [35_000],
+        'tx_size': 512,
         'duration': 300,
-        'runs': 2,
+        'runs': 4,
     }
     node_params = {
         'consensus': {
             'timeout_delay': 60_000,
-            'sync_retry_delay': 10_000,
-            'min_block_delay': 0
+            'sync_retry_delay': 500_000,
+            'max_payload_size': 1_000,
+            'min_block_delay': 100
         },
         'mempool': {
             'queue_capacity': 100_000_000,
@@ -136,19 +139,14 @@ def logs(ctx):
 
 @task
 def aggregate(ctx):
-    files = glob('benchmark.*.txt')
-    try:
-        LogAggregator(files).print('benchmark.txt')
-    except ParseError as e:
-        Print.error(BenchError('Failed to aggregate logs', e))
+    LogAggregator().print()
 
 
 @task
 def plot(ctx):
-    files = glob('results/plot/*.txt')
     try:
-        ploter = Ploter(files)
-        ploter.plot_tps('Committee size', ploter.txs_rate)
-        ploter.plot_latency('Committee size', ploter.txs_rate)
+        ploter = Ploter(glob('plot/*.txt'))
+        #ploter.plot_tps(ploter.tx_size)
+        ploter.plot_latency(ploter.nodes)
     except PlotError as e:
         Print.error(BenchError('Failed to plot performance', e))

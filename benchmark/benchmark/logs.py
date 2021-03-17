@@ -4,7 +4,7 @@ from itertools import repeat
 from multiprocessing import Pool
 from os.path import join
 from re import findall, search
-from statistics import mean, stdev
+from statistics import mean, median_grouped, stdev
 
 from benchmark.utils import Print
 
@@ -38,11 +38,13 @@ class LogParser:
                 results = p.map(self._parse_nodes, nodes)
         except (ValueError, IndexError) as e:
             raise ParseError(f'Failed to parse node logs: {e}')
-        self.payload, proposals, commits, sizes, self.samples, timeouts \
+        self.payload, proposals, commits, sizes, self.samples, timeouts, \
             = zip(*results)
-        self.proposals = {k: v for x in proposals for k, v in x.items()}
-        self.commits = {k: v for x in commits for k, v in x.items()}
-        self.sizes = {k: v for x in sizes for k, v in x.items()}
+        self.proposals = self._merge_results([x.items() for x in proposals])
+        self.commits = self._merge_results([x.items() for x in commits])
+        self.sizes = {
+            k: v for x in sizes for k, v in x.items() if k in self.commits
+        }
         self.timeouts = max(timeouts)
 
         # Check whether clients missed their target rate.
@@ -55,6 +57,14 @@ class LogParser:
         # Note that nodes are expected to time out once at the beginning.
         if self.timeouts > 1:
             Print.warn(f'Nodes timed out {self.timeouts:,} time(s)')
+
+    def _merge_results(self, input):
+        merged = {}
+        for x in input:
+            for k, v in x:
+                if not k in merged or merged[k] > v:
+                    merged[k] = v
+        return merged
 
     def _parse_clients(self, log):
         if search(r'Error', log) is not None:
@@ -80,13 +90,15 @@ class LogParser:
         payload = int(search(r'Max payload size: (\d+)', log).group(1))
 
         tmp = findall(r'\[(.*Z) .* Created B\d+\(([^ ]+)\)', log)
-        proposals = {d: self._to_posix(t) for t, d in tmp}
+        tmp = [(d, self._to_posix(t)) for t, d in tmp]
+        proposals = self._merge_results([tmp])
 
         tmp = findall(r'\[(.*Z) .* Committed B\d+\(([^ ]+)\)', log)
-        commits = {d: self._to_posix(t) for t, d in tmp if d in proposals}
+        tmp = [(d, self._to_posix(t)) for t, d in tmp]
+        commits = self._merge_results([tmp])
 
         tmp = findall(r'Payload ([^ ]+) contains (\d+) B', log)
-        sizes = {d: int(s) for d, s in tmp if d in commits}
+        sizes = {d: int(s) for d, s in tmp}
 
         tmp = findall(r'Payload ([^ ]+) contains (\d+) sample', log)
         samples = {d: int(s) for d, s in tmp if d in commits}
@@ -111,7 +123,7 @@ class LogParser:
         return tps, bps, duration
 
     def _consensus_latency(self):
-        latency = [c - self.proposals[r] for r, c in self.commits.items()]
+        latency = [c - self.proposals[d] for d, c in self.commits.items()]
         return mean(latency) if latency else 0
 
     def _end_to_end_throughput(self):
@@ -150,7 +162,7 @@ class LogParser:
             f' Committee size: {self.committee_size} nodes\n'
             f' Max payload size: {self.payload[0]:,} B \n'
             f' Transaction size: {self.size[0]:,} B \n'
-            f' Transaction rate: {sum(self.rate):,} tx/s\n'
+            f' Input rate: {sum(self.rate):,} tx/s\n'
             f' Execution time: {round(duration):,} s\n'
             '\n'
             f' Consensus TPS: {round(consensus_tps):,} tx/s\n'
@@ -182,69 +194,3 @@ class LogParser:
                 nodes += [f.read()]
 
         return cls(clients, nodes)
-
-
-class LogAggregator:
-    def __init__(self, filenames):
-        ok = isinstance(filenames, list) and filenames \
-            and all(isinstance(x, str) for x in filenames)
-        if not ok:
-            raise ParseError('Invalid input arguments')
-
-        # Load result files.
-        self.raw_results = {}
-        try:
-            for filename in filenames:
-                x = int(search(r'\d+', filename).group(0))
-                with open(filename, 'r') as f:
-                    self.raw_results[x] = f.read()
-        except (OSError, ValueError) as e:
-            raise ParseError(f'Failed to load logs: {e}')
-
-        # Aggregate results.
-        self.aggregated_results = []
-        for x, data in sorted(self.raw_results.items()):
-            ret = self._aggregate(data)
-            mean_tps, std_tps, mean_latency, std_latency = ret
-            self.aggregated_results += [(
-                f' Variable value: X={x}\n'
-                f'  + Average TPS: {round(mean_tps):,} tx/s\n'
-                f'  + Std TPS: {round(std_tps):,} tx/s\n'
-                f'  + Average latency: {round(mean_latency):,} ms\n'
-                f'  + Std latency: {round(std_latency):,} ms\n'
-            )]
-
-    def _aggregate(self, data):
-        data = data.replace(',', '')
-
-        tps = [int(x) for x in findall(r'End-to-end TPS: (\d+)', data)]
-        mean_tps = mean(tps)
-        std_tps = stdev(tps) if len(tps) > 1 else 0
-
-        latency = [int(x) for x in findall(r'End-to-end latency: (\d+)', data)]
-        mean_latency = mean(latency)
-        std_latency = stdev(latency) if len(latency) > 1 else 0
-
-        return mean_tps, std_tps, mean_latency, std_latency
-
-    def result(self):
-        aggregated_results = '\n'.join(self.aggregated_results)
-        raw_results = ''.join(self.raw_results.values())
-        return (
-            '\n'
-            '-----------------------------------------\n'
-            ' AGGREGATED RESULTS:\n'
-            '-----------------------------------------\n'
-            f'{aggregated_results}'
-            '-----------------------------------------\n'
-            '\n\n\n RAW DATA:\n\n\n'
-            f'{raw_results}'
-        )
-
-    def print(self, filename):
-        assert isinstance(filename, str)
-        try:
-            with open(filename, 'w') as f:
-                f.write(self.result())
-        except OSError as e:
-            raise ParseError(f'Failed to print aggregated results: {e}')

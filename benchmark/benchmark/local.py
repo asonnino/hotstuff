@@ -96,7 +96,7 @@ class LocalBench:
                     break
                 cmd = CommandMaker.run_client(
                     addr,
-                    self.size,
+                    self.tx_size,
                     rate_share,
                     timeout
                 )

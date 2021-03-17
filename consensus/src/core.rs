@@ -2,8 +2,8 @@ use crate::aggregator::Aggregator;
 use crate::config::{Committee, Parameters};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
-use crate::mempool::MempoolDriver;
 use crate::messages::{Block, Timeout, Vote, QC, TC, SignedQC, RandomnessShare, RandomCoin};
+use crate::mempool::{MempoolDriver, NodeMempool};
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
 use async_recursion::async_recursion;
@@ -11,13 +11,12 @@ use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
 use log::{debug, error, info, warn};
-use mempool::NodeMempool;
 use network::NetMessage;
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::time::{Duration, sleep};
+use tokio::time::{sleep, Duration};
 
 #[cfg(test)]
 #[path = "tests/core_tests.rs"]
@@ -144,6 +143,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
 
     async fn make_vote(&mut self, block: &Block) -> Option<Vote> {
         // Check if we can vote for this block.
+        // TODO [issue #25]: The unlock condition is too brutal.
         let safety_rule_1 = block.round > self.last_voted_round;
         let mut safety_rule_2 = block.qc.round >= self.high_qc.round;
         if let Some(ref tc) = block.tc {
@@ -155,7 +155,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
 
         // Ensure we won't vote for contradicting blocks.
         self.increase_last_voted_round(block.round);
-        // TODO: Write to storage preferred_round and last_voted_round.
+        // TODO [issue #15]: Write to storage preferred_round and last_voted_round.
         Some(Vote::new(&block, self.name, self.signature_service.clone()).await)
     }
     // -- End Safety Module --
@@ -260,6 +260,10 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     #[async_recursion]
     async fn generate_proposal(&mut self, tc: Option<TC>) -> ConsensusResult<()> {
         // Make a new block.
+        let payload = self
+            .mempool_driver
+            .get(self.parameters.max_payload_size)
+            .await;
         let block = Block::new(
             self.high_qc.clone(),
             tc,
@@ -268,22 +272,28 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             self.round,
             self.height,
             self.fallback,
-            /* payload */ self.mempool_driver.get().await,
+            payload,
             self.signature_service.clone(),
         )
         .await;
         if !block.payload.is_empty() {
             info!("Created {}", block);
+
+            #[cfg(feature = "benchmark")]
+            for x in &block.payload {
+                info!("Created B{}({})", block.round, base64::encode(x));
+            }
         }
         debug!("Created {:?}", block);
-
-        // Wait for the minimum block delay. 
-        sleep(Duration::from_millis(self.parameters.min_block_delay)).await;
 
         // Process our new block and broadcast it.
         let message = CoreMessage::Propose(block.clone());
         self.transmit(&message, None).await?;
-        self.process_block(&block).await
+        self.process_block(&block).await?;
+
+        // Wait for the minimum block delay.
+        sleep(Duration::from_millis(self.parameters.min_block_delay)).await;
+        Ok(())
     }
 
     async fn process_qc(&mut self, qc: &QC) {
@@ -331,6 +341,9 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         // Store the block only if we have already processed all its ancestors.
         self.store_block(block).await?;
 
+        // Cleanup the mempool.
+        self.mempool_driver.cleanup(&b0, &b1).await;
+
         // Check if we can commit the head of the 2-chain.
         // Note that we commit blocks only if we have all its ancestors.
         let mut commit_rule = b0.round + 1 == b1.round;
@@ -338,9 +351,13 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         if commit_rule {
             if !b0.payload.is_empty() {
                 info!("Committed {}", b0);
+
+                #[cfg(feature = "benchmark")]
+                for x in &b0.payload {
+                    info!("Committed B{}({})", b0.round, base64::encode(x));
+                }
             }
             debug!("Committed {:?}", b0);
-            self.mempool_driver.garbage_collect(&b0).await;
             if let Err(e) = self.commit_channel.send(b0.clone()).await {
                 warn!("Failed to send block through the commit channel: {}", e);
             }
