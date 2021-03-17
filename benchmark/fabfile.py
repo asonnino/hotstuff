@@ -34,7 +34,7 @@ def local(ct):
             'min_block_delay': 0
         },
         'protocol': 1, # 0 HotStuff, 1 HotStuffWithAsyncFallback, 2 ChainedVABA
-        'crash': 1  # crash f nodes from the beginning
+        'crash': 0  # crash f nodes from the beginning
     }
     try:
         ret = LocalBench(bench_params, node_params).run(debug=False).result()

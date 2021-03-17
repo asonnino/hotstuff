@@ -2,7 +2,7 @@ use crate::aggregator::Aggregator;
 use crate::config::{Committee, Parameters, Stake};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
-use crate::mempool::MempoolDriver;
+use crate::mempool::{MempoolDriver, NodeMempool};
 use crate::messages::{Block, Timeout, Vote, QC, TC, SignedQC, RandomnessShare, RandomCoin};
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
@@ -12,7 +12,6 @@ use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
 use log::{debug, error, info, warn};
-use mempool::NodeMempool;
 use network::NetMessage;
 use std::cmp::max;
 use store::Store;
@@ -392,6 +391,10 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
     #[async_recursion]
     async fn generate_proposal(&mut self, tc: Option<TC>, qc: QC) -> ConsensusResult<()> {
         // Make a new block.
+        let payload = self
+            .mempool_driver
+            .get(self.parameters.max_payload_size)
+            .await;
         let block = Block::new(
             qc.clone(),
             tc,
@@ -400,12 +403,17 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
             qc.round+1,   // The chain always has consecutive round numbers
             self.height,
             self.fallback,
-            /* payload */ self.mempool_driver.get().await,
+            payload,
             self.signature_service.clone(),
         )
         .await;
         if !block.payload.is_empty() {
             info!("Created {}", block);
+
+            #[cfg(feature = "benchmark")]
+            for x in &block.payload {
+                info!("Created B{}({})", block.round, base64::encode(x));
+            }
         }
         debug!("Created {:?}", block);
 
@@ -456,6 +464,9 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         // Store the block only if we have already processed all its ancestors.
         self.store_block(block).await?;
 
+        // Cleanup the mempool.
+        self.mempool_driver.cleanup(&b0, &b1).await;
+
         if b0.round <= self.last_committed_round && self.last_committed_round != u64::MAX {
             return Ok(());
         }
@@ -472,10 +483,15 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         if same_view && endorsed {
             if !b0.payload.is_empty() {
                 info!("Committed {}", b0);
+
+                #[cfg(feature = "benchmark")]
+                for x in &b0.payload {
+                    info!("Committed B{}({})", b0.round, base64::encode(x));
+                }
             }
+
             self.last_committed_round = b0.round;
             debug!("Committed {:?}", b0);
-            self.mempool_driver.garbage_collect(&b0).await;
             if let Err(e) = self.commit_channel.send(b0.clone()).await {
                 warn!("Failed to send block through the commit channel: {}", e);
             }
