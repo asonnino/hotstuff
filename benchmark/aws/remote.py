@@ -188,6 +188,7 @@ class Bench:
             c = Connection(host, user='ubuntu', connect_kwargs=self.connect)
             c.put(PathMaker.committee_file(), '.')
             c.put(PathMaker.key_file(i), '.')
+            c.put(PathMaker.threshold_key_file(i), '.')
             c.put(PathMaker.parameters_file(), '.')
 
         return committee
@@ -222,13 +223,15 @@ class Bench:
         key_files = [PathMaker.key_file(i) for i in range(len(hosts))]
         dbs = [PathMaker.db_path(i) for i in range(len(hosts))]
         node_logs = [PathMaker.node_log_file(i) for i in range(len(hosts))]
+        threshold_key_files = [PathMaker.threshold_key_file(i) for i in range(len(hosts))]
         counter = 0
-        for host, key_file, db, log_file in zip(hosts, key_files, dbs, node_logs):
+        for host, key_file, threshold_key_file, db, log_file in zip(hosts, key_files, threshold_key_files, dbs, node_logs):
             counter += 1
             if counter > committee.size() - node_parameters.crash:
                 break
             cmd = CommandMaker.run_node(
                 key_file,
+                threshold_key_file,
                 PathMaker.committee_file(),
                 db,
                 PathMaker.parameters_file(),

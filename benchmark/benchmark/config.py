@@ -82,10 +82,11 @@ class Committee:
         mempool_authorities = data['mempool']['authorities'].values()
 
         names = [x['name'] for x in consensus_authorities]
+        ids = [x['id'] for x in consensus_authorities]
         consensus_addr = [x['address'] for x in consensus_authorities]
         front_addr = [x['front_address'] for x in mempool_authorities]
         mempool_addr = [x['mempool_address'] for x in mempool_authorities]
-        return cls(names, consensus_addr, front_addr, mempool_addr)
+        return cls(names, ids, consensus_addr, front_addr, mempool_addr)
 
 
 class LocalCommittee(Committee):

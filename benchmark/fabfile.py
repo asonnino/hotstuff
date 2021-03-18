@@ -102,16 +102,16 @@ def remote(ctx):
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 60_000,
+            'timeout_delay': 10_000,
             'sync_retry_delay': 500_000,
             'max_payload_size': 1_000,
             'min_block_delay': 100,
             'network_delay': 0
         },
         'mempool': {
-            'queue_capacity': 100_000_000,
-            'max_payload_size': 2_000_000,
-            'min_block_delay': 0
+            'queue_capacity': 100_000,
+            'max_payload_size': 500_000,
+            'min_block_delay': 100
         },
         'protocol': 1, # 0 HotStuff, 1 HotStuffWithAsyncFallback, 2 ChainedVABA
         'crash': 0  # crash f nodes from the beginning
