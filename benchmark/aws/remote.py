@@ -9,7 +9,7 @@ from math import ceil
 from os.path import join
 import subprocess
 
-from benchmark.config import Committee, Key, NodeParameters, BenchParameters, ConfigError
+from benchmark.config import Committee, Key, TSSKey, NodeParameters, BenchParameters, ConfigError
 from benchmark.utils import BenchError, Print, PathMaker, progress_bar
 from benchmark.commands import CommandMaker
 from benchmark.logs import LogParser, ParseError
@@ -76,7 +76,7 @@ class Bench:
         try:
             g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect)
             output = g.run(' && '.join(cmd), hide=True)
-            self._check_stderr(output)
+            # self._check_stderr(output)
             Print.heading(f'Initialized testbed of {len(hosts)} nodes')
         except GroupException as e:
             error = FabricError(e)
@@ -155,11 +155,24 @@ class Bench:
             subprocess.run(cmd, check=True)
             keys += [Key.from_file(filename)]
 
+        # Generate threshold signature files.
+        nodes = len(hosts)
+        cmd = './node threshold_keys'
+        for i in range(nodes):
+            cmd += ' --filename ' + PathMaker.threshold_key_file(i)
+        # print(cmd)
+        cmd = cmd.split()
+        subprocess.run(cmd, capture_output=True, check=True)
+
         names = [x.name for x in keys]
         consensus_addr = [f'{x}:{self.settings.consensus_port}' for x in hosts]
         mempool_addr = [f'{x}:{self.settings.mempool_port}' for x in hosts]
         front_addr = [f'{x}:{self.settings.front_port}' for x in hosts]
-        committee = Committee(names, consensus_addr, mempool_addr, front_addr)
+        tss_keys = []
+        for i in range(nodes):
+            tss_keys += [TSSKey.from_file(PathMaker.threshold_key_file(i))]
+        ids = [x.id for x in tss_keys]
+        committee = Committee(names, ids, consensus_addr, mempool_addr, front_addr)
         committee.print(PathMaker.committee_file())
 
         node_parameters.print(PathMaker.parameters_file())
@@ -278,6 +291,18 @@ class Bench:
         except (GroupException, ExecutionError) as e:
             e = FabricError(e) if isinstance(e, GroupException) else e
             raise BenchError('Failed to update nodes', e)
+
+        if node_parameters.protocol == 0:
+            Print.info('Running HotStuff')
+        elif node_parameters.protocol == 1:
+            Print.info('Running HotStuff with Async Fallback')
+        elif node_parameters.protocol == 2:
+            Print.info('Running Chained-VABA')
+        else:
+            Print.info('Wrong protocol type!')
+
+        Print.info(f'Crash {node_parameters.crash} nodes')
+        Print.info(f'Timeout {node_parameters.timeout_delay} ms, Network delay {node_parameters.network_delay} ms')
 
         # Run benchmarks.
         for n in bench_parameters.nodes:
