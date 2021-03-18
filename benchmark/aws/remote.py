@@ -306,6 +306,7 @@ class Bench:
 
         Print.info(f'Crash {node_parameters.crash} nodes')
         Print.info(f'Timeout {node_parameters.timeout_delay} ms, Network delay {node_parameters.network_delay} ms')
+        Print.info(f'DDOS attack {self.node_parameters.ddos}')
 
         # Run benchmarks.
         for n in bench_parameters.nodes:

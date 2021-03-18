@@ -109,6 +109,7 @@ class NodeParameters:
             inputs += [json['consensus']['max_payload_size']]
             inputs += [json['consensus']['min_block_delay']]
             inputs += [json['consensus']['network_delay']]
+            inputs += [json['consensus']['ddos']]
             inputs += [json['mempool']['queue_capacity']]
             inputs += [json['mempool']['max_payload_size']]
             inputs += [json['mempool']['min_block_delay']]
@@ -122,6 +123,7 @@ class NodeParameters:
 
         self.timeout_delay = json['consensus']['timeout_delay'] 
         self.network_delay = json['consensus']['network_delay'] 
+        self.ddos = json['consensus']['ddos']
         self.protocol = json['protocol']
         self.crash = json['crash']
         self.json = json

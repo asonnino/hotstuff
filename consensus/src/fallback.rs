@@ -296,6 +296,10 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
 
                 // Make a new block if we are the next leader and not in fallback
                 if self.fallback == 0 && self.name == self.leader_elector.get_leader(self.round) {
+                    // Simulate DDOS attack on the leader
+                    if self.parameters.ddos {
+                        sleep(Duration::from_millis(2 * self.parameters.timeout_delay)).await;
+                    }
                     self.generate_proposal(None, self.high_qc.clone()).await?;
                 }
             }
@@ -738,6 +742,10 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         self.advance_view(view+1).await;
         self.schedule_timer().await;
         if self.name == self.leader_elector.get_leader(self.round) {
+            // Simulate DDOS attack on the leader
+            if self.parameters.ddos {
+                sleep(Duration::from_millis(2 * self.parameters.timeout_delay)).await;
+            }
             self.generate_proposal(None, self.high_qc.clone())
                 .await
                 .expect("Failed to send the first block after fallback");
@@ -750,6 +758,10 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         // Also, schedule a timer in case we don't hear from the leader.
         self.schedule_timer().await;
         if self.name == self.leader_elector.get_leader(self.round) {
+            // Simulate DDOS attack on the leader
+            if self.parameters.ddos {
+                sleep(Duration::from_millis(2 * self.parameters.timeout_delay)).await;
+            }
             self.generate_proposal(None, self.high_qc.clone())
                 .await
                 .expect("Failed to send the first block");

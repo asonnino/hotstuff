@@ -113,7 +113,7 @@ class LocalBench:
 
             Print.info(f'Crash {self.node_parameters.crash} nodes')
             Print.info(f'Timeout {self.node_parameters.timeout_delay} ms, Network delay {self.node_parameters.network_delay} ms')
-
+            Print.info(f'DDOS attack {self.node_parameters.ddos}')
 
             # Run the nodes.
             dbs = [PathMaker.db_path(i) for i in range(nodes)]

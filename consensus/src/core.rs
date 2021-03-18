@@ -286,6 +286,10 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         }
         debug!("Created {:?}", block);
 
+        if self.parameters.ddos {
+            sleep(Duration::from_millis(2 * self.parameters.timeout_delay)).await;
+        }
+
         // Process our new block and broadcast it.
         let message = CoreMessage::Propose(block.clone());
         self.transmit(&message, None).await?;
