@@ -417,13 +417,14 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         }
         debug!("Created {:?}", block);
 
-        // Wait for the minimum block delay. 
-        sleep(Duration::from_millis(self.parameters.min_block_delay)).await;
-
         // Process our new block and broadcast it.
         let message = CoreMessage::Propose(block.clone());
         self.transmit(&message, None).await?;
-        self.process_block(&block).await
+        self.process_block(&block).await?;
+        
+        // Wait for the minimum block delay. 
+        sleep(Duration::from_millis(self.parameters.min_block_delay)).await;
+        Ok(())
     }
 
     async fn process_pending_blocks(&mut self) -> ConsensusResult<()> {
