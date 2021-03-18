@@ -536,6 +536,9 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         if block.fallback == 1 && block.view != self.view {
             return Ok(());
         }
+        if block.fallback != self.fallback {
+            return Ok(());
+        }
 
         // See if we can propose a fallback block extending the fallback QC
         if block.qc.fallback == 1 && (block.qc.view == self.view && block.qc.height >= self.height) {
