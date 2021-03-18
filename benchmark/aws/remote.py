@@ -205,11 +205,7 @@ class Bench:
         rate_share = ceil(rate / committee.size())
         timeout = node_parameters.timeout_delay
         client_logs = [PathMaker.client_log_file(i) for i in range(len(hosts))]
-        counter = 0
         for host, addr, log_file in zip(hosts, addresses, client_logs):
-            counter += 1
-            if counter > committee.size() - node_parameters.crash:
-                break
             cmd = CommandMaker.run_client(
                 addr,
                 bench_parameters.tx_size,
@@ -306,7 +302,7 @@ class Bench:
 
         Print.info(f'Crash {node_parameters.crash} nodes')
         Print.info(f'Timeout {node_parameters.timeout_delay} ms, Network delay {node_parameters.network_delay} ms')
-        Print.info(f'DDOS attack {self.node_parameters.ddos}')
+        Print.info(f'DDOS attack {node_parameters.ddos}')
 
         # Run benchmarks.
         for n in bench_parameters.nodes:
