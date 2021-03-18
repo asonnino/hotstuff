@@ -199,7 +199,7 @@ impl Hash for Vote {
 
 impl fmt::Debug for Vote {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "Vote(blockhash {}, view {}, round {}, height {}, fallback {}, proposer {})", self.hash, self.view, self.round, self.height, self.fallback, self.proposer)
+        write!(f, "Vote(blockhash {}, proposer {}, view {}, round {}, height {}, fallback {}, voter {})", self.hash, self.proposer, self.view, self.round, self.height, self.fallback, self.author)
     }
 }
 

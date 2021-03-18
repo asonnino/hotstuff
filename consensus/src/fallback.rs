@@ -122,7 +122,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
 
     async fn schedule_timer(&mut self) {
         self.timer
-            .schedule(self.parameters.timeout_delay, self.round)
+            .schedule(self.parameters.timeout_delay, self.view)
             .await;
     }
 
@@ -269,6 +269,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         )
         .await;
         debug!("Created {:?}", timeout);
+        self.schedule_timer().await;
         let message = CoreMessage::Timeout(timeout.clone());
         self.transmit(&message, None).await?;
         self.handle_timeout(&timeout).await
@@ -363,7 +364,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         if round < self.round {
             return;
         }
-        self.timer.cancel(self.round).await;
+        self.timer.cancel(self.view).await;
         self.round = round + 1;
         debug!("Moved to round {}", self.round);
 
@@ -377,6 +378,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         if view <= self.view {
             return;
         }
+        self.timer.cancel(self.view).await;
         self.view = view;
         info!("-------------------------------------------------------- Enter view {} --------------------------------------------------------", view);
 
