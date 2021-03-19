@@ -70,12 +70,9 @@ impl Core {
         }
     }
 
-    async fn store_payload(&mut self, key: Vec<u8>, payload: &Payload) -> MempoolResult<()> {
+    async fn store_payload(&mut self, key: Vec<u8>, payload: &Payload) {
         let value = bincode::serialize(payload).expect("Failed to serialize payload");
-        self.store
-            .write(key, value)
-            .await
-            .map_err(MempoolError::from)
+        self.store.write(key, value).await;
     }
 
     async fn transmit(
@@ -110,7 +107,7 @@ impl Core {
         }
 
         // Store the payload.
-        self.store_payload(digest.to_vec(), &payload).await?;
+        self.store_payload(digest.to_vec(), &payload).await;
 
         // Share the payload with all other nodes.
         let message = MempoolMessage::Payload(payload);
@@ -158,7 +155,7 @@ impl Core {
         // Store payload.
         // TODO [issue #18]: A bad node may make us store a lot of junk. There is no
         // limit to how many payloads they can send us, and we will store them all.
-        self.store_payload(digest.to_vec(), &payload).await?;
+        self.store_payload(digest.to_vec(), &payload).await;
 
         // Add the payload to the queue.
         self.queue.insert(digest);

@@ -89,13 +89,10 @@ impl Core {
         }
     }
 
-    async fn store_block(&mut self, block: &Block) -> ConsensusResult<()> {
+    async fn store_block(&mut self, block: &Block) {
         let key = block.digest().to_vec();
         let value = bincode::serialize(block).expect("Failed to serialize block");
-        self.store
-            .write(key, value)
-            .await
-            .map_err(ConsensusError::from)
+        self.store.write(key, value).await;
     }
 
     async fn schedule_timer(&mut self) {
@@ -305,7 +302,7 @@ impl Core {
         };
 
         // Store the block only if we have already processed all its ancestors.
-        self.store_block(block).await?;
+        self.store_block(block).await;
 
         // Check if we can commit the head of the 2-chain.
         // Note that we commit blocks only if we have all its ancestors.

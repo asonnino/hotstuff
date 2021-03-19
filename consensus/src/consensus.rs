@@ -9,7 +9,7 @@ use crypto::{PublicKey, SignatureService};
 use log::info;
 use network::{NetReceiver, NetSender};
 use store::Store;
-use tokio::sync::mpsc::{channel, Sender, Receiver};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 #[cfg(test)]
 #[path = "tests/consensus_tests.rs"]
@@ -25,7 +25,7 @@ impl Consensus {
         store: Store,
         signature_service: SignatureService,
         tx_core: Sender<ConsensusMessage>,
-        rx_core: Receiver<ConsensusMessage>, 
+        rx_core: Receiver<ConsensusMessage>,
         tx_consensus_mempool: Sender<ConsensusMempoolMessage>,
         tx_commit: Sender<Block>,
     ) -> ConsensusResult<()> {
