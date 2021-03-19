@@ -1,5 +1,8 @@
 {
-    "key_path": "/absolute/key/path",
+    "key": {
+        "name": "aws",
+        "path": "/absolute/key/path"
+    },
     "ports": {
         "consensus": 8000,
         "mempool": 7000,

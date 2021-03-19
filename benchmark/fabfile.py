@@ -1,5 +1,4 @@
 from fabric import task
-from glob import glob
 
 from benchmark.local import LocalBench
 from benchmark.logs import ParseError, LogParser
@@ -8,8 +7,6 @@ from benchmark.utils import Print
 from benchmark.plot import Ploter, PlotError
 from aws.instance import InstanceManager
 from aws.remote import Bench, BenchError
-
-# NOTE: Also requires tmux: brew install tmux
 
 
 @task
@@ -30,6 +27,7 @@ def local(ctx):
         },
         'mempool': {
             'queue_capacity': 10_000,
+            'sync_retry_delay': 100_000,
             'max_payload_size': 15_000,
             'min_block_delay': 0
         }
@@ -42,7 +40,7 @@ def local(ctx):
 
 
 @task
-def create(ctx, nodes=4):
+def create(ctx, nodes=2):
     ''' Create a testbed'''
     try:
         InstanceManager.make().create_instances(nodes)
@@ -99,21 +97,22 @@ def install(ctx):
 def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
-        'nodes': [4],
-        'rate': [35_000],
+        'nodes': [10],
+        'rate': [40_000],
         'tx_size': 512,
         'duration': 300,
-        'runs': 5,
+        'runs': 2,
     }
     node_params = {
         'consensus': {
             'timeout_delay': 30_000,
-            'sync_retry_delay': 500_000,
+            'sync_retry_delay': 100_000,
             'max_payload_size': 1_000,
             'min_block_delay': 100
         },
         'mempool': {
             'queue_capacity': 100_000,
+            'sync_retry_delay': 100_000,
             'max_payload_size': 500_000,
             'min_block_delay': 100
         }
@@ -131,7 +130,7 @@ def plot(ctx):
     try:
         Ploter.plot_robustness(Ploter.nodes)
         Ploter.plot_latency(Ploter.nodes)
-        Ploter.plot_tps(Ploter.tx_size)
+        Ploter.plot_tps(Ploter.max_latency)
     except PlotError as e:
         Print.error(BenchError('Failed to plot performance', e))
 

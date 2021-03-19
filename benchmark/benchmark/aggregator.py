@@ -14,12 +14,14 @@ class Setup:
         self.nodes = nodes
         self.rate = rate
         self.tx_size = tx_size
+        self.max_latency = 'any'
 
     def __str__(self):
         return (
             f' Committee size: {self.nodes} nodes\n'
-            f' Input rate: {self.rate} txs\n'
+            f' Input rate: {self.rate} tx/s\n'
             f' Transaction size: {self.tx_size} B\n'
+            f' Max latency: {self.max_latency} ms\n'
         )
 
     def __eq__(self, other):
@@ -104,7 +106,10 @@ class LogAggregator:
                     '-----------------------------------------\n'
                 )
                 filename = PathMaker.agg_file(
-                    setup.nodes, setup.rate, setup.tx_size
+                    setup.nodes, 
+                    setup.rate, 
+                    setup.tx_size, 
+                    max_latency=setup.max_latency
                 )
                 with open(filename, 'w') as f:
                     f.write(string)
@@ -123,23 +128,26 @@ class LogAggregator:
 
         return organized
 
-    def _print_tps(self, max_latency=4000):
+    def _print_tps(self, max_latencies=[2_000, 5_000]):
         records = deepcopy(self.records)
         organized = defaultdict(list)
-        for setup, result in records.items():
-            if result.mean_latency <= max_latency:
-                nodes = setup.nodes
-                setup.nodes = 'x'
-                setup.rate = 'any'
+        for max_latency in max_latencies:
+            for setup, result in records.items():
+                setup = deepcopy(setup)
+                if result.mean_latency <= max_latency:
+                    nodes = setup.nodes
+                    setup.nodes = 'x'
+                    setup.rate = 'any'
+                    setup.max_latency = max_latency
 
-                new_point = all(nodes != x[0] for x in organized[setup])
-                highest_tps = False
-                for w, r in organized[setup]:
-                    if result.mean_tps > r.mean_tps and nodes == w:
-                        organized[setup].remove((w, r))
-                        highest_tps = True
-                if new_point or highest_tps:
-                    organized[setup] += [(nodes, result)]
+                    new_point = all(nodes != x[0] for x in organized[setup])
+                    highest_tps = False
+                    for w, r in organized[setup]:
+                        if result.mean_tps > r.mean_tps and nodes == w:
+                            organized[setup].remove((w, r))
+                            highest_tps = True
+                    if new_point or highest_tps:
+                        organized[setup] += [(nodes, result)]
 
         [v.sort(key=lambda x: x[0]) for v in organized.values()]
         return organized

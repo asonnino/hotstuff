@@ -19,7 +19,7 @@ pub struct Block {
     pub tc: Option<TC>,
     pub author: PublicKey,
     pub round: RoundNumber,
-    pub payload: Vec<Vec<u8>>,
+    pub payload: Vec<Digest>,
     pub signature: Signature,
 }
 
@@ -29,7 +29,7 @@ impl Block {
         tc: Option<TC>,
         author: PublicKey,
         round: RoundNumber,
-        payload: Vec<Vec<u8>>,
+        payload: Vec<Digest>,
         mut signature_service: SignatureService,
     ) -> Self {
         let block = Self {
@@ -48,7 +48,7 @@ impl Block {
         Block::default()
     }
 
-    pub fn previous(&self) -> &Digest {
+    pub fn parent(&self) -> &Digest {
         &self.qc.hash
     }
 
@@ -98,7 +98,7 @@ impl fmt::Debug for Block {
             self.author,
             self.round,
             self.qc,
-            self.payload.iter().map(|x| x.len()).sum::<usize>(),
+            self.payload.iter().map(|x| x.size()).sum::<usize>(),
         )
     }
 }

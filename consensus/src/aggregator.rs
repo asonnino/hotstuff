@@ -26,7 +26,7 @@ impl Aggregator {
     }
 
     pub fn add_vote(&mut self, vote: Vote) -> ConsensusResult<Option<QC>> {
-        // TODO: A bad node may make us run out of memory by sending many votes
+        // TODO [issue #7]: A bad node may make us run out of memory by sending many votes
         // with different round numbers or different digests.
 
         // Add the new vote to our aggregator and see if we have a QC.

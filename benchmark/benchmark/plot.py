@@ -1,4 +1,4 @@
-from re import findall, search
+from re import findall, search, split
 import matplotlib.pyplot as plt
 from matplotlib.ticker import StrMethodFormatter
 from glob import glob
@@ -15,6 +15,7 @@ class Ploter:
         if not filenames:
             raise PlotError('No data to plot')
 
+        filenames.sort(key=self._natural_keys)
         self.results = []
         try:
             for filename in filenames:
@@ -22,6 +23,10 @@ class Ploter:
                     self.results += [f.read().replace(',', '')]
         except OSError as e:
             raise PlotError(f'Failed to load log files: {e}')
+
+    def _natural_keys(self, text):
+        def try_cast(text): return int(text) if text.isdigit() else text
+        return [try_cast(c) for c in split('(\d+)', text)]
 
     def _tps(self, data):
         values = findall(r' TPS: (\d+) \+/- (\d+)', data)
@@ -46,7 +51,7 @@ class Ploter:
         size = int(search(r'Transaction size: (\d+)', data).group(1))
         return x * 10**6 / size
 
-    def _plot(self, x_label, y_label, y_axis, z_axis, filename):
+    def _plot(self, x_label, y_label, y_axis, z_axis, type):
         plt.figure()
         for result in self.results:
             y_values, y_err = y_axis(result)
@@ -58,12 +63,14 @@ class Ploter:
                 x_values, y_values, yerr=y_err,  # uplims=True, lolims=True,
                 marker='o', label=z_axis(result), linestyle='dotted'
             )
+            # if type == 'latency':
+            #    plt.yscale('log')
 
         plt.xlim(xmin=0)
         plt.ylim(bottom=0)
         plt.xlabel(x_label)
         plt.ylabel(y_label[0])
-        plt.legend(loc='upper right')
+        plt.legend(loc='upper left')
         ax = plt.gca()
         ax.xaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
         ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
@@ -75,7 +82,7 @@ class Ploter:
             secaxy.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
 
         for x in ['pdf', 'png']:
-            plt.savefig(PathMaker.plot_file(filename, x), bbox_inches='tight')
+            plt.savefig(PathMaker.plot_file(type, x), bbox_inches='tight')
 
     @staticmethod
     def nodes(data):
@@ -86,13 +93,18 @@ class Ploter:
     def tx_size(data):
         return search(r'Transaction size: .*', data).group(0)
 
+    @staticmethod
+    def max_latency(data):
+        x = search(r'Max latency: (\d+)', data).group(1)
+        return f'Max latency: {float(x) / 1000:,.0f} s'
+
     @classmethod
     def plot_robustness(cls, z_axis):
         assert hasattr(z_axis, '__call__')
         x_label = 'Input rate (tx/s)'
         y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
 
-        files = glob(PathMaker.agg_file(r'[0-9]*', 'x', r'*'))
+        files = glob(PathMaker.agg_file(r'[0-9]*', 'x', r'*', 'any'))
         ploter = cls(files)
         ploter._plot(x_label, y_label, ploter._tps, z_axis, 'robustness')
 
@@ -102,7 +114,7 @@ class Ploter:
         x_label = 'Throughput (tx/s)'
         y_label = ['Latency (ms)']
 
-        files = glob(PathMaker.agg_file(r'[0-9]*', 'any', r'*'))
+        files = glob(PathMaker.agg_file(r'[0-9]*', 'any', r'*', 'any'))
         ploter = cls(files)
         ploter._plot(x_label, y_label, ploter._latency, z_axis, 'latency')
 
@@ -112,6 +124,6 @@ class Ploter:
         x_label = 'Committee size'
         y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
 
-        files = glob(PathMaker.agg_file('x', 'any', r'*'))
+        files = glob(PathMaker.agg_file('x', 'any', r'*', r'*'))
         ploter = cls(files)
         ploter._plot(x_label, y_label, ploter._tps, z_axis, 'tps')

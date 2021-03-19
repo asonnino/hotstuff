@@ -7,6 +7,7 @@ use std::net::SocketAddr;
 #[derive(Serialize, Deserialize)]
 pub struct Parameters {
     pub queue_capacity: usize,
+    pub sync_retry_delay: u64,
     pub max_payload_size: usize,
     pub min_block_delay: u64,
 }
@@ -15,6 +16,7 @@ impl Default for Parameters {
     fn default() -> Self {
         Self {
             queue_capacity: 10_000,
+            sync_retry_delay: 10_000,
             max_payload_size: 100_000,
             min_block_delay: 100,
         }
