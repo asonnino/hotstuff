@@ -67,7 +67,7 @@ impl Node {
             store.clone(),
             signature_service.clone(),
             tx_consensus.clone(),
-            rx_consensus_mempool
+            rx_consensus_mempool,
         )?;
 
         // Run the consensus core.

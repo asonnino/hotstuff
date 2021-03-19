@@ -20,8 +20,7 @@ async fn read_write_value() {
     // Write value to the store.
     let key = vec![0u8, 1u8, 2u8, 3u8];
     let value = vec![4u8, 5u8, 6u8, 7u8];
-    let result = store.write(key.clone(), value.clone()).await;
-    assert!(result.is_ok());
+    store.write(key.clone(), value.clone()).await;
 
     // Read value.
     let result = store.read(key).await;
@@ -69,6 +68,6 @@ async fn read_notify() {
     });
 
     // Write the missing value and ensure the handle terminates correctly.
-    store.write(key, value).await.unwrap();
+    store.write(key, value).await;
     assert!(handle.await.is_ok());
 }

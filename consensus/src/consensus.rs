@@ -9,7 +9,7 @@ use crypto::{PublicKey, SignatureService};
 use log::info;
 use network::{NetReceiver, NetSender};
 use store::Store;
-use tokio::sync::mpsc::{channel, Sender, Receiver};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 #[cfg(test)]
 #[path = "tests/consensus_tests.rs"]
@@ -18,6 +18,7 @@ pub mod consensus_tests;
 pub struct Consensus;
 
 impl Consensus {
+    #[allow(clippy::too_many_arguments)]
     pub async fn run(
         name: PublicKey,
         committee: Committee,
@@ -25,7 +26,7 @@ impl Consensus {
         store: Store,
         signature_service: SignatureService,
         tx_core: Sender<ConsensusMessage>,
-        rx_core: Receiver<ConsensusMessage>, 
+        rx_core: Receiver<ConsensusMessage>,
         tx_consensus_mempool: Sender<ConsensusMempoolMessage>,
         tx_commit: Sender<Block>,
     ) -> ConsensusResult<()> {

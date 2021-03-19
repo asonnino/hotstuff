@@ -3,13 +3,13 @@ use crate::common::{block, chain, committee, keys};
 use std::fs;
 
 #[tokio::test]
-async fn get_existing_previous_block() {
+async fn get_existing_parent_block() {
     let mut chain = chain(keys());
     let block = chain.pop().unwrap();
     let b2 = chain.pop().unwrap();
 
     // Add the block b2 to the store.
-    let path = ".db_test_get_existing_previous_block";
+    let path = ".db_test_get_existing_parent_block";
     let _ = fs::remove_dir_all(path);
     let mut store = Store::new(path).unwrap();
     let key = b2.digest().to_vec();
@@ -31,16 +31,16 @@ async fn get_existing_previous_block() {
     .await;
 
     // Ask the predecessor of 'block' to the synchronizer.
-    match synchronizer.get_previous_block(&block).await {
+    match synchronizer.get_parent_block(&block).await {
         Ok(Some(b)) => assert_eq!(b, b2),
         _ => assert!(false),
     }
 }
 
 #[tokio::test]
-async fn get_genesis_previous_block() {
+async fn get_genesis_parent_block() {
     // Make a new synchronizer.
-    let path = ".db_test_get_genesis_previous_block";
+    let path = ".db_test_get_genesis_parent_block";
     let _ = fs::remove_dir_all(path);
     let store = Store::new(path).unwrap();
     let (name, _) = keys().pop().unwrap();
@@ -57,20 +57,20 @@ async fn get_genesis_previous_block() {
     .await;
 
     // Ask the predecessor of 'block' to the synchronizer.
-    match synchronizer.get_previous_block(&block()).await {
+    match synchronizer.get_parent_block(&block()).await {
         Ok(Some(b)) => assert_eq!(b, Block::genesis()),
         _ => assert!(false),
     }
 }
 
 #[tokio::test]
-async fn get_missing_previous_block() {
+async fn get_missing_parent_block() {
     let mut chain = chain(keys());
     let block = chain.pop().unwrap();
-    let previous_block = chain.pop().unwrap();
+    let parent_block = chain.pop().unwrap();
 
     // Make a new synchronizer.
-    let path = ".db_test_get_missing_previous_block";
+    let path = ".db_test_get_missing_parent_block";
     let _ = fs::remove_dir_all(path);
     let mut store = Store::new(path).unwrap();
     let (name, _) = keys().pop().unwrap();
@@ -90,7 +90,7 @@ async fn get_missing_previous_block() {
     // The store does not have the parent yet.
     let copy = block.clone();
     let handle = tokio::spawn(async move {
-        match synchronizer.get_previous_block(&copy).await {
+        match synchronizer.get_parent_block(&copy).await {
             Ok(None) => assert!(true),
             _ => assert!(false),
         }
@@ -102,7 +102,7 @@ async fn get_missing_previous_block() {
         Some(NetMessage(bytes, mut recipients)) => {
             match bincode::deserialize(&bytes).unwrap() {
                 ConsensusMessage::SyncRequest(b, s) => {
-                    assert_eq!(b, previous_block.digest());
+                    assert_eq!(b, parent_block.digest());
                     assert_eq!(s, name);
                 }
                 _ => assert!(false),
@@ -120,8 +120,8 @@ async fn get_missing_previous_block() {
     assert!(handle.await.is_ok());
 
     // Add the parent to the store.
-    let key = previous_block.digest().to_vec();
-    let value = bincode::serialize(&previous_block).unwrap();
+    let key = parent_block.digest().to_vec();
+    let value = bincode::serialize(&parent_block).unwrap();
     let _ = store.write(key, value).await;
 
     // Now that we have the parent, ensure the synchronizer
