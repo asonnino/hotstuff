@@ -18,6 +18,7 @@ pub mod consensus_tests;
 pub struct Consensus;
 
 impl Consensus {
+    #[allow(clippy::too_many_arguments)]
     pub async fn run(
         name: PublicKey,
         committee: Committee,
