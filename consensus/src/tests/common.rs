@@ -1,13 +1,13 @@
 use crate::config::Committee;
 use crate::core::RoundNumber;
-use crate::mempool::{NodeMempool, PayloadStatus};
+use crate::mempool::{ConsensusMempoolMessage, PayloadStatus};
 use crate::messages::{Block, Timeout, Vote, QC};
-use async_trait::async_trait;
 use crypto::Hash as _;
 use crypto::{generate_keypair, Digest, PublicKey, SecretKey, Signature};
 use rand::rngs::StdRng;
 use rand::RngCore as _;
 use rand::SeedableRng as _;
+use tokio::sync::mpsc::Receiver;
 
 // Fixture.
 pub fn keys() -> Vec<(PublicKey, SecretKey)> {
@@ -45,7 +45,7 @@ impl Block {
         qc: QC,
         author: PublicKey,
         round: RoundNumber,
-        payload: Vec<Vec<u8>>,
+        payload: Vec<Digest>,
         secret: &SecretKey,
     ) -> Self {
         let block = Block {
@@ -186,18 +186,23 @@ pub fn chain(keys: Vec<(PublicKey, SecretKey)>) -> Vec<Block> {
 // Fixture
 pub struct MockMempool;
 
-#[async_trait]
-impl NodeMempool for MockMempool {
-    async fn get(&mut self, _max: usize) -> Vec<Vec<u8>> {
-        let mut rng = StdRng::from_seed([0; 32]);
-        let mut payload = [0u8; 32];
-        rng.fill_bytes(&mut payload);
-        vec![payload.to_vec()]
+impl MockMempool {
+    pub fn run(mut consensus_mempool_channel: Receiver<ConsensusMempoolMessage>) {
+        tokio::spawn(async move {
+            while let Some(message) = consensus_mempool_channel.recv().await {
+                match message {
+                    ConsensusMempoolMessage::Get(_max, sender) => {
+                        let mut rng = StdRng::from_seed([0; 32]);
+                        let mut payload = [0u8; 32];
+                        rng.fill_bytes(&mut payload);
+                        sender.send(vec![Digest(payload)]).unwrap();
+                    }
+                    ConsensusMempoolMessage::Verify(_block, sender) => {
+                        sender.send(PayloadStatus::Accept).unwrap()
+                    }
+                    ConsensusMempoolMessage::Cleanup(_digests, _round) => (),
+                }
+            }
+        });
     }
-
-    async fn verify(&mut self, _payload: &[Vec<u8>], _author: PublicKey) -> PayloadStatus {
-        PayloadStatus::Accept
-    }
-
-    async fn garbage_collect(&mut self, _payload: &[Vec<u8>]) {}
 }

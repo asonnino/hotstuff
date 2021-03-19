@@ -21,16 +21,20 @@ fn spawn_nodes(
             let _ = fs::remove_dir_all(&store_path);
             let store = Store::new(&store_path).unwrap();
             let signature_service = SignatureService::new(secret);
-            let mempool = MockMempool;
+            let (tx_consensus, rx_consensus) = channel(10);
+            let (tx_consensus_mempool, rx_consensus_mempool) = channel(1);
+            MockMempool::run(rx_consensus_mempool);
             let (tx_commit, mut rx_commit) = channel(1);
             tokio::spawn(async move {
                 Consensus::run(
                     name,
                     committee,
                     parameters,
-                    signature_service,
                     store,
-                    mempool,
+                    signature_service,
+                    tx_consensus,
+                    rx_consensus,
+                    tx_consensus_mempool,
                     tx_commit,
                 )
                 .await

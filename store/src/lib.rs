@@ -13,7 +13,7 @@ type Key = Vec<u8>;
 type Value = Vec<u8>;
 
 pub enum StoreCommand {
-    Write(Key, Value, oneshot::Sender<StoreResult<()>>),
+    Write(Key, Value),
     Read(Key, oneshot::Sender<StoreResult<Option<Value>>>),
     NotifyRead(Key, oneshot::Sender<StoreResult<Value>>),
 }
@@ -31,9 +31,8 @@ impl Store {
         tokio::spawn(async move {
             while let Some(command) = rx.recv().await {
                 match command {
-                    StoreCommand::Write(key, value, sender) => {
-                        let response = db.put(&key, &value);
-                        let _ = sender.send(response);
+                    StoreCommand::Write(key, value) => {
+                        let _ = db.put(&key, &value);
                         if let Some(mut senders) = obligations.remove(&key) {
                             while let Some(s) = senders.pop_front() {
                                 let _ = s.send(Ok(value.clone()));
@@ -62,16 +61,10 @@ impl Store {
         Ok(Self { channel: tx })
     }
 
-    pub async fn write(&mut self, key: Key, value: Value) -> StoreResult<()> {
-        let (sender, _receiver) = oneshot::channel();
-        if let Err(e) = self
-            .channel
-            .send(StoreCommand::Write(key, value, sender))
-            .await
-        {
+    pub async fn write(&mut self, key: Key, value: Value) {
+        if let Err(e) = self.channel.send(StoreCommand::Write(key, value)).await {
             panic!("Failed to send Write command to store: {}", e);
         }
-        Ok(())
     }
 
     pub async fn read(&mut self, key: Key) -> StoreResult<Option<Value>> {

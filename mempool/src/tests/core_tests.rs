@@ -1,6 +1,5 @@
 use super::*;
 use crate::common::{committee, keys, payload};
-use crypto::PublicKey;
 use std::fs;
 use std::time::Duration;
 use tokio::sync::mpsc::channel;
@@ -11,32 +10,43 @@ async fn core(
     store_path: &str,
 ) -> (
     Receiver<NetMessage>,
-    Sender<CoreMessage>,
-    Sender<ConsensusMessage>,
+    Sender<MempoolMessage>,
+    Sender<ConsensusMempoolMessage>,
     Sender<Transaction>,
 ) {
     let (tx_network, rx_network) = channel(1);
+    let (tx_consensus, _rx_consensus) = channel(1);
     let (tx_core, rx_core) = channel(1);
-    let (tx_consensus, rx_consensus) = channel(1);
+    let (tx_consensus_mempool, rx_consensus_mempool) = channel(1);
     let (tx_client, rx_client) = channel(1);
 
     let (name, secret) = keys().pop().unwrap();
     let parameters = Parameters {
         queue_capacity: 1,
+        sync_retry_delay: 10_000,
         max_payload_size: 1,
         min_block_delay: 0,
     };
     let signature_service = SignatureService::new(secret);
     let _ = fs::remove_dir_all(store_path);
     let store = Store::new(store_path).unwrap();
+    let synchronizer = Synchronizer::new(
+        tx_consensus,
+        store.clone(),
+        name,
+        committee(),
+        tx_network.clone(),
+        parameters.sync_retry_delay,
+    );
     let mut core = Core::new(
         name,
         committee(),
         parameters,
-        signature_service,
         store,
+        signature_service,
+        synchronizer,
         /* core_channel */ rx_core,
-        /* consensus_channel */ rx_consensus,
+        /* consensus_channel */ rx_consensus_mempool,
         /* client_channel */ rx_client,
         /* network_channel */ tx_network,
     );
@@ -44,7 +54,7 @@ async fn core(
         core.run().await;
     });
 
-    (rx_network, tx_core, tx_consensus, tx_client)
+    (rx_network, tx_core, tx_consensus_mempool, tx_client)
 }
 
 #[tokio::test]
@@ -66,14 +76,14 @@ async fn handle_request() {
     let (mut rx_network, tx_core, _tx_consensus, _tx_client) = core(path).await;
 
     // Send a payload to the core.
-    let message = CoreMessage::Payload(payload());
+    let message = MempoolMessage::Payload(payload());
     tx_core.send(message).await.unwrap();
     sleep(Duration::from_millis(50)).await;
 
     // Send a sync request.
     let (name, _) = keys().pop().unwrap();
     let digest = payload().digest();
-    let message = CoreMessage::PayloadRequest(digest, name);
+    let message = MempoolMessage::PayloadRequest(vec![digest], name);
     tx_core.send(message).await.unwrap();
 
     // Ensure we transmit a reply.
@@ -92,45 +102,8 @@ async fn get_payload() {
 
     // Get the next payload.
     let (sender, receiver) = oneshot::channel();
-    let message = ConsensusMessage::Get(64, sender);
+    let message = ConsensusMempoolMessage::Get(64, sender);
     tx_consensus.send(message).await.unwrap();
     let result = receiver.await.unwrap();
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), vec![payload().digest()]);
-}
-
-#[tokio::test]
-async fn verify_existing_payload() {
-    // Run the core.
-    let path = ".db_test_verify_existing_payload";
-    let (_rx_network, tx_core, tx_consensus, _tx_client) = core(path).await;
-
-    // Send a payload to the core.
-    let message = CoreMessage::Payload(payload());
-    tx_core.send(message).await.unwrap();
-    sleep(Duration::from_millis(50)).await;
-
-    // Verify a payload.
-    let (sender, receiver) = oneshot::channel();
-    let author = PublicKey::default();
-    let message = ConsensusMessage::Verify(vec![payload().digest()], author, sender);
-    tx_consensus.send(message).await.unwrap();
-    let result = receiver.await.unwrap();
-    assert!(result.unwrap().is_empty());
-}
-
-#[tokio::test]
-async fn test_verify_missing_payload() {
-    // Run the core.
-    let path = ".db_test_verify_missing_payload";
-    let (_rx_network, _tx_core, tx_consensus, _tx_client) = core(path).await;
-
-    // Verify a payload.
-    let (sender, receiver) = oneshot::channel();
-    let digests = vec![payload().digest()];
-    let (author, _) = keys().pop().unwrap();
-    let message = ConsensusMessage::Verify(digests.clone(), author, sender);
-    tx_consensus.send(message).await.unwrap();
-    let result = receiver.await.unwrap();
-    assert_eq!(result.unwrap(), digests);
+    assert_eq!(result, vec![payload().digest()]);
 }

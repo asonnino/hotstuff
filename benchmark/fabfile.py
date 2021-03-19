@@ -27,6 +27,7 @@ def local(ctx):
         },
         'mempool': {
             'queue_capacity': 10_000,
+            'sync_retry_delay': 100_000,
             'max_payload_size': 15_000,
             'min_block_delay': 0
         }
@@ -39,7 +40,7 @@ def local(ctx):
 
 
 @task
-def create(ctx, nodes=4):
+def create(ctx, nodes=2):
     ''' Create a testbed'''
     try:
         InstanceManager.make().create_instances(nodes)
@@ -96,8 +97,8 @@ def install(ctx):
 def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
-        'nodes': [30],
-        'rate': [60_000],
+        'nodes': [10],
+        'rate': [40_000],
         'tx_size': 512,
         'duration': 300,
         'runs': 2,
@@ -111,6 +112,7 @@ def remote(ctx):
         },
         'mempool': {
             'queue_capacity': 100_000,
+            'sync_retry_delay': 100_000,
             'max_payload_size': 500_000,
             'min_block_delay': 100
         }
