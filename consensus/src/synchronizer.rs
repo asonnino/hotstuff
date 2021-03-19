@@ -1,5 +1,5 @@
 use crate::config::Committee;
-use crate::core::CoreMessage;
+use crate::core::ConsensusMessage;
 use crate::error::ConsensusResult;
 use crate::messages::{Block, QC};
 use crate::timer::Timer;
@@ -30,12 +30,12 @@ impl Synchronizer {
         committee: Committee,
         store: Store,
         network_channel: Sender<NetMessage>,
-        core_channel: Sender<CoreMessage>,
+        core_channel: Sender<ConsensusMessage>,
         sync_retry_delay: u64,
     ) -> Self {
         let (tx_inner, mut rx_inner): (_, Receiver<Block>) = channel(1000);
         let mut timer = Timer::new();
-        timer.schedule(5u64, true).await;
+        timer.schedule(5000u64, true).await;
 
         let store_copy = store.clone();
         tokio::spawn(async move {
@@ -53,7 +53,7 @@ impl Synchronizer {
                             if !requests.contains_key(&previous){
                                 let now = SystemTime::now()
                                     .duration_since(UNIX_EPOCH)
-                                    .expect("Failed to measure duration")
+                                    .expect("Failed to measure time")
                                     .as_millis();
                                 requests.insert(previous.clone(), now);
                                 Self::transmit(previous, &name, &committee, &network_channel).await;
@@ -65,7 +65,7 @@ impl Synchronizer {
                             Ok(block) => {
                                 let _ = pending.remove(&block.digest());
                                 let _ = requests.remove(&block.previous());
-                                let message = CoreMessage::LoopBack(block);
+                                let message = ConsensusMessage::LoopBack(block);
                                 if let Err(e) = core_channel.send(message).await {
                                     panic!("Failed to send message through core channel: {}", e);
                                 }
@@ -78,13 +78,13 @@ impl Synchronizer {
                         for (digest, timestamp) in &requests {
                             let now = SystemTime::now()
                                 .duration_since(UNIX_EPOCH)
-                                .expect("Failed to measure duration")
+                                .expect("Failed to measure time")
                                 .as_millis();
                             if timestamp + (sync_retry_delay as u128) < now {
                                 Self::transmit(digest.clone(), &name, &committee, &network_channel).await;
                             }
                         }
-                        timer.schedule(5u64, true).await;
+                        timer.schedule(5000u64, true).await;
                     },
                     else => break,
                 }
@@ -109,7 +109,7 @@ impl Synchronizer {
     ) {
         debug!("Requesting sync for block {}", digest);
         let addresses = committee.broadcast_addresses(&name);
-        let message = CoreMessage::SyncRequest(digest, *name);
+        let message = ConsensusMessage::SyncRequest(digest, *name);
         let bytes = bincode::serialize(&message).expect("Failed to serialize core message");
         let message = NetMessage(Bytes::from(bytes), addresses);
         if let Err(e) = network_channel.send(message).await {
