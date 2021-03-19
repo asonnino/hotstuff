@@ -2,7 +2,6 @@ use crate::config::Committee;
 use crate::core::ConsensusMessage;
 use crate::error::ConsensusResult;
 use crate::messages::{Block, QC};
-use crate::timer::Timer;
 use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey};
@@ -14,6 +13,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::time::{sleep, Duration, Instant};
 
 #[cfg(test)]
 #[path = "tests/synchronizer_tests.rs"]
@@ -34,14 +34,15 @@ impl Synchronizer {
         sync_retry_delay: u64,
     ) -> Self {
         let (tx_inner, mut rx_inner): (_, Receiver<Block>) = channel(1000);
-        let mut timer = Timer::new();
-        timer.schedule(5000u64, true).await;
 
         let store_copy = store.clone();
         tokio::spawn(async move {
             let mut waiting = FuturesUnordered::new();
             let mut pending = HashSet::new();
             let mut requests = HashMap::new();
+
+            let timer = sleep(Duration::from_millis(5000));
+            tokio::pin!(timer);
             loop {
                 tokio::select! {
                     Some(block) = rx_inner.recv() => {
@@ -71,7 +72,7 @@ impl Synchronizer {
                         },
                         Err(e) => error!("{}", e)
                     },
-                    Some(_) = timer.notifier.recv() => {
+                    () = &mut timer => {
                         // This implements the 'perfect point to point link' abstraction.
                         for (digest, timestamp) in &requests {
                             let now = SystemTime::now()
@@ -82,7 +83,7 @@ impl Synchronizer {
                                 Self::transmit(digest.clone(), &name, &committee, &network_channel).await;
                             }
                         }
-                        timer.schedule(5000u64, true).await;
+                        timer.as_mut().reset(Instant::now() + Duration::from_millis(5000));
                     },
                     else => break,
                 }

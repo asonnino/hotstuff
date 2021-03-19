@@ -49,7 +49,7 @@ pub struct Core {
     round: RoundNumber,
     last_voted_round: RoundNumber,
     high_qc: QC,
-    timer: Timer<RoundNumber>,
+    timer: Timer,
     aggregator: Aggregator,
 }
 
@@ -69,6 +69,7 @@ impl Core {
         commit_channel: Sender<Block>,
     ) -> Self {
         let aggregator = Aggregator::new(committee.clone());
+        let timer = Timer::new(parameters.timeout_delay);
         Self {
             name,
             committee,
@@ -84,7 +85,7 @@ impl Core {
             round: 1,
             last_voted_round: 0,
             high_qc: QC::genesis(),
-            timer: Timer::new(),
+            timer,
             aggregator,
         }
     }
@@ -93,12 +94,6 @@ impl Core {
         let key = block.digest().to_vec();
         let value = bincode::serialize(block).expect("Failed to serialize block");
         self.store.write(key, value).await;
-    }
-
-    async fn schedule_timer(&mut self) {
-        self.timer
-            .schedule(self.parameters.timeout_delay, self.round)
-            .await;
     }
 
     async fn transmit(
@@ -164,7 +159,7 @@ impl Core {
         )
         .await;
         debug!("Created {:?}", timeout);
-        self.schedule_timer().await;
+        self.timer.reset();
         let message = ConsensusMessage::Timeout(timeout.clone());
         self.transmit(&message, None).await?;
         self.handle_timeout(&timeout).await
@@ -231,15 +226,13 @@ impl Core {
         if round < self.round {
             return;
         }
-        self.timer.cancel(self.round).await;
+        // Reset the timer and advance round.
+        self.timer.reset();
         self.round = round + 1;
         debug!("Moved to round {}", self.round);
 
         // Cleanup the vote aggregator.
         self.aggregator.cleanup(&self.round);
-
-        // Schedule a new timer for this round.
-        self.schedule_timer().await;
     }
     // -- End Pacemaker --
 
@@ -406,7 +399,7 @@ impl Core {
     pub async fn run(&mut self) {
         // Upon booting, generate the very first block (if we are the leader).
         // Also, schedule a timer in case we don't hear from the leader.
-        self.schedule_timer().await;
+        self.timer.reset();
         if self.name == self.leader_elector.get_leader(self.round) {
             self.generate_proposal(None)
                 .await
@@ -427,7 +420,7 @@ impl Core {
                         ConsensusMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await
                     }
                 },
-                Some(_) = self.timer.notifier.recv() => self.local_timeout_round().await,
+                () = &mut self.timer => self.local_timeout_round().await,
                 else => break,
             };
             match result {
