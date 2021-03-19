@@ -48,7 +48,7 @@ impl Block {
         Block::default()
     }
 
-    pub fn previous(&self) -> &Digest {
+    pub fn parent(&self) -> &Digest {
         &self.qc.hash
     }
 

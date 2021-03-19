@@ -46,24 +46,24 @@ impl Synchronizer {
                 tokio::select! {
                     Some(block) = rx_inner.recv() => {
                         if pending.insert(block.digest()) {
-                            let previous = block.previous().clone();
-                            let fut = Self::waiter(store_copy.clone(), previous.clone(), block);
+                            let parent = block.parent().clone();
+                            let fut = Self::waiter(store_copy.clone(), parent.clone(), block);
                             waiting.push(fut);
 
-                            if !requests.contains_key(&previous){
+                            if !requests.contains_key(&parent){
                                 let now = SystemTime::now()
                                     .duration_since(UNIX_EPOCH)
                                     .expect("Failed to measure time")
                                     .as_millis();
-                                requests.insert(previous.clone(), now);
-                                Self::transmit(previous, &name, &committee, &network_channel).await;
+                                requests.insert(parent.clone(), now);
+                                Self::transmit(parent, &name, &committee, &network_channel).await;
                             }
                         }
                     },
                     Some(result) = waiting.next() => match result {
                         Ok(block) => {
                             let _ = pending.remove(&block.digest());
-                            let _ = requests.remove(&block.previous());
+                            let _ = requests.remove(&block.parent());
                             let message = ConsensusMessage::LoopBack(block);
                             if let Err(e) = core_channel.send(message).await {
                                 panic!("Failed to send message through core channel: {}", e);
@@ -115,12 +115,12 @@ impl Synchronizer {
         }
     }
 
-    async fn get_previous_block(&mut self, block: &Block) -> ConsensusResult<Option<Block>> {
+    async fn get_parent_block(&mut self, block: &Block) -> ConsensusResult<Option<Block>> {
         if block.qc == QC::genesis() {
             return Ok(Some(Block::genesis()));
         }
-        let previous = block.previous();
-        match self.store.read(previous.to_vec()).await? {
+        let parent = block.parent();
+        match self.store.read(parent.to_vec()).await? {
             Some(bytes) => Ok(Some(bincode::deserialize(&bytes)?)),
             None => {
                 if let Err(e) = self.inner_channel.send(block.clone()).await {
@@ -135,12 +135,12 @@ impl Synchronizer {
         &mut self,
         block: &Block,
     ) -> ConsensusResult<Option<(Block, Block)>> {
-        let b1 = match self.get_previous_block(block).await? {
+        let b1 = match self.get_parent_block(block).await? {
             Some(b) => b,
             None => return Ok(None),
         };
         let b0 = self
-            .get_previous_block(&b1)
+            .get_parent_block(&b1)
             .await?
             .expect("We should have all ancestors of delivered blocks");
         Ok(Some((b0, b1)))
