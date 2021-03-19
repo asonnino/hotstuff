@@ -47,7 +47,7 @@ impl Synchronizer {
             let mut pending = HashMap::new();
             let mut requests = HashMap::new();
 
-            let timer = sleep(Duration::from_millis(5_000));
+            let timer = sleep(Duration::from_millis(5000));
             tokio::pin!(timer);
             loop {
                 tokio::select! {
@@ -143,7 +143,7 @@ impl Synchronizer {
                             .await
                             .expect("Failed to send payload sync request");
                         }
-                        timer.as_mut().reset(Instant::now() + Duration::from_millis(5_000));
+                        timer.as_mut().reset(Instant::now() + Duration::from_millis(5000));
                     },
                     else => break,
                 }

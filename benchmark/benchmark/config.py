@@ -95,6 +95,7 @@ class NodeParameters:
             inputs += [json['consensus']['max_payload_size']]
             inputs += [json['consensus']['min_block_delay']]
             inputs += [json['mempool']['queue_capacity']]
+            inputs += [json['consensus']['sync_retry_delay']]
             inputs += [json['mempool']['max_payload_size']]
             inputs += [json['mempool']['min_block_delay']]
         except KeyError as e:

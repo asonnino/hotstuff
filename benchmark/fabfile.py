@@ -27,6 +27,7 @@ def local(ctx):
         },
         'mempool': {
             'queue_capacity': 10_000,
+            'sync_retry_delay': 100_000,
             'max_payload_size': 15_000,
             'min_block_delay': 0
         }
@@ -97,10 +98,10 @@ def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
         'nodes': [10],
-        'rate': [30_000, 50_000, 60_000, 60_000],
+        'rate': [40_000],
         'tx_size': 512,
         'duration': 300,
-        'runs': 1,
+        'runs': 2,
     }
     node_params = {
         'consensus': {
@@ -111,6 +112,7 @@ def remote(ctx):
         },
         'mempool': {
             'queue_capacity': 100_000,
+            'sync_retry_delay': 100_000,
             'max_payload_size': 500_000,
             'min_block_delay': 100
         }

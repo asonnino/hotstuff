@@ -60,18 +60,16 @@ impl Synchronizer {
                             }
                         }
                     },
-                    Some(result) = waiting.next() => {
-                        match result {
-                            Ok(block) => {
-                                let _ = pending.remove(&block.digest());
-                                let _ = requests.remove(&block.previous());
-                                let message = ConsensusMessage::LoopBack(block);
-                                if let Err(e) = core_channel.send(message).await {
-                                    panic!("Failed to send message through core channel: {}", e);
-                                }
-                            },
-                            Err(e) => error!("{}", e)
-                        }
+                    Some(result) = waiting.next() => match result {
+                        Ok(block) => {
+                            let _ = pending.remove(&block.digest());
+                            let _ = requests.remove(&block.previous());
+                            let message = ConsensusMessage::LoopBack(block);
+                            if let Err(e) = core_channel.send(message).await {
+                                panic!("Failed to send message through core channel: {}", e);
+                            }
+                        },
+                        Err(e) => error!("{}", e)
                     },
                     Some(_) = timer.notifier.recv() => {
                         // This implements the 'perfect point to point link' abstraction.
