@@ -11,7 +11,7 @@ use crypto::{PublicKey, SignatureService};
 use network::{NetReceiver, NetSender};
 use store::Store;
 use tokio::sync::mpsc::{channel, Sender};
-use tokio::time::{Duration, sleep};
+// use tokio::time::{Duration, sleep};
 use threshold_crypto::PublicKeySet;
 
 #[cfg(test)]
@@ -68,7 +68,7 @@ impl Consensus {
         )
         .await;
 
-        sleep(Duration::from_millis((committee.size() as u64) * parameters.timeout_delay)).await;
+        // sleep(Duration::from_millis((committee.size() as u64) * parameters.timeout_delay)).await;
 
         match protocol {
             Protocol::HotStuff => {  // Run HotStuff

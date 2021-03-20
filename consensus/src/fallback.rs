@@ -253,12 +253,12 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
         self.fallback_random_coin.retain(|v, _| v >= &view);
     }
 
-    async fn local_timeout_round(&mut self) -> ConsensusResult<()> {
-        warn!("Timeout reached for round {}", self.round);
-        // Will not timeout if already in fallback
-        if self.fallback == 1 {
-            return Ok(());
-        }
+    async fn local_timeout_view(&mut self) -> ConsensusResult<()> {
+        warn!("Timeout reached for view {}", self.view);
+        // // Will not timeout if already in fallback
+        // if self.fallback == 1 {
+        //     return Ok(());
+        // }
         // self.increase_last_voted_round(self.round);
         self.fallback = 1;  // Enter fallback and stop voting for non-fallback blocks
         let timeout = Timeout::new(
@@ -788,7 +788,7 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
                         CoreMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await
                     }
                 },
-                Some(_) = self.timer.notifier.recv() => self.local_timeout_round().await,
+                Some(_) = self.timer.notifier.recv() => self.local_timeout_view().await,
                 else => break,
             };
             match result {

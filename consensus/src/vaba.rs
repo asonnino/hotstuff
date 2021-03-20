@@ -5,7 +5,7 @@ use crate::leader::LeaderElector;
 use crate::mempool::{MempoolDriver, NodeMempool};
 use crate::messages::{Block, Timeout, Vote, QC, TC, SignedQC, RandomnessShare, RandomCoin};
 use crate::synchronizer::Synchronizer;
-// use crate::timer::Timer;
+use crate::timer::Timer;
 use crate::core::{CoreMessage, SeqNumber, HeightNumber};
 use async_recursion::async_recursion;
 use bytes::Bytes;
@@ -52,7 +52,7 @@ pub struct VABA<Mempool> {
     fallback_randomness_share_weight: HashMap<SeqNumber, Stake>,    // weight of the above nodes
     fallback_randomness_shares: HashMap<SeqNumber, Vec<RandomnessShare>>,    // set of nodes that send randomness share
     fallback_random_coin: HashMap<SeqNumber, RandomCoin>,   // random coin of each fallback
-    // timer: Timer<SeqNumber>,
+    timer: Timer<SeqNumber>,
     aggregator: Aggregator,
 }
 
@@ -104,7 +104,7 @@ impl<Mempool: 'static + NodeMempool> VABA<Mempool> {
             fallback_randomness_share_weight: HashMap::new(),
             fallback_randomness_shares: HashMap::new(),
             fallback_random_coin: HashMap::new(),
-            // timer: Timer::new(),
+            timer: Timer::new(),
             aggregator,
         }
     }
@@ -118,11 +118,11 @@ impl<Mempool: 'static + NodeMempool> VABA<Mempool> {
             .map_err(ConsensusError::from)
     }
 
-    // async fn schedule_timer(&mut self) {
-    //     self.timer
-    //         .schedule(self.parameters.timeout_delay, self.view)
-    //         .await;
-    // }
+    async fn schedule_timer(&mut self) {
+        self.timer
+            .schedule(self.parameters.timeout_delay, self.view)
+            .await;
+    }
 
     async fn transmit(
         &mut self,
@@ -707,6 +707,7 @@ impl<Mempool: 'static + NodeMempool> VABA<Mempool> {
         // if self.parameters.ddos {
         //     sleep(Duration::from_millis(2 * self.parameters.timeout_delay)).await;
         // }
+        self.schedule_timer().await;
         self.advance_view(1).await;
         self.generate_proposal(None, self.high_qc.clone())
             .await
@@ -729,7 +730,10 @@ impl<Mempool: 'static + NodeMempool> VABA<Mempool> {
                         CoreMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await
                     }
                 },
-                // Some(_) = self.timer.notifier.recv() => self.local_timeout_round().await,
+                Some(_) = self.timer.notifier.recv() => {
+                    self.generate_proposal(None, self.high_qc.clone())
+                        .await
+                },
                 else => break,
             };
             match result {
