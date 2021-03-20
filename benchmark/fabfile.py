@@ -34,7 +34,7 @@ def local(ct):
             'max_payload_size': 15_000,
             'min_block_delay': 100
         },
-        'protocol': 1, # 0 for HotStuff, 1 for HotStuffWithAsyncFallback, 2 for ChainedVABA
+        'protocol': 2, # 0 for HotStuff, 1 for HotStuffWithAsyncFallback, 2 for ChainedVABA
         'crash': 0  # crash f nodes from the beginning
     }
     try:
@@ -119,7 +119,7 @@ def remote(ctx):
         'crash': 0  # TODO: crash f nodes
     }
     try:
-        Bench(ctx).run(bench_params, node_params, debug=True)
+        Bench(ctx).run(bench_params, node_params, debug=False)
     except BenchError as e:
         Print.error(e)
 

@@ -120,7 +120,7 @@ impl<Mempool: 'static + NodeMempool> VABA<Mempool> {
 
     async fn schedule_timer(&mut self) {
         self.timer
-            .schedule(self.parameters.timeout_delay, self.view)
+            .schedule(self.parameters.timeout_delay, 1)
             .await;
     }
 
@@ -247,7 +247,7 @@ impl<Mempool: 'static + NodeMempool> VABA<Mempool> {
     }
 
     async fn local_timeout_view(&mut self) -> ConsensusResult<()> {
-        warn!("Timeout reached for view {}", self.view);
+        warn!("Timeout reached for view 1");
         // // Will not timeout if already in fallback
         // if self.fallback == 1 {
         //     return Ok(());
@@ -256,7 +256,7 @@ impl<Mempool: 'static + NodeMempool> VABA<Mempool> {
         // self.fallback = 1;  // Enter fallback and stop voting for non-fallback blocks
         let timeout = Timeout::new(
             self.high_qc.clone(),
-            self.view,
+            1,
             self.name,
             self.signature_service.clone(),
         )
