@@ -74,6 +74,7 @@ impl Block {
         let block = Block {
             qc,
             tc: None,
+            coin: None,
             author,
             view,
             round,

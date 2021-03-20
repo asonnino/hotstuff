@@ -1,6 +1,7 @@
 use crate::config::{Committee, Parameters, Protocol};
 use crate::core::Core;
 use crate::fallback::Fallback;
+use crate::vaba::VABA;
 use crate::error::ConsensusResult;
 use crate::leader::LeaderElector;
 use crate::mempool::{MempoolDriver, NodeMempool};
@@ -106,7 +107,26 @@ impl Consensus {
                 tokio::spawn(async move {
                     hotstuff_with_fallback.run().await;
                 });
-            }
+            },
+            Protocol::ChainedVABA => {  // Run HotStuff with Async Fallback
+                let mut vaba = VABA::new(
+                    name,
+                    committee,
+                    parameters,
+                    signature_service,
+                    pk_set,
+                    store,
+                    leader_elector,
+                    mempool_driver,
+                    synchronizer,
+                    /* core_channel */ rx_core,
+                    /* network_channel */ tx_network,
+                    commit_channel,
+                );
+                tokio::spawn(async move {
+                    vaba.run().await;
+                });
+            },
             _ => return Ok(()),
         }
     

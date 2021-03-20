@@ -19,6 +19,7 @@ pub mod messages_tests;
 pub struct Block {
     pub qc: QC,
     pub tc: Option<TC>,
+    pub coin: Option<RandomCoin>,
     pub author: PublicKey,
     pub view: SeqNumber,   // increment by 1 after every async fallback, initially 0
     pub round: SeqNumber,
@@ -32,6 +33,7 @@ impl Block {
     pub async fn new(
         qc: QC,
         tc: Option<TC>,
+        coin: Option<RandomCoin>,
         author: PublicKey,
         view: SeqNumber,
         round: SeqNumber,
@@ -43,6 +45,7 @@ impl Block {
         let mut block = Self {
             qc,
             tc,
+            coin,
             author,
             view,
             round,
@@ -76,7 +79,7 @@ impl Block {
 
         ensure!(
             (self.fallback == 0 && self.height == 0) || (self.fallback == 1 && (self.height == 1 || self.height == 2)),
-            ConsensusError::InvalidHeight
+            ConsensusError::InvalidHeight(self.height)
         );
 
         // Check the signature.
@@ -90,6 +93,72 @@ impl Block {
         // Check the TC embedded in the block (if any).
         if let Some(ref tc) = self.tc {
             tc.verify(committee)?;
+        }
+        Ok(())
+    }
+
+    pub fn verify_fallback(&self, committee: &Committee, pk_set: &PublicKeySet) -> ConsensusResult<()> {
+        // Ensure the authority has voting rights.
+        let voting_rights = committee.stake(&self.author);
+        ensure!(
+            voting_rights > 0,
+            ConsensusError::UnknownAuthority(self.author)
+        );
+
+        ensure!(
+            (self.fallback == 0 && self.height == 0) || (self.fallback == 1 && (self.height == 1 || self.height == 2)),
+            ConsensusError::InvalidHeight(self.height)
+        );
+
+        // Check the signature.
+        self.signature.verify(&self.digest(), &self.author)?;
+
+        // Check the embedded QC.
+        if self.qc != QC::genesis() {
+            self.qc.verify(committee)?;
+        }
+
+        // Check the TC embedded in the block (if any).
+        if let Some(ref tc) = self.tc {
+            tc.verify(committee)?;
+        }
+
+        // Check the coin embedded in the block (if any).
+        if let Some(ref coin) = self.coin {
+            coin.verify(committee, pk_set)?;
+        }
+        Ok(())
+    }
+
+    pub fn verify_vaba(&self, committee: &Committee, pk_set: &PublicKeySet) -> ConsensusResult<()> {
+        // Ensure the authority has voting rights.
+        let voting_rights = committee.stake(&self.author);
+        ensure!(
+            voting_rights > 0,
+            ConsensusError::UnknownAuthority(self.author)
+        );
+
+        ensure!(
+            self.fallback == 1 && (self.height == 1 || self.height == 2 || self.height == 3),
+            ConsensusError::InvalidHeight(self.height)
+        );
+
+        // Check the signature.
+        self.signature.verify(&self.digest(), &self.author)?;
+
+        // Check the embedded QC.
+        if self.qc != QC::genesis() {
+            self.qc.verify_vaba(committee)?;
+        }
+
+        // Check the TC embedded in the block (if any).
+        if let Some(ref tc) = self.tc {
+            tc.verify(committee)?;
+        }
+
+        // Check the coin embedded in the block (if any).
+        if let Some(ref coin) = self.coin {
+            coin.verify(committee, pk_set)?;
         }
         Ok(())
     }
@@ -175,7 +244,24 @@ impl Vote {
 
         ensure!(
             (self.fallback == 0 && self.height == 0) || (self.fallback == 1 && (self.height == 1 || self.height == 2)),
-            ConsensusError::InvalidHeight
+            ConsensusError::InvalidHeight(self.height)
+        );
+
+        // Check the signature.
+        self.signature.verify(&self.digest(), &self.author)?;
+        Ok(())
+    }
+
+    pub fn verify_vaba(&self, committee: &Committee) -> ConsensusResult<()> {
+        // Ensure the authority has voting rights.
+        ensure!(
+            committee.stake(&self.author) > 0,
+            ConsensusError::UnknownAuthority(self.author)
+        );
+
+        ensure!(
+            self.fallback == 1 && (self.height == 1 || self.height == 2 || self.height == 3),
+            ConsensusError::InvalidHeight(self.height)
         );
 
         // Check the signature.
@@ -241,7 +327,32 @@ impl QC {
 
         ensure!(
             (self.fallback == 0 && self.height == 0) || (self.fallback == 1 && (self.height == 1 || self.height == 2)),
-            ConsensusError::InvalidHeight
+            ConsensusError::InvalidHeight(self.height)
+        );
+
+        // Check the signatures.
+        Signature::verify_batch(&self.digest(), &self.votes).map_err(ConsensusError::from)
+    }
+
+    pub fn verify_vaba(&self, committee: &Committee) -> ConsensusResult<()> {
+        // Ensure the QC has a quorum.
+        let mut weight = 0;
+        let mut used = HashSet::new();
+        for (name, _) in self.votes.iter() {
+            ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
+            let voting_rights = committee.stake(name);
+            ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
+            used.insert(*name);
+            weight += voting_rights;
+        }
+        ensure!(
+            weight >= committee.quorum_threshold(),
+            ConsensusError::QCRequiresQuorum
+        );
+
+        ensure!(
+            self.fallback == 1 && (self.height == 1 || self.height == 2 || self.height == 3),
+            ConsensusError::InvalidHeight(self.height)
         );
 
         // Check the signatures.
@@ -313,6 +424,23 @@ impl SignedQC {
         // Check the embedded QC.
         if self.qc != QC::genesis() {
             self.qc.verify(committee)?;
+        }
+        Ok(())
+    }
+
+    pub fn verify_vaba(&self, committee: &Committee) -> ConsensusResult<()> {
+        // Ensure the authority has voting rights.
+        ensure!(
+            committee.stake(&self.author) > 0,
+            ConsensusError::UnknownAuthority(self.author)
+        );
+
+        // Check the signature.
+        self.signature.verify(&self.digest(), &self.author)?;
+
+        // Check the embedded QC.
+        if self.qc != QC::genesis() {
+            self.qc.verify_vaba(committee)?;
         }
         Ok(())
     }

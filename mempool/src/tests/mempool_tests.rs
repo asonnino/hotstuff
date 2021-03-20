@@ -27,7 +27,7 @@ async fn end_to_end() {
                 max_payload_size: 1,
                 min_block_delay: 0,
             };
-            let signature_service = SignatureService::new(secret);
+            let signature_service = SignatureService::new(secret, None);
             let store_path = format!(".db_test_end_to_end_{}", i);
             let _ = fs::remove_dir_all(&store_path);
             let store = Store::new(&store_path).unwrap();

@@ -1,4 +1,4 @@
-use crate::core::SeqNumber;
+use crate::core::{SeqNumber, HeightNumber};
 use crypto::{CryptoError, Digest, PublicKey};
 use store::StoreError;
 use thiserror::Error;
@@ -72,8 +72,8 @@ pub enum ConsensusError {
         round: SeqNumber,
     },
 
-    #[error("Invalid block/vote/qc height")]
-    InvalidHeight,
+    #[error("Invalid block/vote/qc height {0}")]
+    InvalidHeight(HeightNumber),
 
     #[error("Invalid payload")]
     InvalidPayload,

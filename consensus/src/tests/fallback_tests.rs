@@ -1,3 +1,4 @@
+use crate::fallback::Fallback;
 use super::*;
 use crate::common::{chain, fallback_committee, fallback_keys, MockMempool};
 use crypto::SecretKey;

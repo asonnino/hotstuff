@@ -25,7 +25,7 @@ async fn core(
         max_payload_size: 1,
         min_block_delay: 0,
     };
-    let signature_service = SignatureService::new(secret);
+    let signature_service = SignatureService::new(secret, None);
     let _ = fs::remove_dir_all(store_path);
     let store = Store::new(store_path).unwrap();
     let mut core = Core::new(

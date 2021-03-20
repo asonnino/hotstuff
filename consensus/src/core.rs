@@ -267,6 +267,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         let block = Block::new(
             self.high_qc.clone(),
             tc,
+            None,
             self.name,
             self.view,
             self.round,

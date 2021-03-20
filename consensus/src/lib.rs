@@ -5,6 +5,7 @@ mod config;
 mod consensus;
 mod core;
 mod fallback;
+mod vaba;
 mod leader;
 mod mempool;
 mod messages;
