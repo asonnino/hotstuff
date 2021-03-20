@@ -18,7 +18,7 @@ def local(ct):
         'nodes': 4,
         'rate': 1_000,
         'tx_size': 512,
-        'duration': 60,
+        'duration': 20,
     }
     node_params = {
         'consensus': {
@@ -34,7 +34,7 @@ def local(ct):
             'max_payload_size': 15_000,
             'min_block_delay': 100
         },
-        'protocol': 2, # 0 for HotStuff, 1 for HotStuffWithAsyncFallback, 2 for ChainedVABA
+        'protocol': 1, # 0 for HotStuff, 1 for HotStuffWithAsyncFallback, 2 for ChainedVABA
         'crash': 0  # crash f nodes from the beginning
     }
     try:
@@ -98,28 +98,28 @@ def remote(ctx):
         'nodes': [8],
         'rate': [10_000],
         'tx_size': 512,
-        'duration': 30,
+        'duration': 60,
         'runs': 1,
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 1_000,
+            'timeout_delay': 5_000,
             'sync_retry_delay': 500_000,
             'max_payload_size': 1_000,
             'min_block_delay': 100,
             'network_delay': 0,
-            'ddos': False # True for DDOS attack on the leader, False otherwise
+            'ddos': True # True for DDOS attack on the leader, False otherwise
         },
         'mempool': {
             'queue_capacity': 100_000,
             'max_payload_size': 500_000,
             'min_block_delay': 100
         },
-        'protocol': 0, # 0 HotStuff, 1 HotStuffWithAsyncFallback, 2 ChainedVABA
+        'protocol': 2, # 0 HotStuff, 1 HotStuffWithAsyncFallback, 2 ChainedVABA
         'crash': 0  # TODO: crash f nodes
     }
     try:
-        Bench(ctx).run(bench_params, node_params, debug=False)
+        Bench(ctx).run(bench_params, node_params, debug=True)
     except BenchError as e:
         Print.error(e)
 

@@ -378,10 +378,10 @@ impl<Mempool: 'static + NodeMempool> Fallback<Mempool> {
 
     // #[async_recursion]
     async fn advance_view(&mut self, view: SeqNumber) {
-        debug!("advance_view: previous view {} with leader {:?}, new view {}", self.view, self.leader_elector.get_fallback_leader(self.view), view);
         if view <= self.view {
             return;
         }
+        debug!("advance_view: previous view {} with leader {:?}, new view {}", self.view, self.leader_elector.get_fallback_leader(self.view), view);
         self.timer.cancel(self.view).await;
         self.view = view;
         info!("-------------------------------------------------------- Enter view {} --------------------------------------------------------", view);

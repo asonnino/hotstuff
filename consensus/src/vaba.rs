@@ -52,7 +52,7 @@ pub struct VABA<Mempool> {
     fallback_randomness_share_weight: HashMap<SeqNumber, Stake>,    // weight of the above nodes
     fallback_randomness_shares: HashMap<SeqNumber, Vec<RandomnessShare>>,    // set of nodes that send randomness share
     fallback_random_coin: HashMap<SeqNumber, RandomCoin>,   // random coin of each fallback
-    timer: Timer<SeqNumber>,
+    timer: Timer<SeqNumber>,    // timer is only used at the begining of protocol
     aggregator: Aggregator,
 }
 
@@ -246,27 +246,27 @@ impl<Mempool: 'static + NodeMempool> VABA<Mempool> {
         self.fallback_random_coin.retain(|v, _| v >= &view);
     }
 
-    // async fn local_timeout_round(&mut self) -> ConsensusResult<()> {
-    //     warn!("Timeout reached for round {}", self.round);
-    //     // Will not timeout if already in fallback
-    //     if self.fallback == 1 {
-    //         return Ok(());
-    //     }
-    //     // self.increase_last_voted_round(self.round);
-    //     self.fallback = 1;  // Enter fallback and stop voting for non-fallback blocks
-    //     let timeout = Timeout::new(
-    //         self.high_qc.clone(),
-    //         self.view,
-    //         self.name,
-    //         self.signature_service.clone(),
-    //     )
-    //     .await;
-    //     debug!("Created {:?}", timeout);
-    //     self.schedule_timer().await;
-    //     let message = CoreMessage::Timeout(timeout.clone());
-    //     self.transmit(&message, None).await?;
-    //     self.handle_timeout(&timeout).await
-    // }
+    async fn local_timeout_view(&mut self) -> ConsensusResult<()> {
+        warn!("Timeout reached for view {}", self.view);
+        // // Will not timeout if already in fallback
+        // if self.fallback == 1 {
+        //     return Ok(());
+        // }
+        // self.increase_last_voted_round(self.round);
+        // self.fallback = 1;  // Enter fallback and stop voting for non-fallback blocks
+        let timeout = Timeout::new(
+            self.high_qc.clone(),
+            self.view,
+            self.name,
+            self.signature_service.clone(),
+        )
+        .await;
+        debug!("Created {:?}", timeout);
+        self.schedule_timer().await;
+        let message = CoreMessage::Timeout(timeout.clone());
+        self.transmit(&message, None).await?;
+        self.handle_timeout(&timeout).await
+    }
 
     #[async_recursion]
     async fn handle_vote(&mut self, vote: &Vote) -> ConsensusResult<()> {
@@ -570,12 +570,44 @@ impl<Mempool: 'static + NodeMempool> VABA<Mempool> {
         Ok(())
     }
 
-    // There is no timeout in VABA
+    // Only handle the timeout for view 1, for synchronization at the beginning of the protocol
     async fn handle_tc(&mut self, _: TC) -> ConsensusResult<()> {
         Ok(())
     }
 
-    async fn handle_timeout(&mut self, _: &Timeout) -> ConsensusResult<()> {
+    async fn handle_timeout(&mut self, timeout: &Timeout) -> ConsensusResult<()> {
+        debug!("Processing {:?}", timeout);
+        if timeout.seq < self.view {
+            return Ok(());
+        }
+
+        // Ensure the timeout is well formed.
+        timeout.verify(&self.committee)?;
+
+        // Process the QC embedded in the timeout.
+        self.process_qc(&timeout.high_qc).await;
+
+        // Add the new vote to our aggregator and see if we have a quorum.
+        // Enter the fallback
+        if let Some(tc) = self.aggregator.add_timeout(timeout.clone())? {
+            debug!("Assembled {:?}", tc);
+            info!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", tc.seq);
+
+            // // Enter fallback
+            // self.fallback = 1;
+
+            // Update the view to be the view of the TC.
+            self.advance_view(tc.seq).await;
+
+            // Initialize fallback states
+            self.init_fallback_state();
+
+            // // Make a new block for its fallback chain
+            // self.height = 1;
+            self.generate_proposal(None, self.high_qc.clone()).await?;
+
+            // self.process_pending_blocks().await?;
+        }
         Ok(())
     }
 
@@ -709,9 +741,9 @@ impl<Mempool: 'static + NodeMempool> VABA<Mempool> {
         // }
         self.schedule_timer().await;
         self.advance_view(1).await;
-        self.generate_proposal(None, self.high_qc.clone())
-            .await
-            .expect("Failed to send the first block");
+        // self.generate_proposal(None, self.high_qc.clone())
+        //     .await
+        //     .expect("Failed to send the first block");
 
         // This is the main loop: it processes incoming blocks and votes,
         // and receive timeout notifications from our Timeout Manager.
@@ -731,8 +763,7 @@ impl<Mempool: 'static + NodeMempool> VABA<Mempool> {
                     }
                 },
                 Some(_) = self.timer.notifier.recv() => {
-                    self.generate_proposal(None, self.high_qc.clone())
-                        .await
+                    self.local_timeout_view().await
                 },
                 else => break,
             };
