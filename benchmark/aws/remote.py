@@ -220,11 +220,7 @@ class Bench:
         dbs = [PathMaker.db_path(i) for i in range(len(hosts))]
         node_logs = [PathMaker.node_log_file(i) for i in range(len(hosts))]
         threshold_key_files = [PathMaker.threshold_key_file(i) for i in range(len(hosts))]
-        counter = 0
         for host, key_file, threshold_key_file, db, log_file in zip(hosts, key_files, threshold_key_files, dbs, node_logs):
-            counter += 1
-            if counter > committee.size() - node_parameters.crash:
-                break
             cmd = CommandMaker.run_node(
                 key_file,
                 threshold_key_file,

@@ -68,7 +68,7 @@ impl Consensus {
         )
         .await;
 
-        sleep(Duration::from_millis(2 * parameters.timeout_delay)).await;
+        sleep(Duration::from_millis((committee.size() as u64) * parameters.timeout_delay)).await;
 
         match protocol {
             Protocol::HotStuff => {  // Run HotStuff

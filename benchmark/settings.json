@@ -12,6 +12,6 @@
     },
     "instances": {
         "type": "m5d.8xlarge",
-        "regions": ["us-east-1"]
+        "regions": ["us-east-1", "eu-north-1", "ap-southeast-2", "us-west-1", "ap-northeast-1"]
     }
 }
