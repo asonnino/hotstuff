@@ -105,7 +105,7 @@ impl<Mempool: 'static + NodeMempool> MempoolDriver<Mempool> {
             PayloadStatus::Accept => Ok(true),
             PayloadStatus::Reject => bail!(ConsensusError::InvalidPayload),
             PayloadStatus::Wait(missing) => {
-                if !self.pending.contains_key(&block.round) {
+                // if !self.pending.contains_key(&block.round) {
                     let (tx_cancel, rx_cancel) = channel(1);
                     let round = block.round;
                     self.pending.insert(round, tx_cancel);
@@ -114,7 +114,7 @@ impl<Mempool: 'static + NodeMempool> MempoolDriver<Mempool> {
                     if let Err(e) = self.inner_channel.send(message).await {
                         panic!("Failed to send request to synchronizer: {}", e);
                     }
-                }
+                // }
                 Ok(false)
             }
         }
