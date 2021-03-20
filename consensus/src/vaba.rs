@@ -340,6 +340,7 @@ impl<Mempool: 'static + NodeMempool> VABA<Mempool> {
         if view <= self.view {
             return;
         }
+        self.timer.cancel(self.view).await;
         self.view = view;
         info!("-------------------------------------------------------- Enter view {} --------------------------------------------------------", view);
 
