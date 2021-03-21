@@ -48,7 +48,7 @@ This command may take a long time the first time you run it (compiling rust code
 ```
 
 ## Next Steps
-The [wiki](https://github.com/asonnino/hotstuff/wiki) documents the codebase, explains its architecture, and provides a step-by-step tutorial to run [benchmarks on Amazon Web Services](https://github.com/asonnino/hotstuff/wiki/AWS-Benchmarks) accross multiple data centers (WAN).
+The [wiki](https://github.com/asonnino/hotstuff/wiki) documents the codebase, explains its architecture and the benchmarks' results, and provides a step-by-step tutorial to run [benchmarks on Amazon Web Services](https://github.com/asonnino/hotstuff/wiki/AWS-Benchmarks) accross multiple data centers (WAN).
 
 ## License
 This software is licensed as [Apache 2.0](LICENSE).
