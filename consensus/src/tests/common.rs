@@ -15,30 +15,10 @@ pub fn keys() -> Vec<(PublicKey, SecretKey)> {
     (0..4).map(|_| generate_keypair(&mut rng)).collect()
 }
 
-pub fn fallback_keys() -> Vec<(PublicKey, SecretKey)> {
-    let mut rng = StdRng::from_seed([1; 32]);
-    (0..4).map(|_| generate_keypair(&mut rng)).collect()
-}
-
 // Fixture.
 pub fn committee() -> Committee {
     Committee::new(
         keys()
-            .into_iter()
-            .enumerate()
-            .map(|(i, (name, _))| {
-                let address = format!("127.0.0.1:{}", i).parse().unwrap();
-                let stake = 1;
-                (name, 0, stake, address)
-            })
-            .collect(),
-        /* epoch */ 1,
-    )
-}
-
-pub fn fallback_committee() -> Committee {
-    Committee::new(
-        fallback_keys()
             .into_iter()
             .enumerate()
             .map(|(i, (name, _))| {

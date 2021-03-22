@@ -2,7 +2,7 @@ use crate::config::{Committee, Parameters};
 use crate::error::{MempoolError, MempoolResult};
 use crate::messages::{Payload, PayloadMaker, Transaction};
 use crate::synchronizer::Synchronizer;
-use consensus::{Block, ConsensusMempoolMessage, PayloadStatus, RoundNumber};
+use consensus::{Block, ConsensusMempoolMessage, PayloadStatus, SeqNumber};
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
 #[cfg(feature = "benchmark")]
@@ -200,7 +200,7 @@ impl Core {
         self.synchronizer.verify_payload(*block).await
     }
 
-    async fn cleanup(&mut self, digests: Vec<Digest>, round: RoundNumber) {
+    async fn cleanup(&mut self, digests: Vec<Digest>, round: SeqNumber) {
         self.synchronizer.cleanup(round).await;
         for x in &digests {
             self.queue.remove(x);

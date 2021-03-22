@@ -3,7 +3,7 @@ use crate::config::{Committee, Parameters};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
 use crate::messages::{Block, Timeout, Vote, QC, TC, SignedQC, RandomnessShare, RandomCoin};
-use crate::mempool::{MempoolDriver, NodeMempool};
+use crate::mempool::MempoolDriver;
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
 use async_recursion::async_recursion;
@@ -138,7 +138,7 @@ impl Core {
         let safety_rule_1 = block.round > self.last_voted_round;
         let mut safety_rule_2 = block.qc.round + 1 == block.round;
         if let Some(ref tc) = block.tc {
-            let mut can_extend = tc.round + 1 == block.round;
+            let mut can_extend = tc.seq + 1 == block.round;
             can_extend &= block.qc.round >= *tc.high_qc_rounds().iter().max().expect("Empty TC");
             safety_rule_2 |= can_extend;
         }

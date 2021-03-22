@@ -88,23 +88,6 @@ impl Consensus {
         )
         .await;
 
-        let mut core = Core::new(
-            name,
-            committee,
-            parameters,
-            signature_service,
-            store,
-            leader_elector,
-            mempool_driver,
-            synchronizer,
-            /* core_channel */ rx_core,
-            /* network_channel */ tx_network,
-            /* commit_channel */ tx_commit,
-        );
-        tokio::spawn(async move {
-            core.run().await;
-        });
-
         match protocol {
             Protocol::HotStuff => {  // Run HotStuff
                 let mut core = Core::new(

@@ -2,7 +2,7 @@ use crate::config::Committee;
 use crate::core::MempoolMessage;
 use crate::error::{MempoolError, MempoolResult};
 use bytes::Bytes;
-use consensus::{Block, ConsensusMessage, RoundNumber};
+use consensus::{Block, ConsensusMessage, SeqNumber};
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey};
 use futures::future::try_join_all;
@@ -22,7 +22,7 @@ pub mod synchronizer_tests;
 
 enum SynchronizerMessage {
     Sync(HashSet<Digest>, Block),
-    Clean(RoundNumber),
+    Clean(SeqNumber),
 }
 
 pub struct Synchronizer {
@@ -213,7 +213,7 @@ impl Synchronizer {
         Ok(false)
     }
 
-    pub async fn cleanup(&mut self, round: RoundNumber) {
+    pub async fn cleanup(&mut self, round: SeqNumber) {
         let message = SynchronizerMessage::Clean(round);
         if let Err(e) = self.inner_channel.send(message).await {
             panic!("Failed to send message to synchronizer core: {}", e);
