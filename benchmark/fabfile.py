@@ -20,7 +20,7 @@ def local(ctx):
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 500,
+            'timeout_delay': 100,
             'sync_retry_delay': 10_000,
             'max_payload_size': 500,
             'min_block_delay': 100,
@@ -33,7 +33,7 @@ def local(ctx):
             'max_payload_size': 15_000,
             'min_block_delay': 100
         },
-        'protocol': 2, # 0 for HotStuff, 1 for HotStuffWithAsyncFallback, 2 for ChainedVABA
+        'protocol': 1, # 0 for HotStuff, 1 for HotStuffWithAsyncFallback, 2 for ChainedVABA
         'crash': 0  # crash f nodes from the beginning
     }
     try:
