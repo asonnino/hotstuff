@@ -8,9 +8,14 @@ async fn core(
     name: PublicKey,
     secret: SecretKey,
     store_path: &str,
-) -> (Sender<CoreMessage>, Receiver<NetMessage>, Receiver<Block>) {
+) -> (
+    Sender<ConsensusMessage>,
+    Receiver<NetMessage>,
+    Receiver<Block>,
+) {
     let (tx_core, rx_core) = channel(1);
     let (tx_network, rx_network) = channel(3);
+    let (tx_consensus_mempool, rx_consensus_mempool) = channel(1);
     let (tx_commit, rx_commit) = channel(1);
 
     let parameters = Parameters {
@@ -21,7 +26,8 @@ async fn core(
     let _ = fs::remove_dir_all(store_path);
     let store = Store::new(store_path).unwrap();
     let leader_elector = LeaderElector::new(committee());
-    let mempool_driver = MempoolDriver::new(MockMempool, tx_core.clone(), store.clone());
+    MockMempool::run(rx_consensus_mempool);
+    let mempool_driver = MempoolDriver::new(tx_consensus_mempool);
     let synchronizer = Synchronizer::new(
         name,
         committee(),
@@ -71,14 +77,14 @@ async fn handle_proposal() {
     let (tx_core, mut rx_network, _rx_commit) = core(public_key, secret_key, store_path).await;
 
     // Send a block to the core.
-    let message = CoreMessage::Propose(block.clone());
+    let message = ConsensusMessage::Propose(block.clone());
     tx_core.send(message).await.unwrap();
 
     // Ensure we get a vote back.
     match rx_network.recv().await {
         Some(NetMessage(bytes, recipient)) => {
             match bincode::deserialize(&bytes).unwrap() {
-                CoreMessage::Vote(v) => assert_eq!(v, vote),
+                ConsensusMessage::Vote(v) => assert_eq!(v, vote),
                 _ => assert!(false),
             }
             let (next_leader, _) = leader_keys(2);
@@ -125,7 +131,7 @@ async fn generate_proposal() {
 
     // Send all votes to the core.
     for vote in votes.clone() {
-        let message = CoreMessage::Vote(vote);
+        let message = ConsensusMessage::Vote(vote);
         tx_core.send(message).await.unwrap();
     }
 
@@ -133,7 +139,7 @@ async fn generate_proposal() {
     match rx_network.recv().await {
         Some(NetMessage(bytes, mut recipients)) => {
             match bincode::deserialize(&bytes).unwrap() {
-                CoreMessage::Propose(b) => {
+                ConsensusMessage::Propose(b) => {
                     assert_eq!(b.round, 2);
                     assert_eq!(b.qc, qc);
                 }
@@ -161,7 +167,7 @@ async fn commit_block() {
 
     // Send a 3-chain to the core.
     for block in chain.clone() {
-        let message = CoreMessage::Propose(block);
+        let message = ConsensusMessage::Propose(block);
         tx_core.send(message).await.unwrap();
     }
 
@@ -186,7 +192,7 @@ async fn local_timeout_round() {
     match rx_network.recv().await {
         Some(NetMessage(bytes, mut recipients)) => {
             match bincode::deserialize(&bytes).unwrap() {
-                CoreMessage::Timeout(t) => assert_eq!(t, timeout),
+                ConsensusMessage::Timeout(t) => assert_eq!(t, timeout),
                 _ => assert!(false),
             }
             let mut addresses = committee().broadcast_addresses(&public_key);

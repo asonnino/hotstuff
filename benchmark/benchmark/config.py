@@ -111,6 +111,7 @@ class NodeParameters:
             inputs += [json['consensus']['network_delay']]
             inputs += [json['consensus']['ddos']]
             inputs += [json['mempool']['queue_capacity']]
+            inputs += [json['consensus']['sync_retry_delay']]
             inputs += [json['mempool']['max_payload_size']]
             inputs += [json['mempool']['min_block_delay']]
             inputs += [json['protocol']]
@@ -157,6 +158,3 @@ class BenchParameters:
 
         except ValueError:
             raise ConfigError('Invalid parameters type')
-
-    def result_filename(self, nodes, rate):
-        return f'bench-{nodes}-{rate}-{self.tx_size}.txt'

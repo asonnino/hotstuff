@@ -41,6 +41,8 @@ impl Node {
         parameters: Option<&str>,
     ) -> Result<Self, NodeError> {
         let (tx_commit, rx_commit) = channel(1000);
+        let (tx_consensus, rx_consensus) = channel(1000);
+        let (tx_consensus_mempool, rx_consensus_mempool) = channel(1000);
 
         // Read the committee and secret key from file.
         let committee = Committee::read(committee_file)?;
@@ -74,12 +76,14 @@ impl Node {
         };
 
         // Make a new mempool.
-        let mempool = Mempool::new(
+        Mempool::run(
             name,
             committee.mempool,
             parameters.mempool,
-            signature_service.clone(),
             store.clone(),
+            signature_service.clone(),
+            tx_consensus.clone(),
+            rx_consensus_mempool,
         )?;
 
         // Run the consensus core.
@@ -87,11 +91,13 @@ impl Node {
             name,
             committee.consensus,
             parameters.consensus,
+            store.clone(),
             signature_service,
             pk_set,
-            store.clone(),
-            mempool,
-            /* commit_channel */ tx_commit,
+            tx_consensus,
+            rx_consensus,
+            tx_consensus_mempool,
+            tx_commit,
             protocol,
         )
         .await?;

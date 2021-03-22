@@ -25,7 +25,7 @@ pub struct Block {
     pub round: SeqNumber,
     pub height: HeightNumber,   // for async block height={1,2}, for sync block height=0
     pub fallback: Bool,  // 1 if async block; 0 if sync block
-    pub payload: Vec<Vec<u8>>,
+    pub payload: Vec<Digest>,
     pub signature: Signature,
 }
 
@@ -39,7 +39,7 @@ impl Block {
         round: SeqNumber,
         height: HeightNumber,
         fallback: Bool,
-        payload: Vec<Vec<u8>>,
+        payload: Vec<Digest>,
         mut signature_service: SignatureService,
     ) -> Self {
         let mut block = Self {
@@ -65,7 +65,7 @@ impl Block {
         Block::default()
     }
 
-    pub fn previous(&self) -> &Digest {
+    pub fn parent(&self) -> &Digest {
         &self.qc.hash
     }
 
@@ -191,7 +191,7 @@ impl fmt::Debug for Block {
             self.round,
             self.height,
             self.qc,
-            self.payload.iter().map(|x| x.len()).sum::<usize>(),
+            self.payload.iter().map(|x| x.size()).sum::<usize>(),
             self.fallback
         )
     }

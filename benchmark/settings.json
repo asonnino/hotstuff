@@ -1,5 +1,8 @@
 {
-    "key_path": "/Users/xiangzhuolun/.ssh/aws",
+    "key": {
+        "name": "aws",
+        "path": "/Users/xiangzhuolun/.ssh/"
+    },
     "ports": {
         "consensus": 8000,
         "mempool": 7000,

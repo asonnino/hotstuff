@@ -43,7 +43,7 @@ class LocalBench:
 
         try:
             Print.info('Setting up testbed...')
-            nodes = self.nodes[0]
+            nodes, rate = self.nodes[0], self.rate[0]
 
             # Cleanup all files.
             cmd = f'{CommandMaker.clean_logs()} ; {CommandMaker.cleanup()}'
@@ -86,7 +86,7 @@ class LocalBench:
 
             # Run the clients (they will wait for the nodes to be ready).
             addresses = committee.front_addresses()
-            rate_share = ceil(sum(self.rate) / nodes)
+            rate_share = ceil(rate / nodes)
             timeout = self.node_parameters.timeout_delay
             client_logs = [PathMaker.client_log_file(i) for i in range(nodes)]
             counter = 0

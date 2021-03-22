@@ -66,7 +66,7 @@ class Bench:
             'source $HOME/.cargo/env',
             'rustup default stable',
 
-            # This is missing from the RockDB installer (needed for RockDB).
+            # This is missing from the Rocksdb installer (needed for Rocksdb).
             'sudo apt-get install -y clang',
 
             # Clone the repo.
@@ -75,12 +75,11 @@ class Bench:
         hosts = self.manager.hosts(flat=True)
         try:
             g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect)
-            output = g.run(' && '.join(cmd), hide=True)
-            # self._check_stderr(output)
+            g.run(' && '.join(cmd), hide=True)
             Print.heading(f'Initialized testbed of {len(hosts)} nodes')
-        except GroupException as e:
-            error = FabricError(e)
-            raise BenchError('Failed to install repo on testbed', error)
+        except (GroupException, ExecutionError) as e:
+            e = FabricError(e) if isinstance(e, GroupException) else e
+            raise BenchError('Failed to install repo on testbed', e)
 
     def kill(self, hosts=[], delete_logs=False):
         assert isinstance(hosts, list)
@@ -137,7 +136,6 @@ class Bench:
         # Cleanup all local configuration files.
         cmd = CommandMaker.cleanup()
         subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
-        sleep(0.5)  # Removing the store may take time.
 
         # Recompile the latest code.
         cmd = CommandMaker.compile().split()
@@ -257,7 +255,7 @@ class Bench:
 
         # Parse logs and return the parser.
         Print.info('Parsing logs and computing performance...')
-        return LogParser.process('./logs')
+        return LogParser.process(PathMaker.logs_path())
 
     def run(self, bench_parameters_dict, node_parameters_dict, debug=False):
         assert isinstance(debug, bool)
@@ -267,12 +265,6 @@ class Bench:
             node_parameters = NodeParameters(node_parameters_dict)
         except ConfigError as e:
             raise BenchError('Invalid nodes or bench parameters', e)
-
-        try:
-            cmd = f'mkdir -p {PathMaker.results_path()}'
-            subprocess.run(cmd.split(), check=True)
-        except subprocess.SubprocessError as e:
-            raise BenchError('Failed to create results folder', e)
 
         # Select which hosts to use.
         selected_hosts = self._select_hosts(bench_parameters)
@@ -321,12 +313,9 @@ class Bench:
                         self._run_single(
                             hosts, r, bench_parameters, node_parameters, debug
                         )
-                        self._logs(hosts).print(
-                            join(
-                                PathMaker.results_path(),
-                                bench_parameters.result_filename(n, r)
-                            )
-                        )
+                        self._logs(hosts).print(PathMaker.result_file(
+                            n, r, bench_parameters.tx_size
+                        ))
                     except (subprocess.SubprocessError, GroupException, ParseError) as e:
                         self.kill(hosts=hosts)
                         if isinstance(e, GroupException):

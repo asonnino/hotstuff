@@ -1,16 +1,17 @@
 use crate::config::{Committee, Parameters, Protocol};
-use crate::core::Core;
 use crate::fallback::Fallback;
 use crate::vaba::VABA;
+use crate::core::{ConsensusMessage, Core};
 use crate::error::ConsensusResult;
 use crate::leader::LeaderElector;
-use crate::mempool::{MempoolDriver, NodeMempool};
+use crate::mempool::{ConsensusMempoolMessage, MempoolDriver};
 use crate::messages::Block;
 use crate::synchronizer::Synchronizer;
 use crypto::{PublicKey, SignatureService};
+use log::info;
 use network::{NetReceiver, NetSender};
 use store::Store;
-use tokio::sync::mpsc::{channel, Sender};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 // use tokio::time::{Duration, sleep};
 use threshold_crypto::PublicKeySet;
 
@@ -21,18 +22,37 @@ pub mod consensus_tests;
 pub struct Consensus;
 
 impl Consensus {
-    pub async fn run<Mempool: 'static + NodeMempool>(
+    #[allow(clippy::too_many_arguments)]
+    pub async fn run(
         name: PublicKey,
         committee: Committee,
         parameters: Parameters,
+        store: Store,
         signature_service: SignatureService,
         pk_set: PublicKeySet,   // The set of tss public keys
-        store: Store,
-        mempool: Mempool,
-        commit_channel: Sender<Block>,
+        tx_core: Sender<ConsensusMessage>,
+        rx_core: Receiver<ConsensusMessage>,
+        tx_consensus_mempool: Sender<ConsensusMempoolMessage>,
+        tx_commit: Sender<Block>,
         protocol: Protocol,
     ) -> ConsensusResult<()> {
-        let (tx_core, rx_core) = channel(1000);
+        info!(
+            "Consensus timeout delay set to {} ms",
+            parameters.timeout_delay
+        );
+        info!(
+            "Consensus synchronizer retry delay set to {} ms",
+            parameters.sync_retry_delay
+        );
+        info!(
+            "Consensus max payload size set to {} B",
+            parameters.max_payload_size
+        );
+        info!(
+            "Consensus min block delay set to {} ms",
+            parameters.min_block_delay
+        );
+
         let (tx_network, rx_network) = channel(1000);
 
         // Make the network sender and receiver.
@@ -54,7 +74,7 @@ impl Consensus {
         let leader_elector = LeaderElector::new(committee.clone());
 
         // Make the mempool driver which will mediate our requests to the mempool.
-        let mempool_driver = MempoolDriver::new(mempool, tx_core.clone(), store.clone());
+        let mempool_driver = MempoolDriver::new(tx_consensus_mempool);
 
         // Make the synchronizer. This instance runs in a background thread
         // and asks other nodes for any block that we may be missing.
@@ -68,7 +88,22 @@ impl Consensus {
         )
         .await;
 
-        // sleep(Duration::from_millis((committee.size() as u64) * parameters.timeout_delay)).await;
+        let mut core = Core::new(
+            name,
+            committee,
+            parameters,
+            signature_service,
+            store,
+            leader_elector,
+            mempool_driver,
+            synchronizer,
+            /* core_channel */ rx_core,
+            /* network_channel */ tx_network,
+            /* commit_channel */ tx_commit,
+        );
+        tokio::spawn(async move {
+            core.run().await;
+        });
 
         match protocol {
             Protocol::HotStuff => {  // Run HotStuff
@@ -83,7 +118,7 @@ impl Consensus {
                     synchronizer,
                     /* core_channel */ rx_core,
                     /* network_channel */ tx_network,
-                    commit_channel,
+                    tx_commit,
                 );
                 tokio::spawn(async move {
                     core.run().await;
@@ -102,7 +137,7 @@ impl Consensus {
                     synchronizer,
                     /* core_channel */ rx_core,
                     /* network_channel */ tx_network,
-                    commit_channel,
+                    tx_commit,
                 );
                 tokio::spawn(async move {
                     hotstuff_with_fallback.run().await;
@@ -121,7 +156,7 @@ impl Consensus {
                     synchronizer,
                     /* core_channel */ rx_core,
                     /* network_channel */ tx_network,
-                    commit_channel,
+                    tx_commit,
                 );
                 tokio::spawn(async move {
                     vaba.run().await;
