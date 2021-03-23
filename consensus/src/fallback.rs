@@ -718,8 +718,9 @@ impl Fallback {
         if let Some(voted_round) = self.fallback_voted_round.get(&fallback_leader) {
             self.last_voted_round = max(self.last_voted_round, *voted_round);
         }
-        let qc = self.fallback_qcs.get(&fallback_leader).unwrap().clone();
-        self.process_qc(&qc).await;
+        if let Some(qc) = self.fallback_qcs.get_mut(&fallback_leader).cloned() {
+            self.process_qc(&qc).await;
+        }
         // }
         // Exit fallback
         self.fallback = 0;
