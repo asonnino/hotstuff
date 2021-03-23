@@ -417,6 +417,12 @@ impl Fallback {
     async fn process_pending_blocks(&mut self) -> ConsensusResult<()> {
         if let Some(map) = self.fallback_pending_blocks.remove(&self.view) {
             for (_, block) in map {
+                // Let's see if we have the block's data. If we don't, the mempool
+                // will get it and then make us resume processing this block.
+                if !self.mempool_driver.verify(block.clone()).await? {
+                    debug!("Processing of {} suspended: missing payload", block.digest());
+                    return Ok(());
+                }
                 if let Err(e) = self.process_block(&block).await {
                     warn!("Failed to process pending blocks: {}", e);
                 }
@@ -512,6 +518,7 @@ impl Fallback {
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
         // debug!("{:?}", self.print_chain(block).await?);
 
+        debug!("Processing block {}", block.digest());
         if let Some(coin) = block.coin.clone() {
             self.handle_random_coin(coin).await?;
         }
