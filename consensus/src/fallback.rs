@@ -73,6 +73,12 @@ impl Fallback {
     ) -> Self {
         let aggregator = Aggregator::new(committee.clone());
         let timer = Timer::new(parameters.timeout_delay);
+        let mut fallback_voted_height = HashMap::new();
+        let mut fallback_voted_round = HashMap::new();
+        for (node, _) in &committee.authorities {
+            fallback_voted_height.insert(*node, 0);
+            fallback_voted_round.insert(*node, 0);
+        }
         Self {
             name,
             committee,
@@ -93,8 +99,8 @@ impl Fallback {
             high_qc: QC::genesis(),
             last_committed_round: u64::MAX, // initially -1
             fallback: 0,
-            fallback_voted_round: HashMap::new(),
-            fallback_voted_height: HashMap::new(),
+            fallback_voted_round,
+            fallback_voted_height,
             fallback_qcs: HashMap::new(),
             fallback_pending_blocks: HashMap::new(),
             fallback_signed_qc_sender: HashMap::new(),
