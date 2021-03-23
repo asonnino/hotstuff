@@ -17,15 +17,28 @@ class Key:
             data = load(f)
         return cls(data['name'], data['secret'])
 
+class TSSKey:
+    def __init__(self, id, name, secret):
+        self.id = id
+        self.name = name
+        self.secret = secret
+
+    @classmethod
+    def from_file(cls, filename):
+        assert isinstance(filename, str)
+        with open(filename, 'r') as f:
+            data = load(f)
+        return cls(data['id'], data['name'], data['secret'])
 
 class Committee:
-    def __init__(self, names, consensus_addr, front_addr, mempool_addr):
+    def __init__(self, names, ids, consensus_addr, front_addr, mempool_addr):
         inputs = [names, consensus_addr, front_addr, mempool_addr]
         assert all(isinstance(x, list) for x in inputs)
         assert all(isinstance(x, str) for y in inputs for x in y)
         assert len({len(x) for x in inputs}) == 1
 
         self.names = names
+        self.ids = ids
         self.consensus = consensus_addr
         self.front = front_addr
         self.mempool = mempool_addr
@@ -37,8 +50,8 @@ class Committee:
 
     def _build_consensus(self):
         node = {}
-        for a, n in zip(self.consensus, self.names):
-            node[n] = {'name': n, 'stake': 1, 'address': a}
+        for a, n, id in zip(self.consensus, self.names, self.ids):
+            node[n] = {'name': n, 'stake': 1, 'address': a, 'id': id}
         return {'authorities': node, 'epoch': 1}
 
     def _build_mempool(self):
@@ -69,21 +82,22 @@ class Committee:
         mempool_authorities = data['mempool']['authorities'].values()
 
         names = [x['name'] for x in consensus_authorities]
+        ids = [x['id'] for x in consensus_authorities]
         consensus_addr = [x['address'] for x in consensus_authorities]
         front_addr = [x['front_address'] for x in mempool_authorities]
         mempool_addr = [x['mempool_address'] for x in mempool_authorities]
-        return cls(names, consensus_addr, front_addr, mempool_addr)
+        return cls(names, ids, consensus_addr, front_addr, mempool_addr)
 
 
 class LocalCommittee(Committee):
-    def __init__(self, names, port):
+    def __init__(self, names, ids, port):
         assert isinstance(names, list) and all(isinstance(x, str) for x in names)
         assert isinstance(port, int)
         size = len(names)
         consensus = [f'127.0.0.1:{port + i}' for i in range(size)]
         front = [f'127.0.0.1:{port + i + size}' for i in range(size)]
         mempool = [f'127.0.0.1:{port + i + 2*size}' for i in range(size)]
-        super().__init__(names, consensus, front, mempool)
+        super().__init__(names, ids, consensus, front, mempool)
 
 
 class NodeParameters:
@@ -94,9 +108,14 @@ class NodeParameters:
             inputs += [json['consensus']['sync_retry_delay']]
             inputs += [json['consensus']['max_payload_size']]
             inputs += [json['consensus']['min_block_delay']]
+            inputs += [json['consensus']['network_delay']]
+            inputs += [json['consensus']['ddos']]
             inputs += [json['mempool']['queue_capacity']]
+            inputs += [json['consensus']['sync_retry_delay']]
             inputs += [json['mempool']['max_payload_size']]
             inputs += [json['mempool']['min_block_delay']]
+            inputs += [json['protocol']]
+            inputs += [json['crash']]
         except KeyError as e:
             raise ConfigError(f'Malformed parameters: missing key {e}')
 
@@ -104,6 +123,10 @@ class NodeParameters:
             raise ConfigError('Invalid parameters type')
 
         self.timeout_delay = json['consensus']['timeout_delay'] 
+        self.network_delay = json['consensus']['network_delay'] 
+        self.ddos = json['consensus']['ddos']
+        self.protocol = json['protocol']
+        self.crash = json['crash']
         self.json = json
 
     def print(self, filename):
@@ -135,6 +158,3 @@ class BenchParameters:
 
         except ValueError:
             raise ConfigError('Invalid parameters type')
-
-    def result_filename(self, nodes, rate):
-        return f'bench-{nodes}-{rate}-{self.tx_size}.txt'

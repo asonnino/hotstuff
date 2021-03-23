@@ -4,6 +4,8 @@ mod aggregator;
 mod config;
 mod consensus;
 mod core;
+mod fallback;
+mod vaba;
 mod leader;
 mod mempool;
 mod messages;
@@ -14,8 +16,9 @@ mod timer;
 #[path = "tests/common.rs"]
 mod common;
 
-pub use crate::config::{Committee, Parameters};
+pub use crate::config::{Committee, Parameters, Protocol};
 pub use crate::consensus::Consensus;
+pub use crate::core::{ConsensusMessage, SeqNumber};
 pub use crate::error::ConsensusError;
-pub use crate::mempool::{NodeMempool, PayloadStatus};
-pub use crate::messages::Block;
+pub use crate::mempool::{ConsensusMempoolMessage, PayloadStatus};
+pub use crate::messages::{Block, QC, TC};

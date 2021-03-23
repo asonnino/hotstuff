@@ -7,6 +7,7 @@ use std::net::SocketAddr;
 #[derive(Serialize, Deserialize)]
 pub struct Parameters {
     pub queue_capacity: usize,
+    pub sync_retry_delay: u64,
     pub max_payload_size: usize,
     pub min_block_delay: u64,
 }
@@ -15,13 +16,14 @@ impl Default for Parameters {
     fn default() -> Self {
         Self {
             queue_capacity: 10_000,
+            sync_retry_delay: 10_000,
             max_payload_size: 100_000,
             min_block_delay: 100,
         }
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Authority {
     pub name: PublicKey,
     pub front_address: SocketAddr,
@@ -30,7 +32,7 @@ pub struct Authority {
 
 pub type EpochNumber = u128;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Committee {
     pub authorities: HashMap<PublicKey, Authority>,
     pub epoch: EpochNumber,

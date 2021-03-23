@@ -9,7 +9,7 @@ from math import ceil
 from os.path import join
 import subprocess
 
-from benchmark.config import Committee, Key, NodeParameters, BenchParameters, ConfigError
+from benchmark.config import Committee, Key, TSSKey, NodeParameters, BenchParameters, ConfigError
 from benchmark.utils import BenchError, Print, PathMaker, progress_bar
 from benchmark.commands import CommandMaker
 from benchmark.logs import LogParser, ParseError
@@ -66,7 +66,7 @@ class Bench:
             'source $HOME/.cargo/env',
             'rustup default stable',
 
-            # This is missing from the RockDB installer (needed for RockDB).
+            # This is missing from the Rocksdb installer (needed for Rocksdb).
             'sudo apt-get install -y clang',
 
             # Clone the repo.
@@ -75,12 +75,11 @@ class Bench:
         hosts = self.manager.hosts(flat=True)
         try:
             g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect)
-            output = g.run(' && '.join(cmd), hide=True)
-            self._check_stderr(output)
+            g.run(' && '.join(cmd), hide=True)
             Print.heading(f'Initialized testbed of {len(hosts)} nodes')
-        except GroupException as e:
-            error = FabricError(e)
-            raise BenchError('Failed to install repo on testbed', error)
+        except (GroupException, ExecutionError) as e:
+            e = FabricError(e) if isinstance(e, GroupException) else e
+            raise BenchError('Failed to install repo on testbed', e)
 
     def kill(self, hosts=[], delete_logs=False):
         assert isinstance(hosts, list)
@@ -137,7 +136,6 @@ class Bench:
         # Cleanup all local configuration files.
         cmd = CommandMaker.cleanup()
         subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
-        sleep(0.5)  # Removing the store may take time.
 
         # Recompile the latest code.
         cmd = CommandMaker.compile().split()
@@ -155,11 +153,24 @@ class Bench:
             subprocess.run(cmd, check=True)
             keys += [Key.from_file(filename)]
 
+        # Generate threshold signature files.
+        nodes = len(hosts)
+        cmd = './node threshold_keys'
+        for i in range(nodes):
+            cmd += ' --filename ' + PathMaker.threshold_key_file(i)
+        # print(cmd)
+        cmd = cmd.split()
+        subprocess.run(cmd, capture_output=True, check=True)
+
         names = [x.name for x in keys]
         consensus_addr = [f'{x}:{self.settings.consensus_port}' for x in hosts]
         mempool_addr = [f'{x}:{self.settings.mempool_port}' for x in hosts]
         front_addr = [f'{x}:{self.settings.front_port}' for x in hosts]
-        committee = Committee(names, consensus_addr, mempool_addr, front_addr)
+        tss_keys = []
+        for i in range(nodes):
+            tss_keys += [TSSKey.from_file(PathMaker.threshold_key_file(i))]
+        ids = [x.id for x in tss_keys]
+        committee = Committee(names, ids, consensus_addr, mempool_addr, front_addr)
         committee.print(PathMaker.committee_file())
 
         node_parameters.print(PathMaker.parameters_file())
@@ -175,6 +186,7 @@ class Bench:
             c = Connection(host, user='ubuntu', connect_kwargs=self.connect)
             c.put(PathMaker.committee_file(), '.')
             c.put(PathMaker.key_file(i), '.')
+            c.put(PathMaker.threshold_key_file(i), '.')
             c.put(PathMaker.parameters_file(), '.')
 
         return committee
@@ -205,9 +217,11 @@ class Bench:
         key_files = [PathMaker.key_file(i) for i in range(len(hosts))]
         dbs = [PathMaker.db_path(i) for i in range(len(hosts))]
         node_logs = [PathMaker.node_log_file(i) for i in range(len(hosts))]
-        for host, key_file, db, log_file in zip(hosts, key_files, dbs, node_logs):
+        threshold_key_files = [PathMaker.threshold_key_file(i) for i in range(len(hosts))]
+        for host, key_file, threshold_key_file, db, log_file in zip(hosts, key_files, threshold_key_files, dbs, node_logs):
             cmd = CommandMaker.run_node(
                 key_file,
+                threshold_key_file,
                 PathMaker.committee_file(),
                 db,
                 PathMaker.parameters_file(),
@@ -241,7 +255,7 @@ class Bench:
 
         # Parse logs and return the parser.
         Print.info('Parsing logs and computing performance...')
-        return LogParser.process('./logs')
+        return LogParser.process(PathMaker.logs_path())
 
     def run(self, bench_parameters_dict, node_parameters_dict, debug=False):
         assert isinstance(debug, bool)
@@ -251,12 +265,6 @@ class Bench:
             node_parameters = NodeParameters(node_parameters_dict)
         except ConfigError as e:
             raise BenchError('Invalid nodes or bench parameters', e)
-
-        try:
-            cmd = f'mkdir -p {PathMaker.results_path()}'
-            subprocess.run(cmd.split(), check=True)
-        except subprocess.SubprocessError as e:
-            raise BenchError('Failed to create results folder', e)
 
         # Select which hosts to use.
         selected_hosts = self._select_hosts(bench_parameters)
@@ -270,6 +278,19 @@ class Bench:
         except (GroupException, ExecutionError) as e:
             e = FabricError(e) if isinstance(e, GroupException) else e
             raise BenchError('Failed to update nodes', e)
+
+        if node_parameters.protocol == 0:
+            Print.info('Running HotStuff')
+        elif node_parameters.protocol == 1:
+            Print.info('Running HotStuff with Async Fallback')
+        elif node_parameters.protocol == 2:
+            Print.info('Running Chained-VABA')
+        else:
+            Print.info('Wrong protocol type!')
+
+        Print.info(f'Crash {node_parameters.crash} nodes')
+        Print.info(f'Timeout {node_parameters.timeout_delay} ms, Network delay {node_parameters.network_delay} ms')
+        Print.info(f'DDOS attack {node_parameters.ddos}')
 
         # Run benchmarks.
         for n in bench_parameters.nodes:
@@ -292,12 +313,9 @@ class Bench:
                         self._run_single(
                             hosts, r, bench_parameters, node_parameters, debug
                         )
-                        self._logs(hosts).print(
-                            join(
-                                PathMaker.results_path(),
-                                bench_parameters.result_filename(n, r)
-                            )
-                        )
+                        self._logs(hosts).print(PathMaker.result_file(
+                            n, r, bench_parameters.tx_size
+                        ))
                     except (subprocess.SubprocessError, GroupException, ParseError) as e:
                         self.kill(hosts=hosts)
                         if isinstance(e, GroupException):

@@ -16,8 +16,8 @@ class AWSError(Exception):
 
 
 class InstanceManager:
-    INSTANCE_NAME = 'hotstuff-node'
-    SECURITY_GROUP_NAME = 'hotstuff'
+    INSTANCE_NAME = 'async-hotstuff-node'
+    SECURITY_GROUP_NAME = 'async-hotstuff'
 
     def __init__(self, settings):
         assert isinstance(settings, Settings)
@@ -163,7 +163,7 @@ class InstanceManager:
                 client.run_instances(
                     ImageId=self._get_ami(client),
                     InstanceType=self.settings.instance_type,
-                    KeyName='aws',
+                    KeyName='Daniel',
                     MaxCount=instances,
                     MinCount=instances,
                     SecurityGroups=[self.SECURITY_GROUP_NAME],

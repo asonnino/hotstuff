@@ -1,6 +1,6 @@
 use crate::node::NodeError;
 use consensus::{Committee as ConsensusCommittee, Parameters as ConsensusParameters};
-use crypto::{generate_keypair, generate_production_keypair, PublicKey, SecretKey};
+use crypto::{generate_keypair, generate_production_keypair, PublicKey, SecretKey, SecretShare};
 use mempool::{Committee as MempoolCommittee, Parameters as MempoolParameters};
 use rand::rngs::StdRng;
 use rand::SeedableRng as _;
@@ -42,6 +42,7 @@ pub trait Export: Serialize + DeserializeOwned {
 pub struct Parameters {
     pub consensus: ConsensusParameters,
     pub mempool: MempoolParameters,
+    pub protocol: u8,
 }
 
 impl Export for Parameters {}
@@ -69,7 +70,9 @@ impl Default for Secret {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+impl Export for SecretShare {}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Committee {
     pub consensus: ConsensusCommittee,
     pub mempool: MempoolCommittee,

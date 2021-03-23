@@ -9,6 +9,10 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::sync::oneshot;
+use threshold_crypto::{
+    PublicKeySet, PublicKeyShare, SecretKeySet, SecretKeyShare, SignatureShare,
+};
+use threshold_crypto::serde_impl::SerdeSecret;
 
 #[cfg(test)]
 #[path = "tests/crypto_tests.rs"]
@@ -24,7 +28,7 @@ impl Digest {
         self.0.to_vec()
     }
 
-    pub fn len(&self) -> usize {
+    pub fn size(&self) -> usize {
         self.0.len()
     }
 }
@@ -210,10 +214,11 @@ impl Signature {
 #[derive(Clone)]
 pub struct SignatureService {
     channel: Sender<(Digest, oneshot::Sender<Signature>)>,
+    tss_channel: Option<Sender<(Digest, oneshot::Sender<SignatureShare>)>>,
 }
 
 impl SignatureService {
-    pub fn new(secret: SecretKey) -> Self {
+    pub fn new(secret: SecretKey, tss_secret: Option<SecretKeyShare>) -> Self {
         let (tx, mut rx): (Sender<(_, oneshot::Sender<_>)>, _) = channel(100);
         tokio::spawn(async move {
             while let Some((digest, sender)) = rx.recv().await {
@@ -221,7 +226,17 @@ impl SignatureService {
                 let _ = sender.send(signature);
             }
         });
-        Self { channel: tx }
+        let (tss_tx, mut tss_rx): (Sender<(_, oneshot::Sender<_>)>, _) = channel(100);
+        if let Some(secret_share) = tss_secret {
+            tokio::spawn(async move {
+                while let Some((digest, sender)) = tss_rx.recv().await {
+                    let signature_share = secret_share.sign(digest);
+                    let _ = sender.send(signature_share);
+                }
+            });
+            return Self { channel: tx, tss_channel: Some(tss_tx) };
+        }
+        Self { channel: tx, tss_channel: None }
     }
 
     pub async fn request_signature(&mut self, digest: Digest) -> Signature {
@@ -232,5 +247,44 @@ impl SignatureService {
         receiver
             .await
             .expect("Failed to receive signature from Signature Service")
+    }
+
+    pub async fn request_tss_signature(&mut self, digest: Digest) -> Option<SignatureShare> {
+        let (sender, receiver): (oneshot::Sender<_>, oneshot::Receiver<_>) = oneshot::channel();
+        if let Some(channel) = &self.tss_channel {
+            if let Err(e) = channel.send((digest, sender)).await {
+                panic!("Failed to send message TSS Signature Service: {}", e);
+            }
+            return Some(receiver
+                .await
+                .expect("Failed to receive tss signature share from TSS Signature Service"));
+        }
+        return None;
+    }
+}
+
+// Wrapper for threshold signature key shares
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SecretShare {
+    pub id: usize,
+    pub name: PublicKeyShare,
+    pub secret: SerdeSecret<SecretKeyShare>,
+    pub pkset: PublicKeySet,
+}
+
+impl SecretShare {
+    pub fn new(id: usize, name: PublicKeyShare, secret: SerdeSecret<SecretKeyShare>, pkset: PublicKeySet) -> Self {
+        Self { id, name, secret, pkset }
+    }
+}
+
+impl Default for SecretShare {
+    fn default() -> Self {
+        let mut rng = rand::thread_rng();
+        let sk_set = SecretKeySet::random(0, &mut rng);
+        let pk_set = sk_set.public_keys();
+        let sk_share = sk_set.secret_key_share(0);
+        let pk_share = pk_set.public_key_share(0);
+        Self{ id: 0, name: pk_share, secret: SerdeSecret(sk_share), pkset: pk_set}
     }
 }

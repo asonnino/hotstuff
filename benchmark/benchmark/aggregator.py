@@ -2,7 +2,9 @@ from re import search
 from collections import defaultdict
 from statistics import mean, stdev
 from glob import glob
+from copy import deepcopy
 from os.path import join
+import os
 
 from benchmark.utils import PathMaker
 
@@ -12,12 +14,14 @@ class Setup:
         self.nodes = nodes
         self.rate = rate
         self.tx_size = tx_size
+        self.max_latency = 'any'
 
     def __str__(self):
         return (
             f' Committee size: {self.nodes} nodes\n'
-            f' Input rate: {self.rate} txs\n'
+            f' Input rate: {self.rate} tx/s\n'
             f' Transaction size: {self.tx_size} B\n'
+            f' Max latency: {self.max_latency} ms\n'
         )
 
     def __eq__(self, other):
@@ -67,79 +71,94 @@ class Result:
 
 class LogAggregator:
     def __init__(self):
-        filenames = glob(join(PathMaker.results_path(), '*.txt'))
         data = ''
-        for filename in filenames:
+        for filename in glob(join(PathMaker.results_path(), '*.txt')):
             with open(filename, 'r') as f:
                 data += f.read()
 
         records = defaultdict(list)
-        for chunk in data.replace(',', '').split('RESULTS')[1:]:
+        for chunk in data.replace(',', '').split('SUMMARY')[1:]:
             if chunk:
                 records[Setup.from_str(chunk)] += [Result.from_str(chunk)]
 
         self.records = {k: Result.aggregate(v) for k, v in records.items()}
 
     def print(self):
-        self._print_latency()
-        self._print_tps()
+        if not os.path.exists(PathMaker.plots_path()):
+            os.makedirs(PathMaker.plots_path())
+
+        results = [
+            self._print_latency(), self._print_tps(), self._print_robustness()
+        ]
+        for records in results:
+            for setup, values in records.items():
+                data = '\n'.join(
+                    f' Variable value: X={x}\n{y}' for x, y in values
+                )
+                string = (
+                    '\n'
+                    '-----------------------------------------\n'
+                    ' RESULTS:\n'
+                    '-----------------------------------------\n'
+                    f'{setup}'
+                    '\n'
+                    f'{data}'
+                    '-----------------------------------------\n'
+                )
+                filename = PathMaker.agg_file(
+                    setup.nodes, 
+                    setup.rate, 
+                    setup.tx_size, 
+                    max_latency=setup.max_latency
+                )
+                with open(filename, 'w') as f:
+                    f.write(string)
 
     def _print_latency(self):
+        records = deepcopy(self.records)
         organized = defaultdict(list)
-        for setup, result in self.records.items():
-            setup.rate = 'X'
-            organized[setup] += [(result.mean_tps, result)]
+        for setup, result in records.items():
+            rate = setup.rate
+            setup.rate = 'any'
+            organized[setup] += [(result.mean_tps, result, rate)]
 
-        for setup, values in organized.items():
-            values.sort(key=lambda x: x[0])
-            data = '\n'.join(f' Variable value: X={x}\n{y}' for x, y in values)
-            string = (
-                '\n'
-                '-----------------------------------------\n'
-                ' RESULTS:\n'
-                '-----------------------------------------\n'
-                f'{setup}'
-                '\n'
-                f'{data}'
-                '-----------------------------------------\n'
-            )
+        for setup, results in list(organized.items()):
+            results.sort(key=lambda x: x[2])
+            organized[setup] = [(x, y) for x, y, _ in results]
 
-            filename = f'{setup.nodes}-x-{setup.tx_size}.txt'
-            with open(filename, 'w') as f:
-                f.write(string)
+        return organized
 
-    def _print_tps(self, max_latency=4000):
+    def _print_tps(self, max_latencies=[2_000, 5_000]):
+        records = deepcopy(self.records)
         organized = defaultdict(list)
-        for setup, result in self.records.items():
-            if result.mean_latency <= max_latency:
-                nodes = setup.nodes
-                setup.nodes = 'X'
-                setup.rate = '-'
-               
-                new_point = all(nodes != x[0] for x in organized[setup])
-                highest_tps = False
-                for w, r in organized[setup]:
-                    if result.mean_tps > r.mean_tps and nodes == w:
-                        organized[setup].remove((w, r))
-                        highest_tps = True
-                if new_point or highest_tps:
-                    organized[setup] += [(nodes, result)]
+        for max_latency in max_latencies:
+            for setup, result in records.items():
+                setup = deepcopy(setup)
+                if result.mean_latency <= max_latency:
+                    nodes = setup.nodes
+                    setup.nodes = 'x'
+                    setup.rate = 'any'
+                    setup.max_latency = max_latency
 
-        print(organized)
-        for setup, values in organized.items():
-            values.sort(key=lambda x: x[0])
-            data = '\n'.join(f' Variable value: X={x}\n{y}' for x, y in values)
-            string = (
-                '\n'
-                '-----------------------------------------\n'
-                ' RESULTS:\n'
-                '-----------------------------------------\n'
-                f'{setup}'
-                '\n'
-                f'{data}'
-                '-----------------------------------------\n'
-            )
+                    new_point = all(nodes != x[0] for x in organized[setup])
+                    highest_tps = False
+                    for w, r in organized[setup]:
+                        if result.mean_tps > r.mean_tps and nodes == w:
+                            organized[setup].remove((w, r))
+                            highest_tps = True
+                    if new_point or highest_tps:
+                        organized[setup] += [(nodes, result)]
 
-            filename = f'x-any-{setup.tx_size}.txt'
-            with open(filename, 'w') as f:
-                f.write(string)
+        [v.sort(key=lambda x: x[0]) for v in organized.values()]
+        return organized
+
+    def _print_robustness(self):
+        records = deepcopy(self.records)
+        organized = defaultdict(list)
+        for setup, result in records.items():
+            rate = setup.rate
+            setup.rate = 'x'
+            organized[setup] += [(rate, result)]
+
+        [v.sort(key=lambda x: x[0]) for v in organized.values()]
+        return organized

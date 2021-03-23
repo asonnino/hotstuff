@@ -4,7 +4,7 @@ from os.path import basename, join, splitext
 from time import sleep
 
 from benchmark.commands import CommandMaker
-from benchmark.config import Key, LocalCommittee, NodeParameters, BenchParameters, ConfigError
+from benchmark.config import Key, TSSKey, LocalCommittee, NodeParameters, BenchParameters, ConfigError
 from benchmark.logs import LogParser, ParseError
 from benchmark.utils import Print, BenchError, PathMaker
 
@@ -43,7 +43,7 @@ class LocalBench:
 
         try:
             Print.info('Setting up testbed...')
-            nodes = self.nodes[0]
+            nodes, rate = self.nodes[0], self.rate[0]
 
             # Cleanup all files.
             cmd = f'{CommandMaker.clean_logs()} ; {CommandMaker.cleanup()}'
@@ -66,18 +66,34 @@ class LocalBench:
                 subprocess.run(cmd, check=True)
                 keys += [Key.from_file(filename)]
 
+            # Generate threshold signature files.
+            cmd = './node threshold_keys'
+            for i in range(nodes):
+                cmd += ' --filename ' + PathMaker.threshold_key_file(i)
+            # print(cmd)
+            cmd = cmd.split()
+            subprocess.run(cmd, capture_output=True, check=True)
+
             names = [x.name for x in keys]
-            committee = LocalCommittee(names, self.BASE_PORT)
+            tss_keys = []
+            for i in range(nodes):
+                tss_keys += [TSSKey.from_file(PathMaker.threshold_key_file(i))]
+            ids = [x.id for x in tss_keys]
+            committee = LocalCommittee(names, ids, self.BASE_PORT)
             committee.print(PathMaker.committee_file())
 
             self.node_parameters.print(PathMaker.parameters_file())
 
             # Run the clients (they will wait for the nodes to be ready).
             addresses = committee.front_addresses()
-            rate_share = ceil(self.rate / nodes)
+            rate_share = ceil(rate / nodes)
             timeout = self.node_parameters.timeout_delay
             client_logs = [PathMaker.client_log_file(i) for i in range(nodes)]
+            counter = 0
             for addr, log_file in zip(addresses, client_logs):
+                counter += 1
+                if counter > nodes - self.node_parameters.crash:
+                    break
                 cmd = CommandMaker.run_client(
                     addr,
                     self.tx_size,
@@ -85,13 +101,32 @@ class LocalBench:
                     timeout
                 )
                 self._background_run(cmd, log_file)
+            
+            if self.node_parameters.protocol == 0:
+                Print.info('Running HotStuff')
+            elif self.node_parameters.protocol == 1:
+                Print.info('Running HotStuff with Async Fallback')
+            elif self.node_parameters.protocol == 2:
+                Print.info('Running Chained-VABA')
+            else:
+                Print.info('Wrong protocol type!')
+
+            Print.info(f'Crash {self.node_parameters.crash} nodes')
+            Print.info(f'Timeout {self.node_parameters.timeout_delay} ms, Network delay {self.node_parameters.network_delay} ms')
+            Print.info(f'DDOS attack {self.node_parameters.ddos}')
 
             # Run the nodes.
             dbs = [PathMaker.db_path(i) for i in range(nodes)]
             node_logs = [PathMaker.node_log_file(i) for i in range(nodes)]
-            for key_file, db, log_file in zip(key_files, dbs, node_logs):
+            threshold_key_files = [PathMaker.threshold_key_file(i) for i in range(nodes)]
+            counter = 0
+            for key_file, threshold_key_file, db, log_file in zip(key_files, threshold_key_files, dbs, node_logs):
+                counter += 1
+                if counter > nodes - self.node_parameters.crash:
+                    break
                 cmd = CommandMaker.run_node(
                     key_file,
+                    threshold_key_file,
                     PathMaker.committee_file(),
                     db,
                     PathMaker.parameters_file(),

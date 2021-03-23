@@ -6,6 +6,7 @@ use futures::future::try_join_all;
 use std::fs;
 use tokio::sync::mpsc::channel;
 use tokio::task::JoinHandle;
+use threshold_crypto::SecretKeySet;
 
 fn spawn_nodes(
     keys: Vec<(PublicKey, SecretKey)>,
@@ -20,18 +21,29 @@ fn spawn_nodes(
             let store_path = format!("{}_{}", store_path, i);
             let _ = fs::remove_dir_all(&store_path);
             let store = Store::new(&store_path).unwrap();
-            let signature_service = SignatureService::new(secret);
-            let mempool = MockMempool;
+            let signature_service = SignatureService::new(secret, None);
+            let (tx_consensus, rx_consensus) = channel(10);
+            let (tx_consensus_mempool, rx_consensus_mempool) = channel(1);
+            MockMempool::run(rx_consensus_mempool);
             let (tx_commit, mut rx_commit) = channel(1);
+            let size = committee.size();
+            let threshold = (size - 1) / 3 + 1;
+            let mut rng = rand::thread_rng();
+            let sk_set = SecretKeySet::random(threshold, &mut rng);
+            let pk_set = sk_set.public_keys();
             tokio::spawn(async move {
                 Consensus::run(
                     name,
                     committee,
                     parameters,
-                    signature_service,
                     store,
-                    mempool,
+                    signature_service,
+                    pk_set,
+                    tx_consensus,
+                    rx_consensus,
+                    tx_consensus_mempool,
                     tx_commit,
+                    Protocol::HotStuff,
                 )
                 .await
                 .unwrap();
