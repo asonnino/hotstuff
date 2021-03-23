@@ -108,7 +108,7 @@ impl Client {
 
         // NOTE: This log entry is used to compute performance.
         info!("Start sending transactions");
-        
+
         loop {
             interval.as_mut().tick().await;
             let now = Instant::now();
@@ -151,7 +151,7 @@ impl Client {
         transport: &mut Framed<TcpStream, LengthDelimitedCodec>,
     ) -> Result<()> {
         // NOTE: This log entry is used to compute performance.
-        info!("Sending sample transaction"); 
+        info!("Sending sample transaction");
 
         let mut tx = BytesMut::with_capacity(self.size);
         tx.resize(self.size, 5u8);
