@@ -2,7 +2,7 @@ from fabric import task
 
 from benchmark.local import LocalBench
 from benchmark.logs import ParseError, LogParser
-from benchmark.aggregator import LogAggregator
+from benchmark.aggregate import LogAggregator
 from benchmark.utils import Print
 from benchmark.plot import Ploter, PlotError
 from aws.instance import InstanceManager
@@ -97,8 +97,8 @@ def install(ctx):
 def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
-        'nodes': [10],
-        'rate': [40_000],
+        'nodes': [10, 20],
+        'rate': [10_000, 30_000],
         'tx_size': 512,
         'duration': 300,
         'runs': 2,

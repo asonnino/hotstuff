@@ -257,6 +257,7 @@ impl Core {
 
             #[cfg(feature = "benchmark")]
             for x in &block.payload {
+                // NOTE: This log entry is used to compute performance.
                 info!("Created B{}({})", block.round, base64::encode(x));
             }
         }
@@ -307,6 +308,7 @@ impl Core {
 
                 #[cfg(feature = "benchmark")]
                 for x in &b0.payload {
+                    // NOTE: This log entry is used to compute performance.
                     info!("Committed B{}({})", b0.round, base64::encode(x));
                 }
             }

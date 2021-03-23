@@ -96,10 +96,12 @@ impl Core {
         payload: Payload,
     ) -> MempoolResult<()> {
         #[cfg(feature = "benchmark")]
+        // NOTE: This log entry is used to compute performance.
         info!("Payload {:?} contains {} B", digest, payload.size());
 
         #[cfg(feature = "benchmark")]
         if payload.sample_txs > 0 {
+            // NOTE: This log entry is used to compute performance.
             info!(
                 "Payload {:?} contains {} sample tx(s)",
                 digest, payload.sample_txs

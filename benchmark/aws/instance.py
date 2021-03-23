@@ -159,7 +159,6 @@ class InstanceManager:
                 self.clients.values(), prefix=f'Creating {size} instances'
             )
             for client in progress:
-                #client = list(self.clients.values())[i % len(self.clients)]
                 client.run_instances(
                     ImageId=self._get_ami(client),
                     InstanceType=self.settings.instance_type,
