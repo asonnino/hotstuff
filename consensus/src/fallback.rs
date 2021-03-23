@@ -719,14 +719,14 @@ impl Fallback {
 
         self.leader_elector.add_random_coin(random_coin.clone());
 
-        if self.fallback == 1 {
-            let fallback_leader = self.leader_elector.get_fallback_leader(view).unwrap();
-            if let Some(voted_round) = self.fallback_voted_round.get(&fallback_leader) {
-                self.last_voted_round = max(self.last_voted_round, *voted_round);
-            }
-            let qc = self.fallback_qcs.get(&fallback_leader).unwrap().clone();
-            self.process_qc(&qc).await;
+        // if self.fallback == 1 {
+        let fallback_leader = self.leader_elector.get_fallback_leader(view).unwrap();
+        if let Some(voted_round) = self.fallback_voted_round.get(&fallback_leader) {
+            self.last_voted_round = max(self.last_voted_round, *voted_round);
         }
+        let qc = self.fallback_qcs.get(&fallback_leader).unwrap().clone();
+        self.process_qc(&qc).await;
+        // }
         // Exit fallback
         self.fallback = 0;
         self.advance_view(view+1).await;
