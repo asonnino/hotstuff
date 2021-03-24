@@ -1,7 +1,7 @@
 {
     "key": {
         "name": "aws",
-        "path": "/Users/asonnino/.ssh/aws"
+        "path": "/absolute/key/path"
     },
     "ports": {
         "consensus": 8000,
