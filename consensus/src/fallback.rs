@@ -49,8 +49,11 @@ pub struct Fallback {
     fallback_signed_qc_weight: HashMap<SeqNumber, Stake>,    // weight of the above nodes
     fallback_randomness_share_sender: HashMap<SeqNumber, HashSet<PublicKey>>,    // set of nodes that send randomness share
     fallback_randomness_share_weight: HashMap<SeqNumber, Stake>,    // weight of the above nodes
-    fallback_randomness_shares: HashMap<SeqNumber, Vec<RandomnessShare>>,    // set of nodes that send randomness share
+    fallback_randomness_shares: HashMap<SeqNumber, Vec<RandomnessShare>>,    // set of randomness share
     fallback_random_coin: HashMap<SeqNumber, RandomCoin>,   // random coin of each fallback
+    fallback_leader_qc_sender: HashMap<SeqNumber, HashSet<PublicKey>>,    // set of nodes that send high qc of the elected leader
+    fallback_leader_qc_weight: HashMap<SeqNumber, Stake>,    // weight of the above nodes
+    fallback_leader_qcs: HashMap<SeqNumber, Vec<SignedQC>>,    // set of leader's qcs
     timer: Timer,
     aggregator: Aggregator,
 }
@@ -103,6 +106,9 @@ impl Fallback {
             fallback_randomness_share_weight: HashMap::new(),
             fallback_randomness_shares: HashMap::new(),
             fallback_random_coin: HashMap::new(),
+            fallback_leader_qc_sender: HashMap::new(),
+            fallback_leader_qc_weight: HashMap::new(),
+            fallback_leader_qcs: HashMap::new(),
             timer,
             aggregator,
         }
@@ -239,6 +245,9 @@ impl Fallback {
         self.fallback_randomness_share_weight.retain(|v, _| v >= &view);
         self.fallback_randomness_shares.retain(|v, _| v >= &view);
         self.fallback_random_coin.retain(|v, _| v >= &view);
+        self.fallback_leader_qc_sender.retain(|v, _| v >= &view);
+        self.fallback_leader_qc_weight.retain(|v, _| v >= &view);
+        self.fallback_leader_qcs.retain(|v, _| v >= &view);
     }
 
     async fn local_timeout_view(&mut self) -> ConsensusResult<()> {
@@ -300,7 +309,7 @@ impl Fallback {
                 }
                 // Sign and multicast height-2 QC
                 if qc.height == 2 {
-                    let signed_qc = SignedQC::new(qc, self.name, self.signature_service.clone()).await;
+                    let signed_qc = SignedQC::new(qc, None, self.name, self.signature_service.clone()).await;
                     let message = ConsensusMessage::SignedQC(signed_qc.clone());
                     self.transmit(&message, None).await?;
                     self.handle_signed_qc(signed_qc).await?;
@@ -558,8 +567,10 @@ impl Fallback {
             }
             if block.qc.height == 2 {
                 // sign and multicast height-2 QC
-                let message = ConsensusMessage::SignedQC(SignedQC::new(block.qc.clone(), self.name, self.signature_service.clone()).await);
+                let signed_qc = SignedQC::new(block.qc.clone(), None, self.name, self.signature_service.clone()).await;
+                let message = ConsensusMessage::SignedQC(signed_qc.clone());
                 self.transmit(&message, None).await?;
+                self.handle_signed_qc(signed_qc).await?;
             }
         }
 
@@ -583,11 +594,11 @@ impl Fallback {
     }
 
     async fn handle_proposal(&mut self, block: &Block) -> ConsensusResult<()> {
-        if block.view < self.view || (block.fallback == 0 && block.round < self.round) {
+        if block.view < self.view {
+            debug!("Received block {} from previous view {}", block.digest(), block.view);
             return Ok(());
         }
         let digest = block.digest();
-
         // Ensure the block proposer is the right leader for the round.
         ensure!(
             block.fallback == 1 || block.author == self.leader_elector.get_leader(block.round),
@@ -600,7 +611,6 @@ impl Fallback {
 
         // Check the block is correctly formed.
         block.verify_fallback(&self.committee, &self.pk_set)?;
-
         // Not in fallback, process the fallback blocks when later enter the fallback
         // It is necessary to receive 2f+1 timeout messages with QCs to update the high_qc
         if block.fallback == 1 && self.fallback == 0 {
@@ -611,14 +621,12 @@ impl Fallback {
             }
             return Ok(());
         }
-
         // Let's see if we have the block's data. If we don't, the mempool
         // will get it and then make us resume processing this block.
         if !self.mempool_driver.verify(block.clone()).await? {
             debug!("Processing of {} suspended: missing payload", digest);
             return Ok(());
         }
-
         // All check pass, we can process this block.
         self.process_block(block).await
     }
@@ -643,30 +651,82 @@ impl Fallback {
 
     // When receiving 2f+1 height-2 fallback QC, send randomness share
     async fn handle_signed_qc(&mut self, signed_qc: SignedQC) -> ConsensusResult<()> {
-        // Already receive from the sender.
-        let set = self.fallback_signed_qc_sender.entry(signed_qc.qc.view).or_insert(HashSet::new());
-        if set.contains(&signed_qc.author) {
-            return Ok(());
+        signed_qc.verify(&self.committee)?;
+        match signed_qc.random_coin {
+            None => {
+                // Already receive from the sender.
+                let set = self.fallback_signed_qc_sender.entry(signed_qc.qc.view).or_insert(HashSet::new());
+                if set.contains(&signed_qc.author) {
+                    return Ok(());
+                }
+
+                if signed_qc.qc.fallback == 0 || signed_qc.qc.height != 2 || signed_qc.qc.view < self.view {
+                    return Ok(());
+                }
+
+                set.insert(signed_qc.author);
+                let weight = self.fallback_signed_qc_weight.entry(signed_qc.qc.view).or_insert(0);
+
+                // Collected 2f+1 height-2 fallback QC, send randomness share
+                *weight += self.committee.stake(&signed_qc.author);
+                if *weight >= self.committee.quorum_threshold() {
+                    *weight = 0; // Only send randomness share once
+                    // Multicast the randomness share
+                    let randomness_share = RandomnessShare::new(signed_qc.qc.view, self.name, self.signature_service.clone()).await;
+                    let message = ConsensusMessage::RandomnessShare(randomness_share.clone());
+                    self.transmit(&message, None).await?;
+                    self.handle_randomness_share(randomness_share).await?;
+                }
+            },
+            Some(ref random_coin) => {
+                random_coin.verify(&self.committee, &self.pk_set)?;
+                let view = random_coin.seq;
+                if view < self.view {
+                    return Ok(());
+                }
+
+                if self.leader_elector.get_fallback_leader(view).is_none() {
+                    let leader_qcs = self.fallback_leader_qcs.entry(view).or_insert(Vec::new());
+                    leader_qcs.push(signed_qc.clone());
+                    return Ok(());
+                }
+                // Already receive from the sender.
+                let set = self.fallback_leader_qc_sender.entry(view).or_insert(HashSet::new());
+                if set.contains(&signed_qc.author) {
+                    return Ok(());
+                }
+
+                set.insert(signed_qc.author);
+                let weight = self.fallback_leader_qc_weight.entry(view).or_insert(0);
+
+                // Collected 2f+1 QC of the elected leader, exit the fallback
+                *weight += self.committee.stake(&signed_qc.author);
+                if *weight >= self.committee.quorum_threshold() {
+                    *weight = 0; 
+                    let fallback_leader = self.leader_elector.get_fallback_leader(view).unwrap();
+                    if let Some(voted_round) = self.fallback_voted_round.get(&fallback_leader) {
+                        self.last_voted_round = max(self.last_voted_round, *voted_round);
+                    }
+                    if let Some(qc) = self.fallback_qcs.get_mut(&fallback_leader).cloned() {
+                        self.process_qc(&qc).await;
+                    }
+                    // Exit fallback
+                    self.fallback = 0;
+                    self.advance_view(view+1).await;
+                    self.timer.reset();
+                    if self.name == self.leader_elector.get_leader(self.round) {
+                    // Simulate DDOS attack on the leader
+                    if self.parameters.ddos {
+                        sleep(Duration::from_millis(2 * self.parameters.timeout_delay)).await;
+                    }
+                    self.generate_proposal(None, Some(random_coin.clone()), self.high_qc.clone())
+                        .await
+                        .expect("Failed to send the first block after fallback");
+                    }
+                }
+            }
         }
 
-        if signed_qc.qc.fallback == 0 || signed_qc.qc.height != 2 || signed_qc.qc.view < self.view {
-            return Ok(());
-        }
-        signed_qc.verify(&self.committee)?;
-        
-        set.insert(signed_qc.author);
-        let weight = self.fallback_signed_qc_weight.entry(signed_qc.qc.view).or_insert(0);
-        
-        // Collected 2f+1 height-2 fallback QC, send randomness share
-        *weight += self.committee.stake(&signed_qc.author);
-        if *weight >= self.committee.quorum_threshold() {
-            *weight = 0; // Only send randomness share once
-            // Multicast the randomness share
-            let randomness_share = RandomnessShare::new(signed_qc.qc.view, self.name, self.signature_service.clone()).await;
-            let message = ConsensusMessage::RandomnessShare(randomness_share.clone());
-            self.transmit(&message, None).await?;
-            self.handle_randomness_share(randomness_share).await?;
-        }
         Ok(())
     }
 
@@ -712,6 +772,7 @@ impl Fallback {
         Ok(())
     }
 
+    #[async_recursion]
     async fn handle_random_coin(&mut self, random_coin: RandomCoin) -> ConsensusResult<()> {
         if random_coin.seq < self.view || self.fallback_random_coin.contains_key(&random_coin.seq) {
             return Ok(())
@@ -726,28 +787,22 @@ impl Fallback {
 
         self.leader_elector.add_random_coin(random_coin.clone());
 
-        // if self.fallback == 1 {
-        let fallback_leader = self.leader_elector.get_fallback_leader(view).unwrap();
-        if let Some(voted_round) = self.fallback_voted_round.get(&fallback_leader) {
-            self.last_voted_round = max(self.last_voted_round, *voted_round);
-        }
-        if let Some(qc) = self.fallback_qcs.get_mut(&fallback_leader).cloned() {
-            self.process_qc(&qc).await;
-        }
-        // }
-        // Exit fallback
-        self.fallback = 0;
-        self.advance_view(view+1).await;
-        self.timer.reset();
-        if self.name == self.leader_elector.get_leader(self.round) {
-            // Simulate DDOS attack on the leader
-            if self.parameters.ddos {
-                sleep(Duration::from_millis(2 * self.parameters.timeout_delay)).await;
+        // sign and multicast leader's high QC
+        let leader_qc = self.fallback_qcs.get(&self.leader_elector.get_fallback_leader(view).unwrap()).unwrap();
+        let signed_qc = SignedQC::new(leader_qc.clone(), Some(random_coin), self.name, self.signature_service.clone()).await;
+        let message = ConsensusMessage::SignedQC(signed_qc.clone());
+        self.transmit(&message, None).await?;
+        self.handle_signed_qc(signed_qc).await?;
+
+        if let Some(map) = self.fallback_leader_qcs.remove(&self.view) {
+            debug!("process fallback leader qcs {:?}", map);
+            for signed_qc in map {
+                if let Err(e) = self.handle_signed_qc(signed_qc).await {
+                    warn!("Failed to process pending signed_qc: {}", e);
+                }
             }
-            self.generate_proposal(None, Some(random_coin), self.high_qc.clone())
-                .await
-                .expect("Failed to send the first block after fallback");
         }
+
         Ok(())
     }
 

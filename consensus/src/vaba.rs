@@ -52,6 +52,9 @@ pub struct VABA {
     fallback_randomness_share_weight: HashMap<SeqNumber, Stake>,    // weight of the above nodes
     fallback_randomness_shares: HashMap<SeqNumber, Vec<RandomnessShare>>,    // set of nodes that send randomness share
     fallback_random_coin: HashMap<SeqNumber, RandomCoin>,   // random coin of each fallback
+    fallback_leader_qc_sender: HashMap<SeqNumber, HashSet<PublicKey>>,    // set of nodes that send high qc of the elected leader
+    fallback_leader_qc_weight: HashMap<SeqNumber, Stake>,    // weight of the above nodes
+    fallback_leader_qcs: HashMap<SeqNumber, Vec<SignedQC>>,    // set of leader's qcs
     timer: Timer,    // timer is only used at the begining of protocol
     aggregator: Aggregator,
 }
@@ -111,6 +114,9 @@ impl VABA {
             fallback_randomness_share_weight: HashMap::new(),
             fallback_randomness_shares: HashMap::new(),
             fallback_random_coin: HashMap::new(),
+            fallback_leader_qc_sender: HashMap::new(),
+            fallback_leader_qc_weight: HashMap::new(),
+            fallback_leader_qcs: HashMap::new(),
             timer,
             aggregator,
         }
@@ -242,6 +248,9 @@ impl VABA {
         self.fallback_randomness_share_weight.retain(|v, _| v >= &view);
         self.fallback_randomness_shares.retain(|v, _| v >= &view);
         self.fallback_random_coin.retain(|v, _| v >= &view);
+        self.fallback_leader_qc_sender.retain(|v, _| v >= &view);
+        self.fallback_leader_qc_weight.retain(|v, _| v >= &view);
+        self.fallback_leader_qcs.retain(|v, _| v >= &view);
     }
 
     async fn local_timeout_view(&mut self) -> ConsensusResult<()> {
@@ -307,7 +316,7 @@ impl VABA {
                     },
                     3 => {  
                         // Sign and multicast height-3 QC
-                        let signed_qc = SignedQC::new(qc, self.name, self.signature_service.clone()).await;
+                        let signed_qc = SignedQC::new(qc, None, self.name, self.signature_service.clone()).await;
                         let message = ConsensusMessage::SignedQC(signed_qc.clone());
                         self.transmit(&message, None).await?;
                         self.handle_signed_qc(signed_qc).await?;
@@ -610,36 +619,81 @@ impl VABA {
 
     // When receiving 2f+1 height-3 fallback QC, send randomness share
     async fn handle_signed_qc(&mut self, signed_qc: SignedQC) -> ConsensusResult<()> {
-        // Already receive from the sender.
-        let set = self.fallback_signed_qc_sender.entry(signed_qc.qc.view).or_insert(HashSet::new());
-        if set.contains(&signed_qc.author) {
-            return Ok(());
-        }
-
-        if signed_qc.qc.fallback != 1 || signed_qc.qc.height != 3 || signed_qc.qc.view < self.view {
-            return Ok(());
-        }
         signed_qc.verify_vaba(&self.committee)?;
+        match signed_qc.random_coin {
+            None => {
+                // Already receive from the sender.
+                let set = self.fallback_signed_qc_sender.entry(signed_qc.qc.view).or_insert(HashSet::new());
+                if set.contains(&signed_qc.author) {
+                    return Ok(());
+                }
 
-        let qc = signed_qc.qc.clone();
-        let fallback_high_qc = self.fallback_qcs.get(&qc.proposer).unwrap();
-        if qc.view > fallback_high_qc.view || (qc.view == fallback_high_qc.view && qc.height > fallback_high_qc.height) {
-            self.fallback_qcs.insert(qc.proposer, qc.clone());
+                if signed_qc.qc.fallback != 1 || signed_qc.qc.height != 3 || signed_qc.qc.view < self.view {
+                    return Ok(());
+                }
+                signed_qc.verify_vaba(&self.committee)?;
+
+                let qc = signed_qc.qc.clone();
+                let fallback_high_qc = self.fallback_qcs.get(&qc.proposer).unwrap();
+                if qc.view > fallback_high_qc.view || (qc.view == fallback_high_qc.view && qc.height > fallback_high_qc.height) {
+                    self.fallback_qcs.insert(qc.proposer, qc.clone());
+                }
+                
+                set.insert(signed_qc.author);
+                let weight = self.fallback_signed_qc_weight.entry(signed_qc.qc.view).or_insert(0);
+                
+                // Collected 2f+1 height-2 fallback QC, send randomness share
+                *weight += self.committee.stake(&signed_qc.author);
+                if *weight >= self.committee.quorum_threshold() {
+                    *weight = 0; // Only send randomness share once
+                    // Multicast the randomness share
+                    let randomness_share = RandomnessShare::new(signed_qc.qc.view, self.name, self.signature_service.clone()).await;
+                    let message = ConsensusMessage::RandomnessShare(randomness_share.clone());
+                    self.transmit(&message, None).await?;
+                    self.handle_randomness_share(randomness_share).await?;
+                }
+            },
+            Some(ref random_coin) => {
+                random_coin.verify(&self.committee, &self.pk_set)?;
+                let view = random_coin.seq;
+                if view < self.view {
+                    return Ok(());
+                }
+
+                if self.leader_elector.get_fallback_leader(view).is_none() {
+                    let leader_qcs = self.fallback_leader_qcs.entry(view).or_insert(Vec::new());
+                    leader_qcs.push(signed_qc.clone());
+                    return Ok(());
+                }
+                // Already receive from the sender.
+                let set = self.fallback_leader_qc_sender.entry(view).or_insert(HashSet::new());
+                if set.contains(&signed_qc.author) {
+                    return Ok(());
+                }
+
+                set.insert(signed_qc.author);
+                let weight = self.fallback_leader_qc_weight.entry(view).or_insert(0);
+
+                // Collected 2f+1 QC of the elected leader, exit the fallback
+                *weight += self.committee.stake(&signed_qc.author);
+                if *weight >= self.committee.quorum_threshold() {
+                    *weight = 0; 
+                    let fallback_leader = self.leader_elector.get_fallback_leader(view).unwrap();
+                    if let Some(voted_round) = self.fallback_voted_round.get(&fallback_leader) {
+                        self.last_voted_round = max(self.last_voted_round, *voted_round);
+                    }
+                    if let Some(qc) = self.fallback_qcs.get_mut(&fallback_leader).cloned() {
+                        self.process_qc(&qc).await;
+                    }
+                    self.advance_view(view+1).await;
+                    self.timer.reset();
+                    self.generate_proposal(Some(random_coin.clone()), self.high_qc.clone())
+                        .await
+                        .expect("Failed to send the first block after fallback");
+                }
+            }
         }
-        
-        set.insert(signed_qc.author);
-        let weight = self.fallback_signed_qc_weight.entry(signed_qc.qc.view).or_insert(0);
-        
-        // Collected 2f+1 height-2 fallback QC, send randomness share
-        *weight += self.committee.stake(&signed_qc.author);
-        if *weight >= self.committee.quorum_threshold() {
-            *weight = 0; // Only send randomness share once
-            // Multicast the randomness share
-            let randomness_share = RandomnessShare::new(signed_qc.qc.view, self.name, self.signature_service.clone()).await;
-            let message = ConsensusMessage::RandomnessShare(randomness_share.clone());
-            self.transmit(&message, None).await?;
-            self.handle_randomness_share(randomness_share).await?;
-        }
+
         Ok(())
     }
 
@@ -685,6 +739,7 @@ impl VABA {
         Ok(())
     }
 
+    #[async_recursion]
     async fn handle_random_coin(&mut self, random_coin: RandomCoin) -> ConsensusResult<()> {
         if random_coin.seq < self.view || self.fallback_random_coin.contains_key(&random_coin.seq) {
             return Ok(())
@@ -699,22 +754,21 @@ impl VABA {
 
         self.leader_elector.add_random_coin(random_coin.clone());
 
-        let fallback_leader = self.leader_elector.get_fallback_leader(view).unwrap();
-        if let Some(voted_round) = self.fallback_voted_round.get(&fallback_leader) {
-            self.last_voted_round = max(self.last_voted_round, *voted_round);
+        // sign and multicast leader's high QC
+        let leader_qc = self.fallback_qcs.get(&self.leader_elector.get_fallback_leader(view).unwrap()).unwrap();
+        let signed_qc = SignedQC::new(leader_qc.clone(), Some(random_coin), self.name, self.signature_service.clone()).await;
+        let message = ConsensusMessage::SignedQC(signed_qc.clone());
+        self.transmit(&message, None).await?;
+        self.handle_signed_qc(signed_qc).await?;
+
+        if let Some(map) = self.fallback_leader_qcs.remove(&self.view) {
+            debug!("process fallback leader qcs {:?}", map);
+            for signed_qc in map {
+                if let Err(e) = self.handle_signed_qc(signed_qc).await {
+                    warn!("Failed to process pending signed_qc: {}", e);
+                }
+            }
         }
-        let qc = self.fallback_qcs.get(&fallback_leader).unwrap().clone();
-        self.process_qc(&qc).await;
-
-        self.advance_view(view+1).await;
-
-        // // Simulate DDOS attack on the leader
-        // if self.parameters.ddos {
-        //     sleep(Duration::from_millis(2 * self.parameters.timeout_delay)).await;
-        // }
-        self.generate_proposal(Some(random_coin), self.high_qc.clone())
-            .await
-            .expect("Failed to send the first block after fallback");
 
         Ok(())
     }

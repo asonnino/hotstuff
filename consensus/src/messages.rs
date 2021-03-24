@@ -385,10 +385,10 @@ impl PartialEq for QC {
     }
 }
 
-// daniel: Signed height-2 QC
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SignedQC {
     pub qc: QC,
+    pub random_coin: Option<RandomCoin>,    // the signed QC to trigger leader election contains no random_coin, the signed QC to update leader's high QC contains random coin
     pub author: PublicKey,
     pub signature: Signature,
 }
@@ -396,11 +396,13 @@ pub struct SignedQC {
 impl SignedQC {
     pub async fn new(
         qc: QC,
+        random_coin: Option<RandomCoin>,
         author: PublicKey,
         mut signature_service: SignatureService,
     ) -> Self {
         let signed_qc = Self {
             qc,
+            random_coin,
             author,
             signature: Signature::default(),
         };
@@ -456,7 +458,7 @@ impl Hash for SignedQC {
 
 impl fmt::Debug for SignedQC {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "Signed QC(author {}, qc {:?})", self.author, self.qc)
+        write!(f, "Signed QC(author {}, qc {:?}, random coin {:?})", self.author, self.qc, self.random_coin)
     }
 }
 
