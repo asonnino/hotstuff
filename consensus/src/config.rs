@@ -10,7 +10,7 @@ pub type EpochNumber = u128;
 #[derive(Serialize, Deserialize)]
 pub enum Protocol {
     HotStuff,
-    HotStuffWithAsyncFallback,
+    AsyncHotStuff,
     ChainedVABA,
     Others,
 }
