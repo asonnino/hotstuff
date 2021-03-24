@@ -90,14 +90,14 @@ class Ploter:
     def nodes(data):
         x = search(r'Committee size: (\d+)', data).group(1)
         f = search(r'Faults: (\d+)', data).group(1)
-        faults = f'({f} fault(s))' if f != '0' else ''
+        faults = f'({f} faulty)' if f != '0' else ''
         return f'{x} nodes {faults}'
 
     @staticmethod
     def max_latency(data):
         x = search(r'Max latency: (\d+)', data).group(1)
         f = search(r'Faults: (\d+)', data).group(1)
-        faults = f'({f} fault(s))' if f != '0' else ''
+        faults = f'({f} faulty)' if f != '0' else ''
         return f'Max latency: {float(x) / 1000:,.0f} s {faults}'
 
     @classmethod

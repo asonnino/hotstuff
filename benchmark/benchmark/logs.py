@@ -19,8 +19,8 @@ class LogParser:
         assert all(isinstance(x, str) for y in inputs for x in y)
         assert all(x for x in inputs)
 
-        self.committee_size = len(nodes)
         self.faults = faults
+        self.committee_size = len(nodes) + faults
 
         # Parse the clients logs.
         try:
