@@ -95,7 +95,6 @@ class Bench:
 
     def _select_hosts(self, bench_parameters):
         nodes = max(bench_parameters.nodes)
-        faults = bench_parameters.faults
 
         # Ensure there are enough hosts.
         hosts = self.manager.hosts()
@@ -105,7 +104,7 @@ class Bench:
         # Select the hosts in different data centers.
         ordered = zip(*hosts.values())
         ordered = [x for y in ordered for x in y]
-        return ordered[:nodes-faults]
+        return ordered[:nodes]
 
     def _background_run(self, host, command, log_file):
         name = splitext(basename(log_file))[0]
@@ -224,7 +223,7 @@ class Bench:
             sleep(ceil(duration / 20))
         self.kill(hosts=hosts, delete_logs=False)
 
-    def _logs(self, hosts):
+    def _logs(self, hosts, faults):
         # Delete local logs (if any).
         cmd = CommandMaker.clean_logs()
         subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
@@ -240,7 +239,7 @@ class Bench:
 
         # Parse logs and return the parser.
         Print.info('Parsing logs and computing performance...')
-        return LogParser.process(PathMaker.logs_path())
+        return LogParser.process(PathMaker.logs_path(), faults=faults)
 
     def run(self, bench_parameters_dict, node_parameters_dict, debug=False):
         assert isinstance(debug, bool)
@@ -278,6 +277,10 @@ class Bench:
                     Print.error(BenchError('Failed to configure nodes', e))
                     continue
 
+                # Do not boot faulty nodes.
+                faults = bench_parameters.faults
+                hosts = hosts[:n-faults]
+
                 # Run the benchmark.
                 for i in range(bench_parameters.runs):
                     Print.heading(f'Run {i+1}/{bench_parameters.runs}')
@@ -285,7 +288,7 @@ class Bench:
                         self._run_single(
                             hosts, r, bench_parameters, node_parameters, debug
                         )
-                        self._logs(hosts).print(PathMaker.result_file(
+                        self._logs(hosts, faults).print(PathMaker.result_file(
                             n, r, bench_parameters.tx_size
                         ))
                     except (subprocess.SubprocessError, GroupException, ParseError) as e:

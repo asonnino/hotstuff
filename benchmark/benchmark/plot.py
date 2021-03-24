@@ -4,6 +4,8 @@ from matplotlib.ticker import StrMethodFormatter
 from glob import glob
 
 from benchmark.utils import PathMaker
+from benchmark.config import PlotParameters
+from benchmark.aggregate import LogAggregator
 
 
 class PlotError(Exception):
@@ -87,43 +89,74 @@ class Ploter:
     @staticmethod
     def nodes(data):
         x = search(r'Committee size: (\d+)', data).group(1)
-        return f'{x} nodes'
-
-    @staticmethod
-    def tx_size(data):
-        return search(r'Transaction size: .*', data).group(0)
+        f = search(r'Faults: (\d+)', data).group(1)
+        faults = f'({f} fault(s))' if f != '0' else ''
+        return f'{x} nodes {faults}'
 
     @staticmethod
     def max_latency(data):
         x = search(r'Max latency: (\d+)', data).group(1)
-        return f'Max latency: {float(x) / 1000:,.0f} s'
+        f = search(r'Faults: (\d+)', data).group(1)
+        faults = f'({f} fault(s))' if f != '0' else ''
+        return f'Max latency: {float(x) / 1000:,.0f} s {faults}'
 
     @classmethod
-    def plot_robustness(cls, z_axis):
-        assert hasattr(z_axis, '__call__')
+    def plot_robustness(cls, files):
+        assert isinstance(files, list)
+        assert all(isinstance(x, str) for x in files)
+        z_axis = cls.nodes
         x_label = 'Input rate (tx/s)'
         y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
-
-        files = glob(PathMaker.agg_file(r'[0-9]*', 'x', r'*', 'any'))
         ploter = cls(files)
         ploter._plot(x_label, y_label, ploter._tps, z_axis, 'robustness')
 
     @classmethod
-    def plot_latency(cls, z_axis):
-        assert hasattr(z_axis, '__call__')
+    def plot_latency(cls, files):
+        assert isinstance(files, list)
+        assert all(isinstance(x, str) for x in files)
+        z_axis = cls.nodes
         x_label = 'Throughput (tx/s)'
         y_label = ['Latency (ms)']
-
-        files = glob(PathMaker.agg_file(r'[0-9]*', 'any', r'*', 'any'))
         ploter = cls(files)
         ploter._plot(x_label, y_label, ploter._latency, z_axis, 'latency')
 
     @classmethod
-    def plot_tps(cls, z_axis):
-        assert hasattr(z_axis, '__call__')
+    def plot_tps(cls, files):
+        assert isinstance(files, list)
+        assert all(isinstance(x, str) for x in files)
+        z_axis = cls.max_latency
         x_label = 'Committee size'
         y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
-
-        files = glob(PathMaker.agg_file('x', 'any', r'*', r'*'))
         ploter = cls(files)
         ploter._plot(x_label, y_label, ploter._tps, z_axis, 'tps')
+
+    @classmethod
+    def plot(cls, params_dict):
+        try:
+            params = PlotParameters(params_dict)
+        except PlotError as e:
+            raise PlotError('Invalid nodes or bench parameters', e)
+
+        # Aggregate the logs.
+        LogAggregator(params.max_latency).print()
+
+        # Load the aggregated log files.
+        robustness_files, latency_files, tps_files = [], [], []
+        tx_size = params.tx_size
+        
+        for f in params.faults:
+            for n in params.nodes:
+                robustness_files += glob(
+                    PathMaker.agg_file(n, 'x', tx_size, f, 'any')
+                )
+                latency_files += glob(
+                    PathMaker.agg_file(n, 'any', tx_size, f, 'any')
+                )
+            tps_files += glob(
+                PathMaker.agg_file('x', 'any', tx_size, f, r'[0-9]*')
+            )
+
+        # Make the plots.
+        cls.plot_robustness(robustness_files)
+        cls.plot_latency(latency_files)
+        cls.plot_tps(tps_files)

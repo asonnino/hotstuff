@@ -10,10 +10,11 @@ from benchmark.utils import PathMaker
 
 
 class Setup:
-    def __init__(self, nodes, rate, tx_size):
+    def __init__(self, nodes, rate, tx_size, faults):
         self.nodes = nodes
         self.rate = rate
         self.tx_size = tx_size
+        self.faults = faults
         self.max_latency = 'any'
 
     def __str__(self):
@@ -21,6 +22,7 @@ class Setup:
             f' Committee size: {self.nodes} nodes\n'
             f' Input rate: {self.rate} tx/s\n'
             f' Transaction size: {self.tx_size} B\n'
+            f' Faults: {self.faults} nodes\n'
             f' Max latency: {self.max_latency} ms\n'
         )
 
@@ -35,7 +37,8 @@ class Setup:
         nodes = int(search(r'.* Committee size: (\d+)', raw).group(1))
         rate = int(search(r'.* Input rate: (\d+)', raw).group(1))
         tx_size = int(search(r'.* Transaction size: (\d+)', raw).group(1))
-        return cls(nodes, rate, tx_size)
+        faults = int(search(r'.* Faults: (\d+)', raw).group(1))
+        return cls(nodes, rate, tx_size, faults)
 
 
 class Result:
@@ -70,7 +73,12 @@ class Result:
 
 
 class LogAggregator:
-    def __init__(self):
+    def __init__(self, max_latencies):
+        assert isinstance(max_latencies, list)
+        assert all(isinstance(x, int) for x in max_latencies)
+
+        self.max_latencies = max_latencies
+
         data = ''
         for filename in glob(join(PathMaker.results_path(), '*.txt')):
             with open(filename, 'r') as f:
@@ -109,6 +117,7 @@ class LogAggregator:
                     setup.nodes, 
                     setup.rate, 
                     setup.tx_size, 
+                    setup.faults,
                     max_latency=setup.max_latency
                 )
                 with open(filename, 'w') as f:
@@ -128,10 +137,10 @@ class LogAggregator:
 
         return organized
 
-    def _print_tps(self, max_latencies=[2_000, 5_000]):
+    def _print_tps(self):
         records = deepcopy(self.records)
         organized = defaultdict(list)
-        for max_latency in max_latencies:
+        for max_latency in self.max_latencies:
             for setup, result in records.items():
                 setup = deepcopy(setup)
                 if result.mean_latency <= max_latency:
