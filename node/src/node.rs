@@ -67,7 +67,7 @@ impl Node {
 
         let protocol = match parameters.protocol {
             0 => Protocol::HotStuff,
-            1 => Protocol::HotStuffWithAsyncFallback,
+            1 => Protocol::AsyncHotStuff,
             2 => Protocol::ChainedVABA,
             _ => {
                 warn!("Undefined protocol type!");

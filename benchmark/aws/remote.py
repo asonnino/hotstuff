@@ -282,7 +282,7 @@ class Bench:
         if node_parameters.protocol == 0:
             Print.info('Running HotStuff')
         elif node_parameters.protocol == 1:
-            Print.info('Running HotStuff with Async Fallback')
+            Print.info('Running AsyncHotStuff')
         elif node_parameters.protocol == 2:
             Print.info('Running Chained-VABA')
         else:

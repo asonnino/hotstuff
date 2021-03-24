@@ -14,18 +14,18 @@ def local(ctx):
     ''' Run benchmarks on localhost '''
     bench_params = {
         'nodes': 4,
-        'rate': 1_000,
+        'rate': 10000,
         'tx_size': 512,
         'duration': 20,
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 100,
+            'timeout_delay': 500,
             'sync_retry_delay': 10_000,
             'max_payload_size': 500,
             'min_block_delay': 100,
             'network_delay': 0,
-            'ddos': True # True for DDOS attack on the leader, False otherwise
+            'ddos': False # True for DDOS attack on the leader, False otherwise
         },
         'mempool': {
             'queue_capacity': 10_000,
@@ -101,20 +101,20 @@ def install(ctx):
 def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
-        'nodes': [10],
-        'rate': [40_000],
+        'nodes': [12],
+        'rate': [10_000],
         'tx_size': 512,
-        'duration': 300,
-        'runs': 2,
+        'duration': 30,
+        'runs': 1,
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 30_000,
+            'timeout_delay': 1_000,
             'sync_retry_delay': 100_000,
             'max_payload_size': 1_000,
             'min_block_delay': 100,
             'network_delay': 0,
-            'ddos': True # True for DDOS attack on the leader, False otherwise
+            'ddos': False # True for DDOS attack on the leader, False otherwise
         },
         'mempool': {
             'queue_capacity': 100_000,
@@ -126,7 +126,7 @@ def remote(ctx):
         'crash': 0  # TODO: crash f nodes
     }
     try:
-        Bench(ctx).run(bench_params, node_params, debug=False)
+        Bench(ctx).run(bench_params, node_params, debug=True)
     except BenchError as e:
         Print.error(e)
 

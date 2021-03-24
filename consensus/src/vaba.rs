@@ -755,8 +755,10 @@ impl VABA {
         self.leader_elector.add_random_coin(random_coin.clone());
 
         // sign and multicast leader's high QC
-        let leader_qc = self.fallback_qcs.get(&self.leader_elector.get_fallback_leader(view).unwrap()).unwrap();
-        let signed_qc = SignedQC::new(leader_qc.clone(), Some(random_coin), self.name, self.signature_service.clone()).await;
+        if let Some(qc) = self.fallback_qcs.get_mut(&random_coin.leader).cloned() {
+            self.process_qc(&qc).await;
+        }
+        let signed_qc = SignedQC::new(self.high_qc.clone(), Some(random_coin), self.name, self.signature_service.clone()).await;
         let message = ConsensusMessage::SignedQC(signed_qc.clone());
         self.transmit(&message, None).await?;
         self.handle_signed_qc(signed_qc).await?;

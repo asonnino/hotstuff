@@ -163,7 +163,7 @@ class InstanceManager:
                 client.run_instances(
                     ImageId=self._get_ami(client),
                     InstanceType=self.settings.instance_type,
-                    KeyName='Daniel',
+                    KeyName=self.settings.key_name,
                     MaxCount=instances,
                     MinCount=instances,
                     SecurityGroups=[self.SECURITY_GROUP_NAME],

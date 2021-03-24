@@ -107,7 +107,7 @@ impl Consensus {
                     core.run().await;
                 });
             },
-            Protocol::HotStuffWithAsyncFallback => {  // Run HotStuff with Async Fallback
+            Protocol::AsyncHotStuff => {  // Run AsyncHotStuff
                 let mut hotstuff_with_fallback = Fallback::new(
                     name,
                     committee,
@@ -126,7 +126,7 @@ impl Consensus {
                     hotstuff_with_fallback.run().await;
                 });
             },
-            Protocol::ChainedVABA => {  // Run HotStuff with Async Fallback
+            Protocol::ChainedVABA => {  // Run Chained-VABA
                 let mut vaba = VABA::new(
                     name,
                     committee,
