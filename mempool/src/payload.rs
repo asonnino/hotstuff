@@ -5,7 +5,7 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio::time::{sleep, Duration};
 
-pub struct Runner {
+struct Runner {
     transactions: Vec<Transaction>,
     size: usize,
     max_size: usize,
@@ -20,7 +20,7 @@ pub struct Runner {
 }
 
 impl Runner {
-    pub fn new(
+    fn new(
         name: PublicKey,
         signature_service: SignatureService,
         max_size: usize,
@@ -85,7 +85,7 @@ impl Runner {
         .await
     }
 
-    pub async fn run(&mut self) {
+    async fn run(&mut self) {
         loop {
             tokio::select! {
                 Some(transaction) = self.client_channel.recv() => {
