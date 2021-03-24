@@ -95,6 +95,7 @@ class Bench:
 
     def _select_hosts(self, bench_parameters):
         nodes = max(bench_parameters.nodes)
+        faults = bench_parameters.faults
 
         # Ensure there are enough hosts.
         hosts = self.manager.hosts()
@@ -104,7 +105,7 @@ class Bench:
         # Select the hosts in different data centers.
         ordered = zip(*hosts.values())
         ordered = [x for y in ordered for x in y]
-        return ordered[:nodes]
+        return ordered[:nodes-faults]
 
     def _background_run(self, host, command, log_file):
         name = splitext(basename(log_file))[0]
