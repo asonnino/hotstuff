@@ -416,6 +416,7 @@ impl Fallback {
 
     async fn process_pending_blocks(&mut self) -> ConsensusResult<()> {
         if let Some(map) = self.fallback_pending_blocks.remove(&self.view) {
+            debug!("process_pending_blocks {:?}", map);
             for (_, block) in map {
                 debug!("Processing pending block {}", block.digest());
                 // Let's see if we have the block's data. If we don't, the mempool
@@ -424,7 +425,7 @@ impl Fallback {
                     debug!("Processing of {} suspended: missing payload", block.digest());
                     continue;
                 }
-                if let Err(e) = self.process_block(&block).await {
+                if let Err(e) = self.handle_proposal(&block).await {
                     warn!("Failed to process pending blocks: {}", e);
                 }
             }
@@ -582,6 +583,9 @@ impl Fallback {
     }
 
     async fn handle_proposal(&mut self, block: &Block) -> ConsensusResult<()> {
+        if block.view < self.view || (block.fallback == 0 && block.round < self.round) {
+            return Ok(());
+        }
         let digest = block.digest();
 
         // Ensure the block proposer is the right leader for the round.
@@ -597,20 +601,21 @@ impl Fallback {
         // Check the block is correctly formed.
         block.verify_fallback(&self.committee, &self.pk_set)?;
 
-        // Let's see if we have the block's data. If we don't, the mempool
-        // will get it and then make us resume processing this block.
-        if !self.mempool_driver.verify(block.clone()).await? {
-            debug!("Processing of {} suspended: missing payload", digest);
-            return Ok(());
-        }
-
         // Not in fallback, process the fallback blocks when later enter the fallback
         // It is necessary to receive 2f+1 timeout messages with QCs to update the high_qc
         if block.fallback == 1 && self.fallback == 0 {
             if block.height == 1 || block.height == 2 {
+                debug!("Add block {} to pending", block.digest());
                 let map = self.fallback_pending_blocks.entry(block.view).or_insert(HashMap::new());
                 map.insert((block.author, block.height), block.clone());
             }
+            return Ok(());
+        }
+
+        // Let's see if we have the block's data. If we don't, the mempool
+        // will get it and then make us resume processing this block.
+        if !self.mempool_driver.verify(block.clone()).await? {
+            debug!("Processing of {} suspended: missing payload", digest);
             return Ok(());
         }
 
