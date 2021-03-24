@@ -184,8 +184,11 @@ class Bench:
         self.kill(hosts=hosts, delete_logs=True)
 
         # Run the clients (they will wait for the nodes to be ready).
+        # Filter all faulty nodes from the client addresses (or they will wait
+        # for the faulty nodes to be online).
         committee = Committee.load(PathMaker.committee_file())
         addresses = committee.front_addresses()
+        addresses = [x for x in addresses if any(host in x for host in hosts)]
         rate_share = ceil(rate / committee.size())
         timeout = node_parameters.timeout_delay
         client_logs = [PathMaker.client_log_file(i) for i in range(len(hosts))]
