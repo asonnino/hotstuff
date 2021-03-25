@@ -40,6 +40,7 @@ pub struct Fallback {
     last_voted_round: SeqNumber,
     high_qc: QC,
     last_committed_round: SeqNumber,    // round of last committed block, initially -1
+    timeout: Bool,  // 0 if not timeout, 1 if timeout
     fallback: Bool, // 0 if not in async fallback, 1 if in async fallback
     fallback_voted_round: HashMap<PublicKey, SeqNumber>,    // voted round number during fallback for each i
     fallback_voted_height: HashMap<PublicKey, HeightNumber>,  // voted height number during fallback for each i
@@ -95,6 +96,7 @@ impl Fallback {
             last_voted_round: 0,
             high_qc: QC::genesis(),
             last_committed_round: u64::MAX, // initially -1
+            timeout: 0,
             fallback: 0,
             fallback_voted_round: HashMap::new(),
             fallback_voted_height: HashMap::new(),
@@ -162,6 +164,9 @@ impl Fallback {
         if block.fallback == 0 {
             // For non-fallback blocks
             // Check if we can vote for this block.
+            if self.timeout != 0 {
+                return None;
+            }
             let safety_rule_1 = block.round > self.last_voted_round && block.round == block.qc.round+1;
             let safety_rule_2 = block.qc.round >= self.high_qc.round;
             if !(safety_rule_1 && safety_rule_2) {
@@ -170,6 +175,9 @@ impl Fallback {
             // Ensure we won't vote for contradicting blocks.
             self.increase_last_voted_round(block.round);
         } else if block.fallback == 1 {
+            if self.fallback != 1 {
+                return None;
+            }
             // For fallback blocks
             let voted_height = match self.fallback_voted_height.get(&block.author) {
                 Some(h) => h,
@@ -252,9 +260,7 @@ impl Fallback {
 
     async fn local_timeout_view(&mut self) -> ConsensusResult<()> {
         warn!("Timeout reached for view {}", self.view);
-        self.fallback = 1;  // Enter fallback and stop voting for non-fallback blocks
-        // Initialize fallback states
-        self.init_fallback_state();
+        self.timeout = 1;  // Timeout and stop voting for non-fallback blocks
 
         let timeout = Timeout::new(
             self.high_qc.clone(),
@@ -342,6 +348,10 @@ impl Fallback {
 
             // Enter fallback
             self.fallback = 1;
+            self.timeout = 1;
+
+            // Initialize fallback states
+            self.init_fallback_state();
 
             // Update the view to be the view of the TC.
             self.advance_view(tc.seq).await;
@@ -554,10 +564,14 @@ impl Fallback {
 
         // See if we can propose a fallback block extending the fallback QC
         if self.fallback == 1 && block.qc.fallback == 1 && (block.qc.view == self.view && block.qc.height >= self.height) {
-            let fallback_high_qc = self.fallback_qcs.get(&block.qc.proposer).unwrap();
-            if block.qc.view > fallback_high_qc.view || (block.qc.view == fallback_high_qc.view && block.qc.height > fallback_high_qc.height) {
-                self.fallback_qcs.insert(block.qc.proposer, block.qc.clone());
+            if let Some(fallback_high_qc) = self.fallback_qcs.get(&block.qc.proposer) {
+                if block.qc.view > fallback_high_qc.view || (block.qc.view == fallback_high_qc.view && block.qc.height > fallback_high_qc.height) {
+                    self.fallback_qcs.insert(block.qc.proposer, block.qc.clone());
+                }
+            } else {
+
             }
+            
             self.height = block.qc.height+1;
             if block.qc.height == 1 {
                 self.height = 2;
@@ -710,8 +724,8 @@ impl Fallback {
                     }
                     // Exit fallback
                     self.fallback = 0;
+                    self.timeout = 0;
                     self.advance_view(view+1).await;
-                    self.timer.reset();
                     if self.name == self.leader_elector.get_leader(self.round) {
                     // Simulate DDOS attack on the leader
                     if self.parameters.ddos {
