@@ -255,7 +255,7 @@ impl Fallback {
         self.fallback = 1;  // Enter fallback and stop voting for non-fallback blocks
         // Initialize fallback states
         self.init_fallback_state();
-        
+
         let timeout = Timeout::new(
             self.high_qc.clone(),
             self.view,
@@ -553,17 +553,15 @@ impl Fallback {
         }
 
         // See if we can propose a fallback block extending the fallback QC
-        if block.qc.fallback == 1 && (block.qc.view == self.view && block.qc.height >= self.height) {
+        if self.fallback == 1 && block.qc.fallback == 1 && (block.qc.view == self.view && block.qc.height >= self.height) {
             let fallback_high_qc = self.fallback_qcs.get(&block.qc.proposer).unwrap();
             if block.qc.view > fallback_high_qc.view || (block.qc.view == fallback_high_qc.view && block.qc.height > fallback_high_qc.height) {
                 self.fallback_qcs.insert(block.qc.proposer, block.qc.clone());
             }
             self.height = block.qc.height+1;
             if block.qc.height == 1 {
-                if self.fallback == 1 {
-                    self.height = 2;
-                    self.generate_proposal(None, None, block.qc.clone()).await?;
-                }
+                self.height = 2;
+                self.generate_proposal(None, None, block.qc.clone()).await?;
             }
             if block.qc.height == 2 {
                 // sign and multicast height-2 QC
