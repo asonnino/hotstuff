@@ -516,28 +516,28 @@ impl Fallback {
     }
 
     // #[async_recursion]
-    // async fn print_chain(&mut self, block: &Block) -> ConsensusResult<()> {
-    //     debug!("-------------------------------------------------------- printing chain start --------------------------------------------------------");
-    //     let mut current_block = block.clone();
-    //     while current_block.qc != QC::genesis() {
-    //         let parent = match self.synchronizer.get_previous_block(&current_block).await? {
-    //             Some(b) => b,
-    //             None => {
-    //                 debug!("Processing of {} suspended: missing parent", current_block.digest());
-    //                 break;
-    //             }
-    //         };
-    //         debug!("{:?}", current_block);
-    //         current_block = parent;
-    //     }
-    //     debug!("{:?}", current_block);
-    //     debug!("-------------------------------------------------------- printing chain end --------------------------------------------------------");
-    //     Ok(())
-    // }
+    async fn print_chain(&mut self, block: &Block) -> ConsensusResult<()> {
+        debug!("-------------------------------------------------------- printing chain start --------------------------------------------------------");
+        let mut current_block = block.clone();
+        while current_block.qc != QC::genesis() {
+            let parent = match self.synchronizer.get_parent_block(&current_block).await? {
+                Some(b) => b,
+                None => {
+                    debug!("Processing of {} suspended: missing parent", current_block.digest());
+                    break;
+                }
+            };
+            debug!("{:?}", current_block);
+            current_block = parent;
+        }
+        debug!("{:?}", current_block);
+        debug!("-------------------------------------------------------- printing chain end --------------------------------------------------------");
+        Ok(())
+    }
 
     #[async_recursion]
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
-        // debug!("{:?}", self.print_chain(block).await?);
+        debug!("{:?}", self.print_chain(block).await?);
 
         debug!("Processing block {}", block.digest());
         if let Some(coin) = block.coin.clone() {
