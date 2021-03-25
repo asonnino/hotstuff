@@ -530,18 +530,16 @@ impl Fallback {
                     break;
                 }
             };
-            debug!("{:?}", current_block);
+            debug!("block {:?}", current_block);
             current_block = parent;
         }
-        debug!("{:?}", current_block);
+        debug!("block {:?}", current_block);
         debug!("-------------------------------------------------------- printing chain end --------------------------------------------------------");
         Ok(())
     }
 
     #[async_recursion]
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
-        debug!("{:?}", self.print_chain(block).await?);
-
         debug!("Processing block {}", block.digest());
         if let Some(coin) = block.coin.clone() {
             self.handle_random_coin(coin).await?;
@@ -551,6 +549,8 @@ impl Fallback {
         self.process_qc(&block.qc).await;
 
         self.commit(block).await?;
+
+        debug!("{:?}", self.print_chain(block).await?);
 
         // Ensure the block's round is as expected.
         // This check is important: it prevents bad leaders from producing blocks

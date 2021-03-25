@@ -488,10 +488,10 @@ impl VABA {
                     break;
                 }
             };
-            debug!("{:?}", current_block);
+            debug!("block {:?}", current_block);
             current_block = parent;
         }
-        debug!("{:?}", current_block);
+        debug!("block {:?}", current_block);
         debug!("-------------------------------------------------------- printing chain end --------------------------------------------------------");
         Ok(())
     }
@@ -505,9 +505,9 @@ impl VABA {
         // Process the QC. This may allow us to advance round.
         self.process_qc(&block.qc).await;
 
-        debug!("{:?}", self.print_chain(block).await?);
-
         self.commit(block).await?;
+
+        debug!("{:?}", self.print_chain(block).await?);
 
         if block.fallback != 1 || (block.fallback == 1 && block.view != self.view) {
             return Ok(());
