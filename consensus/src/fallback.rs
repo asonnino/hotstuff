@@ -253,6 +253,9 @@ impl Fallback {
     async fn local_timeout_view(&mut self) -> ConsensusResult<()> {
         warn!("Timeout reached for view {}", self.view);
         self.fallback = 1;  // Enter fallback and stop voting for non-fallback blocks
+        // Initialize fallback states
+        self.init_fallback_state();
+        
         let timeout = Timeout::new(
             self.high_qc.clone(),
             self.view,
@@ -342,9 +345,6 @@ impl Fallback {
 
             // Update the view to be the view of the TC.
             self.advance_view(tc.seq).await;
-
-            // Initialize fallback states
-            self.init_fallback_state();
 
             // Make a new block for its fallback chain
             self.height = 1;
