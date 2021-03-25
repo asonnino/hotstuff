@@ -517,6 +517,9 @@ impl Fallback {
 
     // #[async_recursion]
     async fn print_chain(&mut self, block: &Block) -> ConsensusResult<()> {
+        if block.view < self.view {
+            return Ok(());
+        }
         debug!("-------------------------------------------------------- printing chain start --------------------------------------------------------");
         let mut current_block = block.clone();
         while current_block.qc != QC::genesis() {
