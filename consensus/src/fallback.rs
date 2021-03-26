@@ -77,6 +77,14 @@ impl Fallback {
     ) -> Self {
         let aggregator = Aggregator::new(committee.clone());
         let timer = Timer::new(parameters.timeout_delay);
+        let mut fallback_voted_height = HashMap::new();
+        let mut fallback_voted_round = HashMap::new();
+        let mut fallback_qcs = HashMap::new();
+        for (node, _) in &committee.authorities {
+            fallback_voted_height.insert(*node, 0);
+            fallback_voted_round.insert(*node, 0);
+            fallback_qcs.insert(*node, QC::genesis());
+        }
         Self {
             name,
             committee,
@@ -98,9 +106,9 @@ impl Fallback {
             last_committed_round: u64::MAX, // initially -1
             timeout: 0,
             fallback: 0,
-            fallback_voted_round: HashMap::new(),
-            fallback_voted_height: HashMap::new(),
-            fallback_qcs: HashMap::new(),
+            fallback_voted_round,
+            fallback_voted_height,
+            fallback_qcs,
             fallback_pending_blocks: HashMap::new(),
             fallback_signed_qc_sender: HashMap::new(),
             fallback_signed_qc_weight: HashMap::new(),
@@ -716,8 +724,12 @@ impl Fallback {
                 *weight += self.committee.stake(&signed_qc.author);
                 if *weight >= self.committee.quorum_threshold() {
                     *weight = 0; // Only send randomness share once
+                    let leader_high_qc = match self.fallback_qcs.get(&self.name) {
+                        Some(qc) => qc.clone(),
+                        None => self.high_qc.clone()
+                    };
                     // Multicast the randomness share with its height-2 QC
-                    let randomness_share = RandomnessShare::new(signed_qc.qc.view, self.name, self.signature_service.clone(), Some(self.fallback_qcs.get(&self.name).unwrap().clone())).await;
+                    let randomness_share = RandomnessShare::new(signed_qc.qc.view, self.name, self.signature_service.clone(), Some(leader_high_qc.clone())).await;
                     let message = ConsensusMessage::RandomnessShare(randomness_share.clone());
                     self.transmit(&message, None).await?;
                     self.handle_randomness_share(randomness_share).await?;
