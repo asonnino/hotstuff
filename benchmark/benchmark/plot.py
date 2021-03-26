@@ -17,7 +17,6 @@ class Ploter:
         if not filenames:
             raise PlotError('No data to plot')
 
-        filenames.sort(key=self._natural_keys)
         self.results = []
         try:
             for filename in filenames:
@@ -55,6 +54,7 @@ class Ploter:
 
     def _plot(self, x_label, y_label, y_axis, z_axis, type):
         plt.figure()
+        self.results.sort(key=self._natural_keys, reverse=(type == 'tps'))
         for result in self.results:
             y_values, y_err = y_axis(result)
             x_values = self._variable(result)
@@ -68,11 +68,12 @@ class Ploter:
             # if type == 'latency':
             #    plt.yscale('log')
 
+        location = 'upper right' if type == 'tps' else 'upper left'
+        plt.legend(loc=location)
         plt.xlim(xmin=0)
         plt.ylim(bottom=0)
         plt.xlabel(x_label)
         plt.ylabel(y_label[0])
-        plt.legend(loc='upper left')
         ax = plt.gca()
         ax.xaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
         ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
@@ -98,7 +99,7 @@ class Ploter:
         x = search(r'Max latency: (\d+)', data).group(1)
         f = search(r'Faults: (\d+)', data).group(1)
         faults = f'({f} faulty)' if f != '0' else ''
-        return f'Max latency: {float(x) / 1000:,.0f} s {faults}'
+        return f'Max latency: {float(x) / 1000:,.1f} s {faults}'
 
     @classmethod
     def plot_robustness(cls, files):
