@@ -68,8 +68,7 @@ class Ploter:
             # if type == 'latency':
             #    plt.yscale('log')
 
-        location = 'upper right' if type == 'tps' else 'upper left'
-        plt.legend(loc=location)
+        plt.legend(loc='lower center', bbox_to_anchor=(0.5, 1), ncol=2)
         plt.xlim(xmin=0)
         plt.ylim(bottom=0)
         plt.xlabel(x_label)
