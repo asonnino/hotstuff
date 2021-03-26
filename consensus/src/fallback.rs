@@ -103,7 +103,7 @@ impl Fallback {
             height: 0,
             last_voted_round: 0,
             high_qc: QC::genesis(),
-            last_committed_round: u64::MAX, // initially -1
+            last_committed_round: 0, // initially 0
             timeout: 0,
             fallback: 0,
             fallback_voted_round,
@@ -516,7 +516,7 @@ impl Fallback {
         // Cleanup the mempool.
         self.mempool_driver.cleanup(&b0, &b1, &block).await;
 
-        if b0.round <= self.last_committed_round && self.last_committed_round != u64::MAX {
+        if b0.round <= self.last_committed_round {
             return Ok(());
         }
 
@@ -592,12 +592,11 @@ impl Fallback {
         self.process_qc(&block.qc).await;
 
         self.commit(block).await?;
+ 
+        // debug!("{:?}", self.print_chain(block).await?);
 
-        debug!("{:?}", self.print_chain(block).await?);
+        debug!("block round {}, view {}, fallback {}, self round {}, view {}, fallback {}", block.round, block.view, block.fallback, self.round, self.view, self.fallback);
 
-        // Ensure the block's round is as expected.
-        // This check is important: it prevents bad leaders from producing blocks
-        // far in the future that may cause overflow on the round number.
         if block.fallback == 0 && block.round != self.round {
             return Ok(());
         }
