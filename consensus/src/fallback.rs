@@ -610,37 +610,37 @@ impl Fallback {
         // Cleanup the mempool.
         self.mempool_driver.cleanup(&b0, &b1, &block).await;
 
-        if b0.round <= self.last_committed_round {
-            return Ok(());
-        }
-
         // The chain should have consecutive round numbers by construction.
         let mut consecutive_rounds = b0.round + 1 == b1.round;
         consecutive_rounds &= b1.round + 1 == block.round;
         ensure!(consecutive_rounds || block.qc == QC::genesis(), ConsensusError::NonConsecutiveRounds{rd1: b0.round, rd2: b1.round, rd3: block.round});
-        
-        // The new commit rule requires blocks of the same view.
-        let same_view = b0.view == b1.view;
-        // For fallback blocks, they need to be proposed by the fallback leader.
-        let endorsed = self.valid_qc(&b1.qc) && self.valid_qc(&block.qc);
-        if same_view && endorsed {
-            // if !b0.payload.is_empty() {
-            //     info!("Committed {}", b0);
 
-            //     #[cfg(feature = "benchmark")]
-            //     for x in &b0.payload {
-            //         info!("Committed B{}({})", b0.round, base64::encode(x));
-            //     }
-            // }
+        if b0.round > self.last_committed_round {
+            // The new commit rule requires blocks of the same view.
+            let same_view = b0.view == b1.view;
+            // For fallback blocks, they need to be proposed by the fallback leader.
+            let endorsed = self.valid_qc(&b1.qc) && self.valid_qc(&block.qc);
+            if same_view && endorsed {
+                // if !b0.payload.is_empty() {
+                //     info!("Committed {}", b0);
 
-            self.commit_ancestors(&b0).await?;
+                //     #[cfg(feature = "benchmark")]
+                //     for x in &b0.payload {
+                //         info!("Committed B{}({})", b0.round, base64::encode(x));
+                //     }
+                // }
 
-            self.last_committed_round = b0.round;
-            debug!("Committed {:?}", b0);
-            if let Err(e) = self.commit_channel.send(b0.clone()).await {
-                warn!("Failed to send block through the commit channel: {}", e);
+                self.commit_ancestors(&b0).await?;
+
+                self.last_committed_round = b0.round;
+                debug!("Committed {:?}", b0);
+                if let Err(e) = self.commit_channel.send(b0.clone()).await {
+                    warn!("Failed to send block through the commit channel: {}", e);
+                }
             }
         }
+
+        
  
         // debug!("{:?}", self.print_chain(block).await?);
 
