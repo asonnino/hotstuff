@@ -531,12 +531,64 @@ impl VABA {
             self.handle_random_coin(coin).await?;
         }
 
-        // Process the QC. This may allow us to advance round.
         self.process_qc(&block.qc).await;
 
-        self.commit(block).await?;
+        // Let's see if we have the last three ancestors of the block, that is:
+        //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
+        // If we don't, the synchronizer asks for them to other nodes. It will
+        // then ensure we process all three ancestors in the correct order, and
+        // finally make us resume processing this block.
+        let (b0, b1, b2) = match self.synchronizer.get_ancestors_3chain(block).await? {
+            Some(ancestors) => ancestors,
+            None => {
+                debug!("Processing of {} suspended: missing parent", block.digest());
+                return Ok(());
+            }
+        };
 
-        debug!("{:?}", self.print_chain(block).await?);
+        // Store the block only if we have already processed all its ancestors.
+        self.store_block(block).await;
+
+        // Cleanup the mempool.
+        self.mempool_driver.cleanup(&b0, &b1, &block).await;
+
+        if b0.round <= self.last_committed_round {
+            return Ok(());
+        }
+
+        // The chain should have consecutive round numbers by construction.
+        let mut consecutive_rounds = b0.round + 1 == b1.round;
+        consecutive_rounds &= b1.round + 1 == b2.round;
+        consecutive_rounds &= b2.round + 1 == block.round;
+        ensure!(consecutive_rounds || block.round <= 2, ConsensusError::NonConsecutiveRounds{rd1: b0.round, rd2: b1.round, rd3: b2.round});
+        
+        // The new commit rule requires blocks of the same view.
+        let mut same_view = b0.view == b1.view;
+        same_view &= b1.view == b2.view;
+        // For fallback blocks, they need to be proposed by the fallback leader.
+        let endorsed = self.valid_qc(&b1.qc) && self.valid_qc(&b2.qc) && self.valid_qc(&block.qc);
+        debug!("same_view {}, endorsed {}", same_view, endorsed);
+        if same_view && endorsed {
+            // if !b0.payload.is_empty() {
+            //     info!("Committed {}", b0);
+
+            //     #[cfg(feature = "benchmark")]
+            //     for x in &b0.payload {
+            //         info!("Committed B{}({})", b0.round, base64::encode(x));
+            //     }
+            // }
+            self.commit_ancestors(&b0).await?;
+
+            self.last_committed_round = b0.round;
+            // debug!("Committed {:?}", b0);
+            if let Err(e) = self.commit_channel.send(b0.clone()).await {
+                warn!("Failed to send block through the commit channel: {}", e);
+            }
+        }
+
+        self.update_lock_qc(&b2.qc);
+
+        // debug!("{:?}", self.print_chain(block).await?);
 
         if block.fallback != 1 || (block.fallback == 1 && block.view != self.view) {
             return Ok(());
