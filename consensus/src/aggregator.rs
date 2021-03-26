@@ -81,13 +81,11 @@ impl QCMaker {
     /// Try to append a signature to a (partial) quorum.
     pub fn append(&mut self, vote: Vote, committee: &Committee) -> ConsensusResult<Option<QC>> {
         let author = vote.author;
-
         // Ensure it is the first time this authority votes.
         ensure!(
             self.used.insert(author),
-            ConsensusError::AuthorityReuse(author)
+            ConsensusError::AuthorityReuseinQC(author)
         );
-
         self.votes.push((author, vote.signature));
         self.weight += committee.stake(&author);
         if self.weight >= committee.quorum_threshold() {
@@ -132,7 +130,7 @@ impl TCMaker {
         // Ensure it is the first time this authority votes.
         ensure!(
             self.used.insert(author),
-            ConsensusError::AuthorityReuse(author)
+            ConsensusError::AuthorityReuseinTC(author)
         );
 
         // Add the timeout to the accumulator.

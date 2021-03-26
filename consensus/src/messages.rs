@@ -289,6 +289,12 @@ impl fmt::Debug for Vote {
     }
 }
 
+impl fmt::Display for Vote {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "Vote{}", self.hash)
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, Default)]
 pub struct QC {
     pub hash: Digest,
@@ -314,7 +320,7 @@ impl QC {
         let mut weight = 0;
         let mut used = HashSet::new();
         for (name, _) in self.votes.iter() {
-            ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
+            ensure!(!used.contains(name), ConsensusError::AuthorityReuseinQC(*name));
             let voting_rights = committee.stake(name);
             ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
             used.insert(*name);
@@ -339,7 +345,7 @@ impl QC {
         let mut weight = 0;
         let mut used = HashSet::new();
         for (name, _) in self.votes.iter() {
-            ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
+            ensure!(!used.contains(name), ConsensusError::AuthorityReuseinQC(*name));
             let voting_rights = committee.stake(name);
             ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
             used.insert(*name);
@@ -527,6 +533,12 @@ impl fmt::Debug for Timeout {
     }
 }
 
+impl fmt::Display for Timeout {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "Timeout{}", self.seq)
+    }
+}
+
 // for VABA or async fallback, seq=view
 // for HotStuff, seq=round
 #[derive(Clone, Serialize, Deserialize)]
@@ -541,7 +553,7 @@ impl TC {
         let mut weight = 0;
         let mut used = HashSet::new();
         for (name, _, _) in self.votes.iter() {
-            ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
+            ensure!(!used.contains(name), ConsensusError::AuthorityReuseinTC(*name));
             let voting_rights = committee.stake(name);
             ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
             used.insert(*name);
@@ -582,6 +594,7 @@ pub struct RandomnessShare {
     pub seq: SeqNumber, // view
     pub author: PublicKey,
     pub signature_share: SignatureShare,
+    pub high_qc: Option<QC>,    // attach its height-2 qc in the randomness share as an optimization
 }
 
 impl RandomnessShare {
@@ -589,6 +602,7 @@ impl RandomnessShare {
         seq: SeqNumber,
         author: PublicKey,
         mut signature_service: SignatureService,
+        high_qc: Option<QC>,
     ) -> Self {
         let mut hasher = Sha512::new();
         hasher.update(seq.to_le_bytes());
@@ -598,6 +612,7 @@ impl RandomnessShare {
             seq,
             author,
             signature_share,
+            high_qc,
         }
     }
 
@@ -646,7 +661,7 @@ impl RandomCoin {
         let mut used = HashSet::new();
         for share in self.shares.iter() {
             let name = share.author;
-            ensure!(!used.contains(&name), ConsensusError::AuthorityReuse(name));
+            ensure!(!used.contains(&name), ConsensusError::AuthorityReuseinCoin(name));
             let voting_rights = committee.stake(&name);
             ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(name));
             used.insert(name);

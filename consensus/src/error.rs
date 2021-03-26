@@ -48,7 +48,13 @@ pub enum ConsensusError {
     RandomCoinWithWrongShares,
 
     #[error("Received more than one vote from {0}")]
-    AuthorityReuse(PublicKey),
+    AuthorityReuseinQC(PublicKey),
+
+    #[error("Received more than one timeout from {0}")]
+    AuthorityReuseinTC(PublicKey),
+
+    #[error("Received more than one random share from {0}")]
+    AuthorityReuseinCoin(PublicKey),
 
     #[error("Received vote from unknown authority {0}")]
     UnknownAuthority(PublicKey),

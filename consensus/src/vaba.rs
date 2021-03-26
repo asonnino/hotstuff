@@ -102,7 +102,7 @@ impl VABA {
             last_voted_round: 0,
             lock_qc: QC::genesis(),
             high_qc: QC::genesis(),
-            last_committed_round: u64::MAX, // initially -1
+            last_committed_round: 0, // initially 0
             // fallback: 1,
             fallback_voted_round,
             fallback_voted_height,
@@ -254,7 +254,6 @@ impl VABA {
     }
 
     async fn local_timeout_view(&mut self) -> ConsensusResult<()> {
-        warn!("Timeout reached for view 1");
         if self.view > 1 {
             self.timer.reset();
             return Ok(());
@@ -266,6 +265,7 @@ impl VABA {
             self.signature_service.clone(),
         )
         .await;
+        warn!("Timeout reached for view {}", self.view);
         debug!("Created {:?}", timeout);
         self.timer.reset();
         let message = ConsensusMessage::Timeout(timeout.clone());
@@ -416,6 +416,31 @@ impl VABA {
     }
 
     #[async_recursion]
+    async fn commit_ancestors(&mut self, block: &Block) -> ConsensusResult<()> {
+        let mut current_block = block.clone();
+        while current_block.round > self.last_committed_round {
+            if !current_block.payload.is_empty() {
+                info!("Committed {}", current_block);
+
+                #[cfg(feature = "benchmark")]
+                for x in &current_block.payload {
+                    info!("Committed B{}({})", current_block.round, base64::encode(x));
+                }
+            }
+            debug!("Committed {}", current_block);
+            let parent = match self.synchronizer.get_parent_block(&current_block).await? {
+                Some(b) => b,
+                None => {
+                    debug!("Commit ancestors, processing of {} suspended: missing parent", current_block.digest());
+                    break;
+                }
+            };
+            current_block = parent;
+        }
+        Ok(())
+    }
+
+    #[async_recursion]
     async fn commit(&mut self, block: &Block) -> ConsensusResult<()> {
         // Let's see if we have the last three ancestors of the block, that is:
         //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
@@ -436,7 +461,7 @@ impl VABA {
         // Cleanup the mempool.
         self.mempool_driver.cleanup(&b0, &b1, &block).await;
 
-        if b0.round <= self.last_committed_round && self.last_committed_round != u64::MAX {
+        if b0.round <= self.last_committed_round {
             return Ok(());
         }
 
@@ -451,18 +476,20 @@ impl VABA {
         same_view &= b1.view == b2.view;
         // For fallback blocks, they need to be proposed by the fallback leader.
         let endorsed = self.valid_qc(&b1.qc) && self.valid_qc(&b2.qc) && self.valid_qc(&block.qc);
+        debug!("same_view {}, endorsed {}", same_view, endorsed);
         if same_view && endorsed {
-            if !b0.payload.is_empty() {
-                info!("Committed {}", b0);
+            // if !b0.payload.is_empty() {
+            //     info!("Committed {}", b0);
 
-                #[cfg(feature = "benchmark")]
-                for x in &b0.payload {
-                    info!("Committed B{}({})", b0.round, base64::encode(x));
-                }
-            }
+            //     #[cfg(feature = "benchmark")]
+            //     for x in &b0.payload {
+            //         info!("Committed B{}({})", b0.round, base64::encode(x));
+            //     }
+            // }
+            self.commit_ancestors(&b0).await?;
 
             self.last_committed_round = b0.round;
-            debug!("Committed {:?}", b0);
+            // debug!("Committed {:?}", b0);
             if let Err(e) = self.commit_channel.send(b0.clone()).await {
                 warn!("Failed to send block through the commit channel: {}", e);
             }
@@ -498,6 +525,8 @@ impl VABA {
 
     #[async_recursion]
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
+        debug!("Processing block {:?}", block);
+        
         if let Some(coin) = block.coin.clone() {
             self.handle_random_coin(coin).await?;
         }
@@ -650,7 +679,7 @@ impl VABA {
                 if *weight >= self.committee.quorum_threshold() {
                     *weight = 0; // Only send randomness share once
                     // Multicast the randomness share
-                    let randomness_share = RandomnessShare::new(signed_qc.qc.view, self.name, self.signature_service.clone()).await;
+                    let randomness_share = RandomnessShare::new(signed_qc.qc.view, self.name, self.signature_service.clone(), None).await;
                     let message = ConsensusMessage::RandomnessShare(randomness_share.clone());
                     self.transmit(&message, None).await?;
                     self.handle_randomness_share(randomness_share).await?;
