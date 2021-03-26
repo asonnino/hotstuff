@@ -38,7 +38,7 @@ class LogParser:
                 results = p.map(self._parse_nodes, nodes)
         except (ValueError, IndexError) as e:
             raise ParseError(f'Failed to parse node logs: {e}')
-        proposals, commits, sizes, self.samples, timeouts, self.configs\
+        proposals, commits, sizes, self.received_samples, timeouts, self.configs \
             = zip(*results)
         self.proposals = self._merge_results([x.items() for x in proposals])
         self.commits = self._merge_results([x.items() for x in commits])
@@ -98,8 +98,8 @@ class LogParser:
         tmp = findall(r'Payload ([^ ]+) contains (\d+) B', log)
         sizes = {d: int(s) for d, s in tmp}
 
-        tmp = findall(r'Payload ([^ ]+) contains (\d+) sample', log)
-        samples = {d: int(s) for d, s in tmp if d in commits}
+        tmp = findall(r'\[(.*Z) .* Payload ([^ ]+) contains (\d+) sample', log)
+        samples = {d: (int(s), self._to_posix(t)) for t, d, s in tmp}
 
         tmp = findall(r'.* WARN .* Timeout', log)
         timeouts = len(tmp)
@@ -155,15 +155,16 @@ class LogParser:
 
     def _end_to_end_latency(self):
         latency = []
-        for start_times, samples in zip(self.sent_samples, self.samples):
-            start_times.sort()
+        for sent, data in zip(self.sent_samples, self.received_samples):
+            sent.sort()
 
-            end_times = []
-            for digest, occurrences in samples.items():
-                tmp = self.commits[digest]
-                end_times += [tmp] * occurrences
+            ordered = sorted(list(data.items()), key=lambda x: x[1][1])
+            commit = []
+            for digest, (occurrences, _) in ordered:
+                tmp = self.commits.get(digest)
+                commit += [tmp] * occurrences
 
-            latency += [x - y for x, y in zip(end_times, start_times)]
+            latency += [x - y for x, y in zip(commit, sent) if x is not None]
         return mean(latency) if latency else 0
 
     def result(self):
