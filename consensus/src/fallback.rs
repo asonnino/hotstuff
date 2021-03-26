@@ -584,12 +584,6 @@ impl Fallback {
     #[async_recursion]
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
         debug!("Processing block {}", block.digest());
-        if let Some(coin) = block.coin.clone() {
-            self.handle_random_coin(coin).await?;
-        }
-
-        // Process the QC. This may allow us to advance round.
-        self.process_qc(&block.qc).await;
 
         // Let's see if we have the last three ancestors of the block, that is:
         //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
@@ -606,9 +600,6 @@ impl Fallback {
 
         // Store the block only if we have already processed all its ancestors.
         self.store_block(block).await;
-
-        // Cleanup the mempool.
-        self.mempool_driver.cleanup(&b0, &b1, &block).await;
 
         // The chain should have consecutive round numbers by construction.
         let mut consecutive_rounds = b0.round + 1 == b1.round;
@@ -639,8 +630,9 @@ impl Fallback {
                 }
             }
         }
-
         
+        // Cleanup the mempool.
+        self.mempool_driver.cleanup(&b0, &b1, &block).await;
  
         // debug!("{:?}", self.print_chain(block).await?);
 
@@ -710,6 +702,14 @@ impl Fallback {
 
         // Check the block is correctly formed.
         block.verify_fallback(&self.committee, &self.pk_set)?;
+
+        if let Some(coin) = block.coin.clone() {
+            self.handle_random_coin(coin).await?;
+        }
+
+        // Process the QC. This may allow us to advance round.
+        self.process_qc(&block.qc).await;
+
         // Not in fallback, process the fallback blocks when later enter the fallback
         // It is necessary to receive 2f+1 timeout messages with QCs to update the high_qc
         if block.fallback == 1 && self.fallback == 0 {

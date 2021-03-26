@@ -526,12 +526,6 @@ impl VABA {
     #[async_recursion]
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
         debug!("Processing block {:?}", block);
-        
-        if let Some(coin) = block.coin.clone() {
-            self.handle_random_coin(coin).await?;
-        }
-
-        self.process_qc(&block.qc).await;
 
         // Let's see if we have the last three ancestors of the block, that is:
         //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
@@ -549,15 +543,12 @@ impl VABA {
         // Store the block only if we have already processed all its ancestors.
         self.store_block(block).await;
 
-        // Cleanup the mempool.
-        self.mempool_driver.cleanup(&b0, &b1, &block).await;
-
         // The chain should have consecutive round numbers by construction.
         let mut consecutive_rounds = b0.round + 1 == b1.round;
         consecutive_rounds &= b1.round + 1 == b2.round;
         consecutive_rounds &= b2.round + 1 == block.round;
         ensure!(consecutive_rounds || block.round <= 2, ConsensusError::NonConsecutiveRounds{rd1: b0.round, rd2: b1.round, rd3: b2.round});
-        
+
         if b0.round > self.last_committed_round {
             // The new commit rule requires blocks of the same view.
             let mut same_view = b0.view == b1.view;
@@ -585,6 +576,9 @@ impl VABA {
         }
 
         self.update_lock_qc(&b2.qc);
+
+        // Cleanup the mempool.
+        self.mempool_driver.cleanup(&b0, &b1, &block).await;
 
         // debug!("{:?}", self.print_chain(block).await?);
 
@@ -633,6 +627,12 @@ impl VABA {
 
         // Check the block is correctly formed.
         block.verify_vaba(&self.committee, &self.pk_set)?;
+
+        if let Some(coin) = block.coin.clone() {
+            self.handle_random_coin(coin).await?;
+        }
+
+        self.process_qc(&block.qc).await;
 
         // Let's see if we have the block's data. If we don't, the mempool
         // will get it and then make us resume processing this block.
