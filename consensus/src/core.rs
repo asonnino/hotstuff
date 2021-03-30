@@ -300,9 +300,7 @@ impl Core {
 
         // Check if we can commit the head of the 2-chain.
         // Note that we commit blocks only if we have all its ancestors.
-        let mut commit_rule = b0.round + 1 == b1.round;
-        commit_rule &= b1.round + 1 == block.round;
-        if commit_rule {
+        if b0.round + 1 == b1.round {
             if !b0.payload.is_empty() {
                 info!("Committed {}", b0);
 
