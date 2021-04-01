@@ -447,12 +447,6 @@ impl Fallback {
             debug!("process_pending_blocks {:?}", map);
             for (_, block) in map {
                 debug!("Processing pending block {}", block.digest());
-                // Let's see if we have the block's data. If we don't, the mempool
-                // will get it and then make us resume processing this block.
-                if !self.mempool_driver.verify(block.clone()).await? {
-                    debug!("Processing of {} suspended: missing payload", block.digest());
-                    continue;
-                }
                 if let Err(e) = self.handle_proposal(&block).await {
                     warn!("Failed to process pending blocks: {}", e);
                 }
@@ -495,84 +489,28 @@ impl Fallback {
         Ok(())
     }
 
-    #[async_recursion]
-    async fn commit(&mut self, block: &Block) -> ConsensusResult<()> {
-        // Let's see if we have the last three ancestors of the block, that is:
-        //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
-        // If we don't, the synchronizer asks for them to other nodes. It will
-        // then ensure we process all three ancestors in the correct order, and
-        // finally make us resume processing this block.
-        let (b0, b1) = match self.synchronizer.get_ancestors(block).await? {
-            Some(ancestors) => ancestors,
-            None => {
-                debug!("Processing of {} suspended: missing parent", block.digest());
-                return Ok(());
-            }
-        };
-
-        // Store the block only if we have already processed all its ancestors.
-        self.store_block(block).await;
-
-        // Cleanup the mempool.
-        self.mempool_driver.cleanup(&b0, &b1, &block).await;
-
-        if b0.round <= self.last_committed_round {
-            return Ok(());
-        }
-
-        // The chain should have consecutive round numbers by construction.
-        let mut consecutive_rounds = b0.round + 1 == b1.round;
-        consecutive_rounds &= b1.round + 1 == block.round;
-        ensure!(consecutive_rounds || block.qc == QC::genesis(), ConsensusError::NonConsecutiveRounds{rd1: b0.round, rd2: b1.round, rd3: block.round});
-        
-        // The new commit rule requires blocks of the same view.
-        let same_view = b0.view == b1.view;
-        // For fallback blocks, they need to be proposed by the fallback leader.
-        let endorsed = self.valid_qc(&b1.qc) && self.valid_qc(&block.qc);
-        if same_view && endorsed {
-            // if !b0.payload.is_empty() {
-            //     info!("Committed {}", b0);
-
-            //     #[cfg(feature = "benchmark")]
-            //     for x in &b0.payload {
-            //         info!("Committed B{}({})", b0.round, base64::encode(x));
-            //     }
-            // }
-
-            self.commit_ancestors(&b0).await?;
-
-            self.last_committed_round = b0.round;
-            debug!("Committed {:?}", b0);
-            if let Err(e) = self.commit_channel.send(b0.clone()).await {
-                warn!("Failed to send block through the commit channel: {}", e);
-            }
-        }
-
-        Ok(())
-    }
-
     // #[async_recursion]
-    async fn print_chain(&mut self, block: &Block) -> ConsensusResult<()> {
-        if block.view < self.view {
-            return Ok(());
-        }
-        debug!("-------------------------------------------------------- printing chain start --------------------------------------------------------");
-        let mut current_block = block.clone();
-        while current_block.qc != QC::genesis() {
-            let parent = match self.synchronizer.get_parent_block(&current_block).await? {
-                Some(b) => b,
-                None => {
-                    debug!("Processing of {} suspended: missing parent", current_block.digest());
-                    break;
-                }
-            };
-            debug!("block {:?}", current_block);
-            current_block = parent;
-        }
-        debug!("block {:?}", current_block);
-        debug!("-------------------------------------------------------- printing chain end --------------------------------------------------------");
-        Ok(())
-    }
+    // async fn print_chain(&mut self, block: &Block) -> ConsensusResult<()> {
+    //     if block.view < self.view {
+    //         return Ok(());
+    //     }
+    //     debug!("-------------------------------------------------------- printing chain start --------------------------------------------------------");
+    //     let mut current_block = block.clone();
+    //     while current_block.qc != QC::genesis() {
+    //         let parent = match self.synchronizer.get_parent_block(&current_block).await? {
+    //             Some(b) => b,
+    //             None => {
+    //                 debug!("Processing of {} suspended: missing parent", current_block.digest());
+    //                 break;
+    //             }
+    //         };
+    //         debug!("block {:?}", current_block);
+    //         current_block = parent;
+    //     }
+    //     debug!("block {:?}", current_block);
+    //     debug!("-------------------------------------------------------- printing chain end --------------------------------------------------------");
+    //     Ok(())
+    // }
 
     fn update_fallback_high_qc(&mut self, qc: &QC) {
         let fallback_high_qc = self.fallback_qcs.get(&qc.proposer).unwrap();

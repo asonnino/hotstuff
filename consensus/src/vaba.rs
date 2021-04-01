@@ -42,6 +42,7 @@ pub struct VABA {
     last_committed_round: SeqNumber,    // round of last committed block, initially -1
     fallback_voted_round: HashMap<PublicKey, SeqNumber>,    // voted round number during fallback for each i
     fallback_voted_height: HashMap<PublicKey, HeightNumber>,  // voted height number during fallback for each i
+    fallback_pending_blocks: HashMap<SeqNumber, HashMap<(PublicKey, HeightNumber), Block>>, // buffering the fallback block received when not enter fallback yet, indexed by view
     fallback_qcs: HashMap<PublicKey, QC>,    // highest fallback QC by each node
     fallback_signed_qc_sender: HashMap<SeqNumber, HashSet<PublicKey>>,    // set of nodes that send height-2 signed QC
     fallback_signed_qc_weight: HashMap<SeqNumber, Stake>,    // weight of the above nodes
@@ -102,6 +103,7 @@ impl VABA {
             fallback_voted_round,
             fallback_voted_height,
             fallback_qcs: HashMap::new(),
+            fallback_pending_blocks: HashMap::new(),
             fallback_signed_qc_sender: HashMap::new(),
             fallback_signed_qc_weight: HashMap::new(),
             fallback_randomness_share_sender: HashMap::new(),
@@ -234,6 +236,7 @@ impl VABA {
     }
 
     fn clean_fallback_state(&mut self, view: &SeqNumber) {
+        self.fallback_pending_blocks.retain(|v, _| v >= &view);
         self.fallback_signed_qc_sender.retain(|v, _| v >= &view);
         self.fallback_signed_qc_weight.retain(|v, _| v >= &view);
         self.fallback_randomness_share_sender.retain(|v, _| v >= &view);
@@ -368,6 +371,18 @@ impl VABA {
         Ok(())
     }
 
+    async fn process_pending_blocks(&mut self) -> ConsensusResult<()> {
+        if let Some(map) = self.fallback_pending_blocks.remove(&self.view) {
+            for (_, block) in map {
+                debug!("Processing pending block {}", block.digest());
+                if let Err(e) = self.process_block(&block).await {
+                    warn!("Failed to process pending blocks: {}", e);
+                }
+            }
+        }
+        Ok(())
+    }
+
     async fn process_qc(&mut self, qc: &QC) {
         // self.advance_round(qc.round).await;
         self.update_high_qc(qc);
@@ -473,7 +488,14 @@ impl VABA {
 
         // debug!("{:?}", self.print_chain(block).await?);
 
-        if block.fallback != 1 || (block.fallback == 1 && block.view != self.view) {
+        if block.fallback != 1 || (block.fallback == 1 && block.view < self.view) {
+            return Ok(());
+        }
+
+        if block.view > self.view {
+            debug!("Add block {} to pending", block.digest());
+            let map = self.fallback_pending_blocks.entry(block.view).or_insert(HashMap::new());
+            map.insert((block.author, block.height), block.clone());
             return Ok(());
         }
 
@@ -643,6 +665,7 @@ impl VABA {
                     self.generate_proposal(Some(random_coin.clone()), self.high_qc.clone())
                         .await
                         .expect("Failed to send the first block after fallback");
+                    self.process_pending_blocks().await?;
                 }
             }
         }
