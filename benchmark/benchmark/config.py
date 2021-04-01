@@ -138,8 +138,8 @@ class BenchParameters:
         try:
             nodes = json['nodes'] 
             nodes = nodes if isinstance(nodes, list) else [nodes]
-            if not nodes:
-                raise ConfigError('Missing number of nodes')
+            if not nodes or any(x <= 0 for x in nodes):
+                raise ConfigError('Missing or invalid number of nodes')
 
             rate = json['rate'] 
             rate = rate if isinstance(rate, list) else [rate]
