@@ -109,7 +109,7 @@ impl Core {
     async fn make_vote(&mut self, block: &Block) -> Option<Vote> {
         // Check if we can vote for this block.
         let safety_rule_1 = block.round > self.last_voted_round;
-        let safety_rule_2 = block.qc.round  >= self.preferred_round;
+        let safety_rule_2 = block.qc.round >= self.preferred_round;
         if !(safety_rule_1 && safety_rule_2) {
             return None;
         }

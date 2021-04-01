@@ -153,7 +153,7 @@ async fn generate_proposal() {
 #[tokio::test]
 async fn commit_block() {
     // Get enough distinct leaders to form a quorum.
-    let leaders = vec![leader_keys(1), leader_keys(2), leader_keys(4)];
+    let leaders = vec![leader_keys(1), leader_keys(2), leader_keys(3)];
     let chain = chain(leaders);
 
     // Run a core instance.
