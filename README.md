@@ -29,6 +29,7 @@ This command may take a long time the first time you run it (compiling rust code
  Committee size: 4 nodes
  Input rate: 1,000 tx/s
  Transaction size: 512 B
+ Faults: 0 nodes
  Execution time: 20 s
 
  Consensus max payloads size: 500 B
