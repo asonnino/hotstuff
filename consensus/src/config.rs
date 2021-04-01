@@ -7,7 +7,7 @@ use std::net::SocketAddr;
 pub type Stake = u32;
 pub type EpochNumber = u128;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Parameters {
     pub timeout_delay: u64,
     pub sync_retry_delay: u64,

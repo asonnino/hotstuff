@@ -1,14 +1,13 @@
 use crate::config::Committee;
 use crate::core::ConsensusMessage;
 use crate::error::ConsensusResult;
+use crate::filter::FilterInput;
 use crate::messages::{Block, QC};
-use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey};
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
 use log::{debug, error};
-use network::NetMessage;
 use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 use store::Store;
@@ -31,7 +30,7 @@ impl Synchronizer {
         name: PublicKey,
         committee: Committee,
         store: Store,
-        network_channel: Sender<NetMessage>,
+        network_filter: Sender<FilterInput>,
         core_channel: Sender<ConsensusMessage>,
         sync_retry_delay: u64,
     ) -> Self {
@@ -61,7 +60,7 @@ impl Synchronizer {
                                     .as_millis();
                                 requests.insert(parent.clone(), now);
                                 let message = ConsensusMessage::SyncRequest(parent, name);
-                                Self::transmit(&message, &name, None, &network_channel, &committee).await.unwrap();
+                                Self::transmit(message, &name, None, &network_filter, &committee).await.unwrap();
                             }
                         }
                     },
@@ -86,7 +85,7 @@ impl Synchronizer {
                             if timestamp + (sync_retry_delay as u128) < now {
                                 debug!("Requesting sync for block {} (retry)", digest);
                                 let message = ConsensusMessage::SyncRequest(digest.clone(), name);
-                                Self::transmit(&message, &name, None, &network_channel, &committee).await.unwrap();
+                                Self::transmit(message, &name, None, &network_filter, &committee).await.unwrap();
                             }
                         }
                         timer.as_mut().reset(Instant::now() + Duration::from_millis(TIMER_ACCURACY));
@@ -107,10 +106,10 @@ impl Synchronizer {
     }
 
     pub async fn transmit(
-        message: &ConsensusMessage,
+        message: ConsensusMessage,
         from: &PublicKey,
         to: Option<&PublicKey>,
-        network_channel: &Sender<NetMessage>,
+        network_filter: &Sender<FilterInput>,
         committee: &Committee,
     ) -> ConsensusResult<()> {
         let addresses = if let Some(to) = to {
@@ -120,9 +119,7 @@ impl Synchronizer {
             debug!("Broadcasting {:?}", message);
             committee.broadcast_addresses(from)
         };
-        let bytes = bincode::serialize(message).expect("Failed to serialize core message");
-        let message = NetMessage(Bytes::from(bytes), addresses);
-        if let Err(e) = network_channel.send(message).await {
+        if let Err(e) = network_filter.send((message, addresses)).await {
             panic!("Failed to send block through network channel: {}", e);
         }
         Ok(())

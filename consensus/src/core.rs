@@ -1,6 +1,7 @@
 use crate::aggregator::Aggregator;
 use crate::config::{Committee, Parameters};
 use crate::error::{ConsensusError, ConsensusResult};
+use crate::filter::FilterInput;
 use crate::leader::LeaderElector;
 use crate::mempool::MempoolDriver;
 use crate::messages::{Block, Timeout, Vote, QC, TC};
@@ -10,7 +11,6 @@ use async_recursion::async_recursion;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
 use log::{debug, error, info, warn};
-use network::NetMessage;
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
 use store::Store;
@@ -31,6 +31,7 @@ pub enum ConsensusMessage {
     TC(TC),
     LoopBack(Block),
     SyncRequest(Digest, PublicKey),
+    SyncReply(Block)
 }
 
 pub struct Core {
@@ -43,7 +44,7 @@ pub struct Core {
     mempool_driver: MempoolDriver,
     synchronizer: Synchronizer,
     core_channel: Receiver<ConsensusMessage>,
-    network_channel: Sender<NetMessage>,
+    network_filter: Sender<FilterInput>,
     commit_channel: Sender<Block>,
     round: RoundNumber,
     last_voted_round: RoundNumber,
@@ -64,7 +65,7 @@ impl Core {
         mempool_driver: MempoolDriver,
         synchronizer: Synchronizer,
         core_channel: Receiver<ConsensusMessage>,
-        network_channel: Sender<NetMessage>,
+        network_filter: Sender<FilterInput>,
         commit_channel: Sender<Block>,
     ) -> Self {
         let aggregator = Aggregator::new(committee.clone());
@@ -78,7 +79,7 @@ impl Core {
             leader_elector,
             mempool_driver,
             synchronizer,
-            network_channel,
+            network_filter,
             commit_channel,
             core_channel,
             round: 1,
@@ -141,10 +142,10 @@ impl Core {
         self.timer.reset();
         let message = ConsensusMessage::Timeout(timeout.clone());
         Synchronizer::transmit(
-            &message,
+            message,
             &self.name,
             None,
-            &self.network_channel,
+            &self.network_filter,
             &self.committee,
         )
         .await?;
@@ -198,10 +199,10 @@ impl Core {
             // Broadcast the TC.
             let message = ConsensusMessage::TC(tc.clone());
             Synchronizer::transmit(
-                &message,
+                message,
                 &self.name,
                 None,
-                &self.network_channel,
+                &self.network_filter,
                 &self.committee,
             )
             .await?;
@@ -259,10 +260,10 @@ impl Core {
         // Process our new block and broadcast it.
         let message = ConsensusMessage::Propose(block.clone());
         Synchronizer::transmit(
-            &message,
+            message,
             &self.name,
             None,
-            &self.network_channel,
+            &self.network_filter,
             &self.committee,
         )
         .await?;
@@ -335,10 +336,10 @@ impl Core {
             } else {
                 let message = ConsensusMessage::Vote(vote);
                 Synchronizer::transmit(
-                    &message,
+                    message,
                     &self.name,
                     Some(&next_leader),
-                    &self.network_channel,
+                    &self.network_filter,
                     &self.committee,
                 )
                 .await?;
@@ -389,12 +390,12 @@ impl Core {
     ) -> ConsensusResult<()> {
         if let Some(bytes) = self.store.read(digest.to_vec()).await? {
             let block = bincode::deserialize(&bytes)?;
-            let message = ConsensusMessage::Propose(block);
+            let message = ConsensusMessage::SyncReply(block);
             Synchronizer::transmit(
-                &message,
+                message,
                 &self.name,
                 Some(&sender),
-                &self.network_channel,
+                &self.network_filter,
                 &self.committee,
             )
             .await?;
@@ -431,7 +432,8 @@ impl Core {
                         ConsensusMessage::Timeout(timeout) => self.handle_timeout(&timeout).await,
                         ConsensusMessage::TC(tc) => self.handle_tc(tc).await,
                         ConsensusMessage::LoopBack(block) => self.process_block(&block).await,
-                        ConsensusMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await
+                        ConsensusMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await,
+                        ConsensusMessage::SyncReply(block) => self.handle_proposal(&block).await,
                     }
                 },
                 () = &mut self.timer => self.local_timeout_round().await,
