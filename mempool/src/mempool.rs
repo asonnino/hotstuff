@@ -2,39 +2,31 @@ use crate::config::{Committee, Parameters};
 use crate::core::Core;
 use crate::error::MempoolResult;
 use crate::front::Front;
-use async_trait::async_trait;
-use consensus::{NodeMempool, PayloadStatus};
-use crypto::{Digest, PublicKey, SignatureService};
+use crate::payload::PayloadMaker;
+use crate::synchronizer::Synchronizer;
+use consensus::{ConsensusMempoolMessage, ConsensusMessage};
+use crypto::{PublicKey, SignatureService};
 use log::info;
 use network::{NetReceiver, NetSender};
-use std::convert::TryInto;
 use store::Store;
-use tokio::sync::mpsc::{channel, Sender};
-use tokio::sync::oneshot;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 #[cfg(test)]
 #[path = "tests/mempool_tests.rs"]
 pub mod mempool_tests;
 
-#[derive(Debug)]
-pub enum ConsensusMessage {
-    Get(usize, oneshot::Sender<MempoolResult<Vec<Digest>>>),
-    Verify(Vec<Digest>, oneshot::Sender<MempoolResult<Vec<Digest>>>),
-    Cleanup(Vec<Digest>),
-}
-
-pub struct Mempool {
-    channel: Sender<ConsensusMessage>,
-}
+pub struct Mempool;
 
 impl Mempool {
-    pub fn new(
+    pub fn run(
         name: PublicKey,
         committee: Committee,
         parameters: Parameters,
-        signature_service: SignatureService,
         store: Store,
-    ) -> MempoolResult<Self> {
+        signature_service: SignatureService,
+        consensus_channel: Sender<ConsensusMessage>,
+        consensus_mempool_channel: Receiver<ConsensusMempoolMessage>,
+    ) -> MempoolResult<()> {
         info!(
             "Mempool queue capacity set to {} payloads",
             parameters.queue_capacity
@@ -50,7 +42,6 @@ impl Mempool {
 
         let (tx_network, rx_network) = channel(1000);
         let (tx_core, rx_core) = channel(1000);
-        let (tx_consensus, rx_consensus) = channel(1000);
         let (tx_client, rx_client) = channel(1000);
 
         // Run the front end that receives client transactions.
@@ -69,7 +60,7 @@ impl Mempool {
             x.set_ip("0.0.0.0".parse().unwrap());
             x
         })?;
-        let network_receiver = NetReceiver::new(address, tx_core);
+        let network_receiver = NetReceiver::new(address, tx_core.clone());
         tokio::spawn(async move {
             network_receiver.run().await;
         });
@@ -79,77 +70,42 @@ impl Mempool {
             network_sender.run().await;
         });
 
+        // Build and run the synchronizer.
+        let synchronizer = Synchronizer::new(
+            consensus_channel,
+            store.clone(),
+            name,
+            committee.clone(),
+            tx_network.clone(),
+            parameters.sync_retry_delay,
+        );
+
+        // Build and run the payload maker.
+        let payload_maker = PayloadMaker::new(
+            name,
+            signature_service,
+            parameters.max_payload_size,
+            parameters.min_block_delay,
+            rx_client,
+            tx_core,
+        );
+
         // Run the core.
         let mut core = Core::new(
             name,
             committee,
             parameters,
-            signature_service,
             store,
+            synchronizer,
+            payload_maker,
             /* core_channel */ rx_core,
-            /* consensus_channel */ rx_consensus,
-            /* client_channel */ rx_client,
+            consensus_mempool_channel,
             /* network_channel */ tx_network,
         );
         tokio::spawn(async move {
             core.run().await;
         });
 
-        Ok(Self {
-            channel: tx_consensus,
-        })
-    }
-}
-
-#[async_trait]
-impl NodeMempool for Mempool {
-    async fn get(&mut self, max: usize) -> Vec<Vec<u8>> {
-        let (sender, receiver) = oneshot::channel();
-        let message = ConsensusMessage::Get(max, sender);
-        self.channel
-            .send(message)
-            .await
-            .expect("Failed to send message through consensus channel");
-        receiver
-            .await
-            .expect("Failed to receive payload from core")
-            .unwrap_or_default()
-            .iter()
-            .map(|x| x.to_vec())
-            .collect()
-    }
-
-    async fn verify(&mut self, payload: &[Vec<u8>]) -> PayloadStatus {
-        if payload.is_empty() {
-            return PayloadStatus::Accept;
-        }
-
-        let (sender, receiver) = oneshot::channel();
-        let message = match payload.iter().map(|x| x[..].try_into()).collect() {
-            Ok(x) => ConsensusMessage::Verify(x, sender),
-            Err(_) => return PayloadStatus::Reject,
-        };
-        self.channel
-            .send(message)
-            .await
-            .expect("Failed to send message through consensus channel");
-        match receiver.await.expect("Failed to receive payload from core") {
-            Ok(missing) if missing.is_empty() => PayloadStatus::Accept,
-            Ok(missing) => PayloadStatus::Wait(missing.iter().map(|x| x.to_vec()).collect()),
-            Err(_) => PayloadStatus::Reject,
-        }
-    }
-
-    async fn garbage_collect(&mut self, payload: &[Vec<u8>]) {
-        let digests = payload
-            .iter()
-            .map(|x| x[..].try_into())
-            .collect::<Result<_, _>>()
-            .expect("Invalid payload");
-        let message = ConsensusMessage::Cleanup(digests);
-        self.channel
-            .send(message)
-            .await
-            .expect("Failed to send message through consensus channel");
+        Ok(())
     }
 }

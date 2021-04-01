@@ -127,7 +127,10 @@ impl<Message: 'static + Send + DeserializeOwned + Debug> NetReceiver<Message> {
                 {
                     Ok(message) => {
                         debug!("Received {:?}", message);
-                        deliver.send(message).await.expect("Core channel closed");
+                        deliver
+                            .send(message)
+                            .await
+                            .expect("Failed to deliver message");
                     }
                     Err(e) => {
                         warn!("{}", e);

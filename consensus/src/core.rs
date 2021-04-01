@@ -2,12 +2,11 @@ use crate::aggregator::Aggregator;
 use crate::config::{Committee, Parameters};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
-use crate::mempool::{MempoolDriver, NodeMempool};
+use crate::mempool::MempoolDriver;
 use crate::messages::{Block, Timeout, Vote, QC, TC};
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
 use async_recursion::async_recursion;
-use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
 use log::{debug, error, info, warn};
@@ -25,7 +24,7 @@ pub mod core_tests;
 pub type RoundNumber = u64;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum CoreMessage {
+pub enum ConsensusMessage {
     Propose(Block),
     Vote(Vote),
     Timeout(Timeout),
@@ -34,27 +33,27 @@ pub enum CoreMessage {
     SyncRequest(Digest, PublicKey),
 }
 
-pub struct Core<Mempool> {
+pub struct Core {
     name: PublicKey,
     committee: Committee,
     parameters: Parameters,
     store: Store,
     signature_service: SignatureService,
     leader_elector: LeaderElector,
-    mempool_driver: MempoolDriver<Mempool>,
+    mempool_driver: MempoolDriver,
     synchronizer: Synchronizer,
-    core_channel: Receiver<CoreMessage>,
+    core_channel: Receiver<ConsensusMessage>,
     network_channel: Sender<NetMessage>,
     commit_channel: Sender<Block>,
     round: RoundNumber,
     last_voted_round: RoundNumber,
     preferred_round: RoundNumber,
     high_qc: QC,
-    timer: Timer<RoundNumber>,
+    timer: Timer,
     aggregator: Aggregator,
 }
 
-impl<Mempool: 'static + NodeMempool> Core<Mempool> {
+impl Core {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         name: PublicKey,
@@ -63,13 +62,14 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         signature_service: SignatureService,
         store: Store,
         leader_elector: LeaderElector,
-        mempool_driver: MempoolDriver<Mempool>,
+        mempool_driver: MempoolDriver,
         synchronizer: Synchronizer,
-        core_channel: Receiver<CoreMessage>,
+        core_channel: Receiver<ConsensusMessage>,
         network_channel: Sender<NetMessage>,
         commit_channel: Sender<Block>,
     ) -> Self {
         let aggregator = Aggregator::new(committee.clone());
+        let timer = Timer::new(parameters.timeout_delay);
         Self {
             name,
             committee,
@@ -86,44 +86,15 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             last_voted_round: 0,
             preferred_round: 0,
             high_qc: QC::genesis(),
-            timer: Timer::new(),
+            timer,
             aggregator,
         }
     }
 
-    async fn store_block(&mut self, block: &Block) -> ConsensusResult<()> {
+    async fn store_block(&mut self, block: &Block) {
         let key = block.digest().to_vec();
         let value = bincode::serialize(block).expect("Failed to serialize block");
-        self.store
-            .write(key, value)
-            .await
-            .map_err(ConsensusError::from)
-    }
-
-    async fn schedule_timer(&mut self) {
-        self.timer
-            .schedule(self.parameters.timeout_delay, self.round)
-            .await;
-    }
-
-    async fn transmit(
-        &mut self,
-        message: &CoreMessage,
-        to: Option<PublicKey>,
-    ) -> ConsensusResult<()> {
-        let addresses = if let Some(to) = to {
-            debug!("Sending {:?} to {}", message, to);
-            vec![self.committee.address(&to)?]
-        } else {
-            debug!("Broadcasting {:?}", message);
-            self.committee.broadcast_addresses(&self.name)
-        };
-        let bytes = bincode::serialize(message).expect("Failed to serialize core message");
-        let message = NetMessage(Bytes::from(bytes), addresses);
-        if let Err(e) = self.network_channel.send(message).await {
-            panic!("Failed to send block through network channel: {}", e);
-        }
-        Ok(())
+        self.store.write(key, value).await;
     }
 
     // -- Start Safety Module --
@@ -168,9 +139,16 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         )
         .await;
         debug!("Created {:?}", timeout);
-        self.schedule_timer().await;
-        let message = CoreMessage::Timeout(timeout.clone());
-        self.transmit(&message, None).await?;
+        self.timer.reset();
+        let message = ConsensusMessage::Timeout(timeout.clone());
+        Synchronizer::transmit(
+            &message,
+            &self.name,
+            None,
+            &self.network_channel,
+            &self.committee,
+        )
+        .await?;
         self.handle_timeout(&timeout).await
     }
 
@@ -219,8 +197,15 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             self.advance_round(tc.round).await;
 
             // Broadcast the TC.
-            let message = CoreMessage::TC(tc.clone());
-            self.transmit(&message, None).await?;
+            let message = ConsensusMessage::TC(tc.clone());
+            Synchronizer::transmit(
+                &message,
+                &self.name,
+                None,
+                &self.network_channel,
+                &self.committee,
+            )
+            .await?;
 
             // Make a new block if we are the next leader.
             if self.name == self.leader_elector.get_leader(self.round) {
@@ -235,15 +220,13 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         if round < self.round {
             return;
         }
-        self.timer.cancel(self.round).await;
+        // Reset the timer and advance round.
+        self.timer.reset();
         self.round = round + 1;
         debug!("Moved to round {}", self.round);
 
         // Cleanup the vote aggregator.
         self.aggregator.cleanup(&self.round);
-
-        // Schedule a new timer for this round.
-        self.schedule_timer().await;
     }
     // -- End Pacemaker --
 
@@ -268,14 +251,22 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
 
             #[cfg(feature = "benchmark")]
             for x in &block.payload {
+                // NOTE: This log entry is used to compute performance.
                 info!("Created B{}({})", block.round, base64::encode(x));
             }
         }
         debug!("Created {:?}", block);
 
         // Process our new block and broadcast it.
-        let message = CoreMessage::Propose(block.clone());
-        self.transmit(&message, None).await?;
+        let message = ConsensusMessage::Propose(block.clone());
+        Synchronizer::transmit(
+            &message,
+            &self.name,
+            None,
+            &self.network_channel,
+            &self.committee,
+        )
+        .await?;
         self.process_block(&block).await?;
 
         // Wait for the minimum block delay.
@@ -293,7 +284,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         debug!("Processing {:?}", block);
 
         // Let's see if we have the last three ancestors of the block, that is:
-        //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
+        //      b0 <- |qc0; b1| <- |qc1; block|
         // If we don't, the synchronizer asks for them to other nodes. It will
         // then ensure we process all three ancestors in the correct order, and
         // finally make us resume processing this block.
@@ -306,22 +297,19 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
         };
 
         // Store the block only if we have already processed all its ancestors.
-        self.store_block(block).await?;
-
-        // Cleanup the mempool.
-        self.mempool_driver.cleanup(&b0, &b1).await;
+        self.store_block(block).await;
 
         // Check if we can commit the head of the 2-chain.
         // Note that we commit blocks only if we have all its ancestors.
         let mut commit_rule = b0.round + 1 == b1.round;
         commit_rule &= b1.round + 1 == b2.round;
-        commit_rule &= b2.round + 1 == block.round;
         if commit_rule {
             if !b0.payload.is_empty() {
                 info!("Committed {}", b0);
 
                 #[cfg(feature = "benchmark")]
                 for x in &b0.payload {
+                    // NOTE: This log entry is used to compute performance.
                     info!("Committed B{}({})", b0.round, base64::encode(x));
                 }
             }
@@ -331,6 +319,9 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             }
         }
         self.update_preferred_round(b1.round);
+
+        // Cleanup the mempool.
+        self.mempool_driver.cleanup(&b0, &b1, &b2, &block).await;
 
         // Ensure the block's round is as expected.
         // This check is important: it prevents bad leaders from producing blocks
@@ -346,8 +337,15 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             if next_leader == self.name {
                 self.handle_vote(&vote).await?;
             } else {
-                let message = CoreMessage::Vote(vote);
-                self.transmit(&message, Some(next_leader)).await?;
+                let message = ConsensusMessage::Vote(vote);
+                Synchronizer::transmit(
+                    &message,
+                    &self.name,
+                    Some(&next_leader),
+                    &self.network_channel,
+                    &self.committee,
+                )
+                .await?;
             }
         }
         Ok(())
@@ -379,7 +377,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
 
         // Let's see if we have the block's data. If we don't, the mempool
         // will get it and then make us resume processing this block.
-        if !self.mempool_driver.verify(block).await? {
+        if !self.mempool_driver.verify(block.clone()).await? {
             debug!("Processing of {} suspended: missing payload", digest);
             return Ok(());
         }
@@ -395,8 +393,15 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     ) -> ConsensusResult<()> {
         if let Some(bytes) = self.store.read(digest.to_vec()).await? {
             let block = bincode::deserialize(&bytes)?;
-            let message = CoreMessage::Propose(block);
-            self.transmit(&message, Some(sender)).await?;
+            let message = ConsensusMessage::Propose(block);
+            Synchronizer::transmit(
+                &message,
+                &self.name,
+                Some(&sender),
+                &self.network_channel,
+                &self.committee,
+            )
+            .await?;
         }
         Ok(())
     }
@@ -412,7 +417,7 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
     pub async fn run(&mut self) {
         // Upon booting, generate the very first block (if we are the leader).
         // Also, schedule a timer in case we don't hear from the leader.
-        self.schedule_timer().await;
+        self.timer.reset();
         if self.name == self.leader_elector.get_leader(self.round) {
             self.generate_proposal(None)
                 .await
@@ -425,15 +430,15 @@ impl<Mempool: 'static + NodeMempool> Core<Mempool> {
             let result = tokio::select! {
                 Some(message) = self.core_channel.recv() => {
                     match message {
-                        CoreMessage::Propose(block) => self.handle_proposal(&block).await,
-                        CoreMessage::Vote(vote) => self.handle_vote(&vote).await,
-                        CoreMessage::Timeout(timeout) => self.handle_timeout(&timeout).await,
-                        CoreMessage::TC(tc) => self.handle_tc(tc).await,
-                        CoreMessage::LoopBack(block) => self.process_block(&block).await,
-                        CoreMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await
+                        ConsensusMessage::Propose(block) => self.handle_proposal(&block).await,
+                        ConsensusMessage::Vote(vote) => self.handle_vote(&vote).await,
+                        ConsensusMessage::Timeout(timeout) => self.handle_timeout(&timeout).await,
+                        ConsensusMessage::TC(tc) => self.handle_tc(tc).await,
+                        ConsensusMessage::LoopBack(block) => self.process_block(&block).await,
+                        ConsensusMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await
                     }
                 },
-                Some(_) = self.timer.notifier.recv() => self.local_timeout_round().await,
+                () = &mut self.timer => self.local_timeout_round().await,
                 else => break,
             };
             match result {

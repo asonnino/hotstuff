@@ -1,10 +1,9 @@
 from datetime import datetime
 from glob import glob
-from itertools import repeat
 from multiprocessing import Pool
 from os.path import join
 from re import findall, search
-from statistics import mean, median_grouped, stdev
+from statistics import mean
 
 from benchmark.utils import Print
 
@@ -14,13 +13,14 @@ class ParseError(Exception):
 
 
 class LogParser:
-    def __init__(self, clients, nodes):
+    def __init__(self, clients, nodes, faults=0):
         inputs = [clients, nodes]
         assert all(isinstance(x, list) for x in inputs)
         assert all(isinstance(x, str) for y in inputs for x in y)
         assert all(x for x in inputs)
 
-        self.committee_size = len(nodes)
+        self.faults = faults
+        self.committee_size = len(nodes) + faults
 
         # Parse the clients logs.
         try:
@@ -38,7 +38,7 @@ class LogParser:
                 results = p.map(self._parse_nodes, nodes)
         except (ValueError, IndexError) as e:
             raise ParseError(f'Failed to parse node logs: {e}')
-        proposals, commits, sizes, self.samples, timeouts, self.configs\
+        proposals, commits, sizes, self.received_samples, timeouts, self.configs \
             = zip(*results)
         self.proposals = self._merge_results([x.items() for x in proposals])
         self.commits = self._merge_results([x.items() for x in commits])
@@ -98,8 +98,8 @@ class LogParser:
         tmp = findall(r'Payload ([^ ]+) contains (\d+) B', log)
         sizes = {d: int(s) for d, s in tmp}
 
-        tmp = findall(r'Payload ([^ ]+) contains (\d+) sample', log)
-        samples = {d: int(s) for d, s in tmp if d in commits}
+        tmp = findall(r'\[(.*Z) .* Payload ([^ ]+) contains (\d+) sample', log)
+        samples = {d: (int(s), self._to_posix(t)) for t, d, s in tmp}
 
         tmp = findall(r'.* WARN .* Timeout', log)
         timeouts = len(tmp)
@@ -155,15 +155,16 @@ class LogParser:
 
     def _end_to_end_latency(self):
         latency = []
-        for start_times, samples in zip(self.sent_samples, self.samples):
-            start_times.sort()
+        for sent, data in zip(self.sent_samples, self.received_samples):
+            sent.sort()
 
-            end_times = []
-            for digest, occurrences in samples.items():
-                tmp = self.commits[digest]
-                end_times += [tmp] * occurrences
+            ordered = sorted(list(data.items()), key=lambda x: x[1][1])
+            commit = []
+            for digest, (occurrences, _) in ordered:
+                tmp = self.commits.get(digest)
+                commit += [tmp] * occurrences
 
-            latency += [x - y for x, y in zip(end_times, start_times)]
+            latency += [x - y for x, y in zip(commit, sent) if x is not None]
         return mean(latency) if latency else 0
 
     def result(self):
@@ -186,6 +187,7 @@ class LogParser:
             f' Committee size: {self.committee_size} nodes\n'
             f' Input rate: {sum(self.rate):,} tx/s\n'
             f' Transaction size: {self.size[0]:,} B\n'
+            f' Faults: {self.faults} nodes\n'
             f' Execution time: {round(duration):,} s\n'
             '\n'
             f' Consensus max payloads size: {consensus_max_payload_size:,} B\n'
@@ -210,7 +212,7 @@ class LogParser:
             f.write(self.result())
 
     @classmethod
-    def process(cls, directory):
+    def process(cls, directory, faults=0):
         assert isinstance(directory, str)
 
         clients = []
@@ -222,4 +224,4 @@ class LogParser:
             with open(filename, 'r') as f:
                 nodes += [f.read()]
 
-        return cls(clients, nodes)
+        return cls(clients, nodes, faults=faults)

@@ -16,6 +16,6 @@ impl RRLeaderElector {
     pub fn get_leader(&self, round: RoundNumber) -> PublicKey {
         let mut keys: Vec<_> = self.committee.authorities.keys().cloned().collect();
         keys.sort();
-        keys[round as usize % self.committee.size()]
+        keys[(round / 2) as usize % self.committee.size()]
     }
 }

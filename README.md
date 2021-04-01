@@ -15,7 +15,7 @@ $ git clone https://github.com/asonnino/hotstuff.git
 $ cd hotstuff/benchmark
 $ pip install -r requirements.txt
 ```
-You also need to [install tmux](https://linuxize.com/post/getting-started-with-tmux), which runs all nodes and clients in the background.
+You also need to [install tmux](https://linuxize.com/post/getting-started-with-tmux/#installing-tmux), which runs all nodes and clients in the background.
 Finally, run a local benchmark using fabric:
 ```
 $ fab local
@@ -29,6 +29,7 @@ This command may take a long time the first time you run it (compiling rust code
  Committee size: 4 nodes
  Input rate: 1,000 tx/s
  Transaction size: 512 B
+ Faults: 0 nodes
  Execution time: 20 s
 
  Consensus max payloads size: 500 B
@@ -46,6 +47,9 @@ This command may take a long time the first time you run it (compiling rust code
  End-to-end latency: 4 ms
 -----------------------------------------
 ```
+
+## Next Steps
+The [wiki](https://github.com/asonnino/hotstuff/wiki) documents the codebase, explains its architecture and how to read benchmarks' results, and provides a step-by-step tutorial to run [benchmarks on Amazon Web Services](https://github.com/asonnino/hotstuff/wiki/AWS-Benchmarks) accross multiple data centers (WAN).
 
 ## License
 This software is licensed as [Apache 2.0](LICENSE).

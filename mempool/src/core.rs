@@ -1,28 +1,29 @@
 use crate::config::{Committee, Parameters};
 use crate::error::{MempoolError, MempoolResult};
-use crate::mempool::ConsensusMessage;
-use crate::messages::{Payload, PayloadMaker, Transaction};
-use bytes::Bytes;
+use crate::messages::Payload;
+use crate::payload::PayloadMaker;
+use crate::synchronizer::Synchronizer;
+use consensus::{Block, ConsensusMempoolMessage, PayloadStatus, RoundNumber};
 use crypto::Hash as _;
-use crypto::{Digest, PublicKey, SignatureService};
+use crypto::{Digest, PublicKey};
 #[cfg(feature = "benchmark")]
 use log::info;
-use log::{debug, error, warn};
+use log::{error, warn};
 use network::NetMessage;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::time::{sleep, Duration};
 
 #[cfg(test)]
 #[path = "tests/core_tests.rs"]
 pub mod core_tests;
 
 #[derive(Deserialize, Serialize, Debug)]
-pub enum CoreMessage {
+pub enum MempoolMessage {
+    OwnPayload(Payload),
     Payload(Payload),
-    PayloadRequest(Digest, PublicKey),
+    PayloadRequest(Vec<Digest>, PublicKey),
 }
 
 pub struct Core {
@@ -30,12 +31,12 @@ pub struct Core {
     committee: Committee,
     parameters: Parameters,
     store: Store,
-    core_channel: Receiver<CoreMessage>,
-    consensus_channel: Receiver<ConsensusMessage>,
-    client_channel: Receiver<Transaction>,
+    synchronizer: Synchronizer,
+    payload_maker: PayloadMaker,
+    core_channel: Receiver<MempoolMessage>,
+    consensus_channel: Receiver<ConsensusMempoolMessage>,
     network_channel: Sender<NetMessage>,
     queue: HashSet<Digest>,
-    payload_maker: PayloadMaker,
 }
 
 impl Core {
@@ -44,55 +45,46 @@ impl Core {
         name: PublicKey,
         committee: Committee,
         parameters: Parameters,
-        signature_service: SignatureService,
         store: Store,
-        core_channel: Receiver<CoreMessage>,
-        consensus_channel: Receiver<ConsensusMessage>,
-        client_channel: Receiver<Transaction>,
+        synchronizer: Synchronizer,
+        payload_maker: PayloadMaker,
+        core_channel: Receiver<MempoolMessage>,
+        consensus_channel: Receiver<ConsensusMempoolMessage>,
         network_channel: Sender<NetMessage>,
     ) -> Self {
         let queue = HashSet::with_capacity(parameters.queue_capacity);
-        let payload_maker = PayloadMaker::new(name, signature_service, parameters.max_payload_size);
         Self {
             name,
             committee,
             parameters,
             store,
+            synchronizer,
             core_channel,
             consensus_channel,
-            client_channel,
             network_channel,
             queue,
             payload_maker,
         }
     }
 
-    async fn store_payload(&mut self, key: Vec<u8>, payload: &Payload) -> MempoolResult<()> {
+    async fn store_payload(&mut self, key: Vec<u8>, payload: &Payload) {
         let value = bincode::serialize(payload).expect("Failed to serialize payload");
-        self.store
-            .write(key, value)
-            .await
-            .map_err(MempoolError::from)
+        self.store.write(key, value).await;
     }
 
     async fn transmit(
         &mut self,
-        message: &CoreMessage,
-        to: Option<PublicKey>,
+        message: &MempoolMessage,
+        to: Option<&PublicKey>,
     ) -> MempoolResult<()> {
-        let addresses = if let Some(to) = to {
-            debug!("Sending {:?} to {}", message, to);
-            vec![self.committee.mempool_address(&to)?]
-        } else {
-            debug!("Broadcasting {:?}", message);
-            self.committee.broadcast_addresses(&self.name)
-        };
-        let bytes = bincode::serialize(message).expect("Failed to serialize core message");
-        let message = NetMessage(Bytes::from(bytes), addresses);
-        if let Err(e) = self.network_channel.send(message).await {
-            panic!("Failed to send block through network channel: {}", e);
-        }
-        Ok(())
+        Synchronizer::transmit(
+            message,
+            &self.name,
+            to,
+            &self.committee,
+            &self.network_channel,
+        )
+        .await
     }
 
     async fn process_own_payload(
@@ -100,33 +92,34 @@ impl Core {
         digest: &Digest,
         payload: Payload,
     ) -> MempoolResult<()> {
-        let bytes = digest.to_vec();
-
-        #[cfg(feature = "benchmark")]
-        info!(
-            "Payload {} contains {} B",
-            base64::encode(&bytes),
-            payload.size()
+        // Drop the transaction if our mempool is full.
+        ensure!(
+            self.queue.len() < self.parameters.queue_capacity,
+            MempoolError::MempoolFull
         );
 
         #[cfg(feature = "benchmark")]
+        // NOTE: This log entry is used to compute performance.
+        info!("Payload {:?} contains {} B", digest, payload.size());
+
+        #[cfg(feature = "benchmark")]
         if payload.sample_txs > 0 {
+            // NOTE: This log entry is used to compute performance.
             info!(
-                "Payload {} contains {} sample tx(s)",
-                base64::encode(&bytes),
-                payload.sample_txs
+                "Payload {:?} contains {} sample tx(s)",
+                digest, payload.sample_txs
             );
         }
 
         // Store the payload.
-        self.store_payload(bytes, &payload).await?;
+        self.store_payload(digest.to_vec(), &payload).await;
 
         // Share the payload with all other nodes.
-        let message = CoreMessage::Payload(payload);
+        let message = MempoolMessage::Payload(payload);
         self.transmit(&message, None).await
     }
 
-    async fn handle_transaction(&mut self, transaction: Transaction) -> MempoolResult<()> {
+    async fn handle_own_payload(&mut self, payload: Payload) -> MempoolResult<()> {
         // Drop the transaction if our mempool is full.
         ensure!(
             self.queue.len() < self.parameters.queue_capacity,
@@ -135,18 +128,13 @@ impl Core {
 
         // Otherwise, try to add the transaction to the next payload
         // we will add to the queue.
-        if let Some(payload) = self.payload_maker.add(transaction).await {
-            let digest = payload.digest();
-            self.process_own_payload(&digest, payload).await?;
-            self.queue.insert(digest);
-
-            // Wait for the minimum block delay.
-            sleep(Duration::from_millis(self.parameters.min_block_delay)).await;
-        }
+        let digest = payload.digest();
+        self.process_own_payload(&digest, payload).await?;
+        self.queue.insert(digest);
         Ok(())
     }
 
-    async fn handle_payload(&mut self, payload: Payload) -> MempoolResult<()> {
+    async fn handle_others_payload(&mut self, payload: Payload) -> MempoolResult<()> {
         // Ensure the author of the payload is in the committee.
         let author = payload.author;
         ensure!(
@@ -167,31 +155,37 @@ impl Core {
         // Store payload.
         // TODO [issue #18]: A bad node may make us store a lot of junk. There is no
         // limit to how many payloads they can send us, and we will store them all.
-        self.store_payload(digest.to_vec(), &payload).await?;
+        self.store_payload(digest.to_vec(), &payload).await;
 
         // Add the payload to the queue.
         self.queue.insert(digest);
         Ok(())
     }
 
-    async fn handle_request(&mut self, digest: Digest, requestor: PublicKey) -> MempoolResult<()> {
-        if let Some(bytes) = self.store.read(digest.to_vec()).await? {
-            let payload = bincode::deserialize(&bytes)?;
-            let message = CoreMessage::Payload(payload);
-            self.transmit(&message, Some(requestor)).await?;
+    async fn handle_request(
+        &mut self,
+        digests: Vec<Digest>,
+        requestor: PublicKey,
+    ) -> MempoolResult<()> {
+        for digest in &digests {
+            if let Some(bytes) = self.store.read(digest.to_vec()).await? {
+                let payload = bincode::deserialize(&bytes)?;
+                let message = MempoolMessage::Payload(payload);
+                self.transmit(&message, Some(&requestor)).await?;
+            }
         }
         Ok(())
     }
 
     async fn get_payload(&mut self, max: usize) -> MempoolResult<Vec<Digest>> {
         if self.queue.is_empty() {
-            let payload = self.payload_maker.make().await;
-            if payload.size() == 0 {
-                return Ok(Vec::new());
+            if let Some(payload) = self.payload_maker.make().await {
+                let digest = payload.digest();
+                self.process_own_payload(&digest, payload).await?;
+                Ok(vec![digest])
+            } else {
+                Ok(Vec::new())
             }
-            let digest = payload.digest();
-            self.process_own_payload(&digest, payload).await?;
-            Ok(vec![digest])
         } else {
             let digest_len = Digest::default().size();
             let digests = self.queue.iter().take(max / digest_len).cloned().collect();
@@ -202,23 +196,12 @@ impl Core {
         }
     }
 
-    async fn verify_payload(&mut self, digests: Vec<Digest>) -> MempoolResult<Vec<Digest>> {
-        let mut missing = Vec::new();
-        for digest in digests {
-            if self.store.read(digest.to_vec()).await?.is_none() {
-                debug!(
-                    "Requesting sync for payload {}",
-                    base64::encode(&digest.to_vec())
-                );
-                let message = CoreMessage::PayloadRequest(digest.clone(), self.name);
-                self.transmit(&message, None).await?;
-                missing.push(digest);
-            }
-        }
-        Ok(missing)
+    async fn verify_payload(&mut self, block: Box<Block>) -> MempoolResult<bool> {
+        self.synchronizer.verify_payload(*block).await
     }
 
-    fn cleanup(&mut self, digests: Vec<Digest>) {
+    async fn cleanup(&mut self, digests: Vec<Digest>, round: RoundNumber) {
+        self.synchronizer.cleanup(round).await;
         for x in &digests {
             self.queue.remove(x);
         }
@@ -236,27 +219,32 @@ impl Core {
             let result = tokio::select! {
                 Some(message) = self.core_channel.recv() => {
                     match message {
-                        CoreMessage::Payload(payload) => self.handle_payload(payload).await,
-                        CoreMessage::PayloadRequest(digest, sender) => self.handle_request(digest, sender).await,
+                        MempoolMessage::OwnPayload(payload) => self.handle_own_payload(payload).await,
+                        MempoolMessage::Payload(payload) => self.handle_others_payload(payload).await,
+                        MempoolMessage::PayloadRequest(digest, sender) => self.handle_request(digest, sender).await,
                     }
                 },
                 Some(message) = self.consensus_channel.recv() => {
                     match message {
-                        ConsensusMessage::Get(max, sender) => {
+                        ConsensusMempoolMessage::Get(max, sender) => {
                             let result = self.get_payload(max).await;
                             log(result.as_ref().map(|_| &()));
-                            let _ = sender.send(result);
+                            let _ = sender.send(result.unwrap_or_default());
                         },
-                        ConsensusMessage::Verify(digests, sender) => {
-                            let result = self.verify_payload(digests).await;
+                        ConsensusMempoolMessage::Verify(block, sender) => {
+                            let result = self.verify_payload(block).await;
                             log(result.as_ref().map(|_| &()));
-                            let _ = sender.send(result);
+                            let status = match result {
+                                Ok(true) => PayloadStatus::Accept,
+                                Ok(false) => PayloadStatus::Wait,
+                                Err(_) => PayloadStatus::Reject,
+                            };
+                            let _ = sender.send(status);
                         },
-                        ConsensusMessage::Cleanup(digests) => self.cleanup(digests),
+                        ConsensusMempoolMessage::Cleanup(digests, round) => self.cleanup(digests, round).await,
                     }
                     Ok(())
                 },
-                Some(tx) = self.client_channel.recv() => self.handle_transaction(tx).await,
                 else => break,
             };
             log(result.as_ref());

@@ -66,7 +66,7 @@ class Bench:
             'source $HOME/.cargo/env',
             'rustup default stable',
 
-            # This is missing from the RockDB installer (needed for RockDB).
+            # This is missing from the Rocksdb installer (needed for Rocksdb).
             'sudo apt-get install -y clang',
 
             # Clone the repo.
@@ -75,12 +75,11 @@ class Bench:
         hosts = self.manager.hosts(flat=True)
         try:
             g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect)
-            output = g.run(' && '.join(cmd), hide=True)
-            self._check_stderr(output)
+            g.run(' && '.join(cmd), hide=True)
             Print.heading(f'Initialized testbed of {len(hosts)} nodes')
-        except GroupException as e:
-            error = FabricError(e)
-            raise BenchError('Failed to install repo on testbed', error)
+        except (GroupException, ExecutionError) as e:
+            e = FabricError(e) if isinstance(e, GroupException) else e
+            raise BenchError('Failed to install repo on testbed', e)
 
     def kill(self, hosts=[], delete_logs=False):
         assert isinstance(hosts, list)
@@ -185,8 +184,11 @@ class Bench:
         self.kill(hosts=hosts, delete_logs=True)
 
         # Run the clients (they will wait for the nodes to be ready).
+        # Filter all faulty nodes from the client addresses (or they will wait
+        # for the faulty nodes to be online).
         committee = Committee.load(PathMaker.committee_file())
         addresses = committee.front_addresses()
+        addresses = [x for x in addresses if any(host in x for host in hosts)]
         rate_share = ceil(rate / committee.size())
         timeout = node_parameters.timeout_delay
         client_logs = [PathMaker.client_log_file(i) for i in range(len(hosts))]
@@ -224,7 +226,7 @@ class Bench:
             sleep(ceil(duration / 20))
         self.kill(hosts=hosts, delete_logs=False)
 
-    def _logs(self, hosts):
+    def _logs(self, hosts, faults):
         # Delete local logs (if any).
         cmd = CommandMaker.clean_logs()
         subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
@@ -240,7 +242,7 @@ class Bench:
 
         # Parse logs and return the parser.
         Print.info('Parsing logs and computing performance...')
-        return LogParser.process(PathMaker.logs_path())
+        return LogParser.process(PathMaker.logs_path(), faults=faults)
 
     def run(self, bench_parameters_dict, node_parameters_dict, debug=False):
         assert isinstance(debug, bool)
@@ -278,6 +280,10 @@ class Bench:
                     Print.error(BenchError('Failed to configure nodes', e))
                     continue
 
+                # Do not boot faulty nodes.
+                faults = bench_parameters.faults
+                hosts = hosts[:n-faults]
+
                 # Run the benchmark.
                 for i in range(bench_parameters.runs):
                     Print.heading(f'Run {i+1}/{bench_parameters.runs}')
@@ -285,8 +291,8 @@ class Bench:
                         self._run_single(
                             hosts, r, bench_parameters, node_parameters, debug
                         )
-                        self._logs(hosts).print(PathMaker.result_file(
-                            n, r, bench_parameters.tx_size
+                        self._logs(hosts, faults).print(PathMaker.result_file(
+                            n, r, bench_parameters.tx_size, faults
                         ))
                     except (subprocess.SubprocessError, GroupException, ParseError) as e:
                         self.kill(hosts=hosts)

@@ -1,3 +1,6 @@
+from os.path import join
+
+
 class BenchError(Exception):
     def __init__(self, message, error):
         assert isinstance(error, Exception)
@@ -9,11 +12,11 @@ class BenchError(Exception):
 class PathMaker:
     @staticmethod
     def binary_path():
-        return '../target/release/'
+        return join('..', 'target', 'release')
 
     @staticmethod
     def node_crate_path():
-        return '../node'
+        return join('..', 'node')
 
     @staticmethod
     def committee_file():
@@ -35,37 +38,42 @@ class PathMaker:
 
     @staticmethod
     def logs_path():
-        return './logs'
+        return 'logs'
 
     @staticmethod
     def node_log_file(i):
         assert isinstance(i, int) and i >= 0
-        return f'{PathMaker.logs_path()}/node-{i}.log'
+        return join(PathMaker.logs_path(), f'node-{i}.log')
 
     @staticmethod
     def client_log_file(i):
         assert isinstance(i, int) and i >= 0
-        return f'{PathMaker.logs_path()}/client-{i}.log'
+        return join(PathMaker.logs_path(), f'client-{i}.log')
 
     @staticmethod
     def results_path():
-        return './results'
+        return 'results'
 
     @staticmethod
-    def result_file(nodes, rate, tx_size):
-        return f'{PathMaker.results_path()}/bench-{nodes}-{rate}-{tx_size}.txt'
+    def result_file(nodes, rate, tx_size, faults):
+        return join(
+            PathMaker.results_path(), f'bench-{nodes}-{rate}-{tx_size}-{faults}.txt'
+        )
 
     @staticmethod
     def plots_path():
-        return './plots'
+        return 'plots'
 
     @staticmethod
-    def agg_file(nodes, rate, tx_size):
-        return f'{PathMaker.plots_path()}/agg-{nodes}-{rate}-{tx_size}.txt'
+    def agg_file(nodes, rate, tx_size, faults, max_latency):
+        return join(
+            PathMaker.plots_path(),
+            f'agg-{nodes}-{rate}-{tx_size}-{faults}-{max_latency}.txt'
+        )
 
     @staticmethod
     def plot_file(name, ext):
-        return f'{PathMaker.plots_path()}/{name}.{ext}'
+        return join(PathMaker.plots_path(), f'{name}.{ext}')
 
 
 class Color:
@@ -110,6 +118,7 @@ class Print:
 
 def progress_bar(iterable, prefix='', suffix='', decimals=1, length=30, fill='█', print_end='\r'):
     total = len(iterable)
+
     def printProgressBar(iteration):
         formatter = '{0:.'+str(decimals)+'f}'
         percent = formatter.format(100 * (iteration / float(total)))
