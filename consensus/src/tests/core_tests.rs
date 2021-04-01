@@ -152,8 +152,8 @@ async fn generate_proposal() {
 
 #[tokio::test]
 async fn commit_block() {
-    // Get 3 successive blocks.
-    let leaders = vec![leader_keys(1), leader_keys(2), leader_keys(3)];
+    // Get enough distinct leaders to form a quorum.
+    let leaders = vec![leader_keys(1), leader_keys(2), leader_keys(4)];
     let chain = chain(leaders);
 
     // Run a core instance.
@@ -161,8 +161,8 @@ async fn commit_block() {
     let (public_key, secret_key) = keys().pop().unwrap();
     let (tx_core, _rx_network, mut rx_commit) = core(public_key, secret_key, store_path).await;
 
-    // Send a 3-chain to the core.
-    for block in chain.clone() {
+    // Send a the blocks to the core.
+    for block in chain {
         let message = ConsensusMessage::Propose(block);
         tx_core.send(message).await.unwrap();
     }
