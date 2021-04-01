@@ -19,6 +19,8 @@ use tokio::time::{sleep, Duration, Instant};
 #[path = "tests/synchronizer_tests.rs"]
 pub mod synchronizer_tests;
 
+const TIMER_ACCURACY: u64 = 5_000;
+
 pub struct Synchronizer {
     store: Store,
     inner_channel: Sender<Block>,
@@ -41,7 +43,7 @@ impl Synchronizer {
             let mut pending = HashSet::new();
             let mut requests = HashMap::new();
 
-            let timer = sleep(Duration::from_millis(5000));
+            let timer = sleep(Duration::from_millis(TIMER_ACCURACY));
             tokio::pin!(timer);
             loop {
                 tokio::select! {
@@ -52,12 +54,14 @@ impl Synchronizer {
                             waiting.push(fut);
 
                             if !requests.contains_key(&parent){
+                                debug!("Requesting sync for block {}", parent);
                                 let now = SystemTime::now()
                                     .duration_since(UNIX_EPOCH)
                                     .expect("Failed to measure time")
                                     .as_millis();
                                 requests.insert(parent.clone(), now);
-                                Self::transmit(parent, &name, &committee, &network_channel).await;
+                                let message = ConsensusMessage::SyncRequest(parent, name);
+                                Self::transmit(&message, &name, None, &network_channel, &committee).await.unwrap();
                             }
                         }
                     },
@@ -80,10 +84,12 @@ impl Synchronizer {
                                 .expect("Failed to measure time")
                                 .as_millis();
                             if timestamp + (sync_retry_delay as u128) < now {
-                                Self::transmit(digest.clone(), &name, &committee, &network_channel).await;
+                                debug!("Requesting sync for block {} (retry)", digest);
+                                let message = ConsensusMessage::SyncRequest(digest.clone(), name);
+                                Self::transmit(&message, &name, None, &network_channel, &committee).await.unwrap();
                             }
                         }
-                        timer.as_mut().reset(Instant::now() + Duration::from_millis(5000));
+                        timer.as_mut().reset(Instant::now() + Duration::from_millis(TIMER_ACCURACY));
                     },
                     else => break,
                 }
@@ -100,20 +106,26 @@ impl Synchronizer {
         Ok(deliver)
     }
 
-    async fn transmit(
-        digest: Digest,
-        name: &PublicKey,
-        committee: &Committee,
+    pub async fn transmit(
+        message: &ConsensusMessage,
+        from: &PublicKey,
+        to: Option<&PublicKey>,
         network_channel: &Sender<NetMessage>,
-    ) {
-        debug!("Requesting sync for block {}", digest);
-        let addresses = committee.broadcast_addresses(&name);
-        let message = ConsensusMessage::SyncRequest(digest, *name);
-        let bytes = bincode::serialize(&message).expect("Failed to serialize core message");
+        committee: &Committee,
+    ) -> ConsensusResult<()> {
+        let addresses = if let Some(to) = to {
+            debug!("Sending {:?} to {}", message, to);
+            vec![committee.address(to)?]
+        } else {
+            debug!("Broadcasting {:?}", message);
+            committee.broadcast_addresses(from)
+        };
+        let bytes = bincode::serialize(message).expect("Failed to serialize core message");
         let message = NetMessage(Bytes::from(bytes), addresses);
         if let Err(e) = network_channel.send(message).await {
             panic!("Failed to send block through network channel: {}", e);
         }
+        Ok(())
     }
 
     async fn get_parent_block(&mut self, block: &Block) -> ConsensusResult<Option<Block>> {

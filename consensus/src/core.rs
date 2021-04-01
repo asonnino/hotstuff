@@ -7,7 +7,6 @@ use crate::messages::{Block, Timeout, Vote, QC, TC};
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
 use async_recursion::async_recursion;
-use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
 use log::{debug, error, info, warn};
@@ -96,26 +95,6 @@ impl Core {
         self.store.write(key, value).await;
     }
 
-    async fn transmit(
-        &mut self,
-        message: &ConsensusMessage,
-        to: Option<PublicKey>,
-    ) -> ConsensusResult<()> {
-        let addresses = if let Some(to) = to {
-            debug!("Sending {:?} to {}", message, to);
-            vec![self.committee.address(&to)?]
-        } else {
-            debug!("Broadcasting {:?}", message);
-            self.committee.broadcast_addresses(&self.name)
-        };
-        let bytes = bincode::serialize(message).expect("Failed to serialize core message");
-        let message = NetMessage(Bytes::from(bytes), addresses);
-        if let Err(e) = self.network_channel.send(message).await {
-            panic!("Failed to send block through network channel: {}", e);
-        }
-        Ok(())
-    }
-
     // -- Start Safety Module --
     fn increase_last_voted_round(&mut self, target: RoundNumber) {
         self.last_voted_round = max(self.last_voted_round, target);
@@ -161,7 +140,14 @@ impl Core {
         debug!("Created {:?}", timeout);
         self.timer.reset();
         let message = ConsensusMessage::Timeout(timeout.clone());
-        self.transmit(&message, None).await?;
+        Synchronizer::transmit(
+            &message,
+            &self.name,
+            None,
+            &self.network_channel,
+            &self.committee,
+        )
+        .await?;
         self.handle_timeout(&timeout).await
     }
 
@@ -211,7 +197,14 @@ impl Core {
 
             // Broadcast the TC.
             let message = ConsensusMessage::TC(tc.clone());
-            self.transmit(&message, None).await?;
+            Synchronizer::transmit(
+                &message,
+                &self.name,
+                None,
+                &self.network_channel,
+                &self.committee,
+            )
+            .await?;
 
             // Make a new block if we are the next leader.
             if self.name == self.leader_elector.get_leader(self.round) {
@@ -265,7 +258,14 @@ impl Core {
 
         // Process our new block and broadcast it.
         let message = ConsensusMessage::Propose(block.clone());
-        self.transmit(&message, None).await?;
+        Synchronizer::transmit(
+            &message,
+            &self.name,
+            None,
+            &self.network_channel,
+            &self.committee,
+        )
+        .await?;
         self.process_block(&block).await?;
 
         // Wait for the minimum block delay.
@@ -334,7 +334,14 @@ impl Core {
                 self.handle_vote(&vote).await?;
             } else {
                 let message = ConsensusMessage::Vote(vote);
-                self.transmit(&message, Some(next_leader)).await?;
+                Synchronizer::transmit(
+                    &message,
+                    &self.name,
+                    Some(&next_leader),
+                    &self.network_channel,
+                    &self.committee,
+                )
+                .await?;
             }
         }
         Ok(())
@@ -383,7 +390,14 @@ impl Core {
         if let Some(bytes) = self.store.read(digest.to_vec()).await? {
             let block = bincode::deserialize(&bytes)?;
             let message = ConsensusMessage::Propose(block);
-            self.transmit(&message, Some(sender)).await?;
+            Synchronizer::transmit(
+                &message,
+                &self.name,
+                Some(&sender),
+                &self.network_channel,
+                &self.committee,
+            )
+            .await?;
         }
         Ok(())
     }
