@@ -516,6 +516,23 @@ impl Timeout {
         }
         Ok(())
     }
+
+    pub fn verify_vaba(&self, committee: &Committee) -> ConsensusResult<()> {
+        // Ensure the authority has voting rights.
+        ensure!(
+            committee.stake(&self.author) > 0,
+            ConsensusError::UnknownAuthority(self.author)
+        );
+
+        // Check the signature.
+        self.signature.verify(&self.digest(), &self.author)?;
+
+        // Check the embedded QC.
+        if self.high_qc != QC::genesis() {
+            self.high_qc.verify_vaba(committee)?;
+        }
+        Ok(())
+    }
 }
 
 impl Hash for Timeout {

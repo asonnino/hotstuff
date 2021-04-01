@@ -34,17 +34,14 @@ pub struct VABA {
     core_channel: Receiver<ConsensusMessage>,
     network_channel: Sender<NetMessage>,
     commit_channel: Sender<Block>,
-    // round: SeqNumber,     // current round
     view: SeqNumber,       // current view
     height: HeightNumber,    // current height, 0 not in fallback, 1 or 2 in fallback
     last_voted_round: SeqNumber,
     lock_qc: QC,
     high_qc: QC,
     last_committed_round: SeqNumber,    // round of last committed block, initially -1
-    // fallback: Bool, // 0 if not in async fallback, 1 if in async fallback
     fallback_voted_round: HashMap<PublicKey, SeqNumber>,    // voted round number during fallback for each i
     fallback_voted_height: HashMap<PublicKey, HeightNumber>,  // voted height number during fallback for each i
-    // fallback_pending_blocks: HashMap<SeqNumber, HashMap<(PublicKey, HeightNumber), Block>>, // buffering the fallback block received when not enter fallback yet, indexed by view
     fallback_qcs: HashMap<PublicKey, QC>,    // highest fallback QC by each node
     fallback_signed_qc_sender: HashMap<SeqNumber, HashSet<PublicKey>>,    // set of nodes that send height-2 signed QC
     fallback_signed_qc_weight: HashMap<SeqNumber, Stake>,    // weight of the above nodes
@@ -96,18 +93,15 @@ impl VABA {
             network_channel,
             commit_channel,
             core_channel,
-            // round: 1,
             view: 0,
             height: 1,
             last_voted_round: 0,
             lock_qc: QC::genesis(),
             high_qc: QC::genesis(),
             last_committed_round: 0, // initially 0
-            // fallback: 1,
             fallback_voted_round,
             fallback_voted_height,
             fallback_qcs: HashMap::new(),
-            // fallback_pending_blocks: HashMap::new(),
             fallback_signed_qc_sender: HashMap::new(),
             fallback_signed_qc_weight: HashMap::new(),
             fallback_randomness_share_sender: HashMap::new(),
@@ -158,10 +152,6 @@ impl VABA {
         }
     }
 
-    // fn increase_last_voted_round(&mut self, target: SeqNumber) {
-    //     self.last_voted_round = max(self.last_voted_round, target);
-    // }
-
     fn update_lock_qc(&mut self, qc: &QC) {
         if !self.valid_qc(qc) {
             return
@@ -175,12 +165,13 @@ impl VABA {
         if !self.valid_qc(qc) {
             return
         }
-        if qc.view > self.lock_qc.view || (qc.view == self.lock_qc.view && qc.round > self.lock_qc.round) {
+        if qc.view > self.high_qc.view || (qc.view == self.high_qc.view && qc.round > self.high_qc.round) {
             self.high_qc = qc.clone();
         }
     }
 
     async fn make_vote(&mut self, block: &Block) -> Option<Vote> {
+        debug!("Creating vote for block {:?}", block);
         if block.fallback != 1 || block.view != self.view {
             return None;
         }
@@ -200,7 +191,7 @@ impl VABA {
             }
         };
         if block.height <= *voted_height || block.round <= *voted_round {
-            warn!("Receiving block with height {} round {}, but voted for height {} round {}", block.height, block.round, *voted_height, *voted_round);
+            debug!("Receiving block with height {} round {}, but voted for height {} round {}", block.height, block.round, *voted_height, *voted_round);
             return None;
         }
         match block.height {
@@ -208,14 +199,15 @@ impl VABA {
                 // Check if we can vote for this block.
                 let safety_rule_1 = block.round == block.qc.round+1;
                 let safety_rule_2 = (block.qc.view > self.lock_qc.view) || (block.qc.view == self.lock_qc.view && block.qc.round >= self.lock_qc.round);
-                // debug!("daniel block.qc.view {}, self.lock_qc.view {}, block.qc.round {}, self.lock_qc.round {}", block.qc.view, self.lock_qc.view, block.qc.round, self.lock_qc.round);
                 if !(safety_rule_1 && safety_rule_2) {
+                    debug!("safety rule violated, block {:?}, lock qc {:?}", block, self.lock_qc);
                     return None;
                 }
             },
             2 | 3 => {
                 let safety_rule_1 = block.round == block.qc.round+1 && block.height == block.qc.height+1;
                 if !(safety_rule_1) {
+                    debug!("safety rule violated, block {:?}, lock qc {:?}", block, self.lock_qc);
                     return None;
                 }
             },
@@ -287,20 +279,6 @@ impl VABA {
         if let Some(qc) = self.aggregator.add_vote(vote.clone())? {
             debug!("Assembled {:?}", qc);
 
-            // // Process non-fallback QC directly.
-            // if qc.fallback == 0 {
-            //     // Process the QC.
-            //     self.process_qc(&qc).await;
-
-            //     // Make a new block if we are the next leader and not in fallback
-            //     if self.fallback == 0 && self.name == self.leader_elector.get_leader(self.round) {
-            //         // Simulate DDOS attack on the leader
-            //         if self.parameters.ddos {
-            //             sleep(Duration::from_millis(2 * self.parameters.timeout_delay)).await;
-            //         }
-            //         self.generate_proposal(None, self.high_qc.clone()).await?;
-            //     }
-            // }
             // Fallback QC of my proposed block
             if qc.fallback == 1 && qc.proposer == self.name && qc.height >= self.height {
                 // Update the highest fallback QC
@@ -329,15 +307,6 @@ impl VABA {
         }
         Ok(())
     }
-
-    // #[async_recursion]
-    // async fn advance_round(&mut self, round: SeqNumber) {
-    //     if round < self.round {
-    //         return;
-    //     }
-    //     self.round = round + 1;
-    //     debug!("Moved to round {}", self.round);
-    // }
 
     // #[async_recursion]
     async fn advance_view(&mut self, view: SeqNumber) {
@@ -399,17 +368,6 @@ impl VABA {
         Ok(())
     }
 
-    // async fn process_pending_blocks(&mut self) -> ConsensusResult<()> {
-    //     if let Some(map) = self.fallback_pending_blocks.remove(&self.view) {
-    //         for (_, block) in map {
-    //             if let Err(e) = self.process_block(&block).await {
-    //                 warn!("Failed to process pending blocks: {}", e);
-    //             }
-    //         }
-    //     }
-    //     Ok(())
-    // }
-
     async fn process_qc(&mut self, qc: &QC) {
         // self.advance_round(qc.round).await;
         self.update_high_qc(qc);
@@ -440,88 +398,28 @@ impl VABA {
         Ok(())
     }
 
-    #[async_recursion]
-    async fn commit(&mut self, block: &Block) -> ConsensusResult<()> {
-        // Let's see if we have the last three ancestors of the block, that is:
-        //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
-        // If we don't, the synchronizer asks for them to other nodes. It will
-        // then ensure we process all three ancestors in the correct order, and
-        // finally make us resume processing this block.
-        let (b0, b1, b2) = match self.synchronizer.get_ancestors_3chain(block).await? {
-            Some(ancestors) => ancestors,
-            None => {
-                debug!("Processing of {} suspended: missing parent", block.digest());
-                return Ok(());
-            }
-        };
-
-        // Store the block only if we have already processed all its ancestors.
-        self.store_block(block).await;
-
-        // Cleanup the mempool.
-        self.mempool_driver.cleanup(&b0, &b1, &block).await;
-
-        if b0.round <= self.last_committed_round {
-            return Ok(());
-        }
-
-        // The chain should have consecutive round numbers by construction.
-        let mut consecutive_rounds = b0.round + 1 == b1.round;
-        consecutive_rounds &= b1.round + 1 == b2.round;
-        consecutive_rounds &= b2.round + 1 == block.round;
-        ensure!(consecutive_rounds || block.round <= 2, ConsensusError::NonConsecutiveRounds{rd1: b0.round, rd2: b1.round, rd3: b2.round});
-        
-        // The new commit rule requires blocks of the same view.
-        let mut same_view = b0.view == b1.view;
-        same_view &= b1.view == b2.view;
-        // For fallback blocks, they need to be proposed by the fallback leader.
-        let endorsed = self.valid_qc(&b1.qc) && self.valid_qc(&b2.qc) && self.valid_qc(&block.qc);
-        debug!("same_view {}, endorsed {}", same_view, endorsed);
-        if same_view && endorsed {
-            // if !b0.payload.is_empty() {
-            //     info!("Committed {}", b0);
-
-            //     #[cfg(feature = "benchmark")]
-            //     for x in &b0.payload {
-            //         info!("Committed B{}({})", b0.round, base64::encode(x));
-            //     }
-            // }
-            self.commit_ancestors(&b0).await?;
-
-            self.last_committed_round = b0.round;
-            // debug!("Committed {:?}", b0);
-            if let Err(e) = self.commit_channel.send(b0.clone()).await {
-                warn!("Failed to send block through the commit channel: {}", e);
-            }
-        }
-
-        self.update_lock_qc(&b2.qc);
-        
-        Ok(())
-    }
-
-    #[async_recursion]
-    async fn print_chain(&mut self, block: &Block) -> ConsensusResult<()> {
-        if block.view < self.view {
-            return Ok(());
-        }
-        debug!("-------------------------------------------------------- printing chain start --------------------------------------------------------");
-        let mut current_block = block.clone();
-        while current_block.qc != QC::genesis() {
-            let parent = match self.synchronizer.get_parent_block(&current_block).await? {
-                Some(b) => b,
-                None => {
-                    debug!("Processing of {} suspended: missing parent", current_block.digest());
-                    break;
-                }
-            };
-            debug!("block {:?}", current_block);
-            current_block = parent;
-        }
-        debug!("block {:?}", current_block);
-        debug!("-------------------------------------------------------- printing chain end --------------------------------------------------------");
-        Ok(())
-    }
+    // #[async_recursion]
+    // async fn print_chain(&mut self, block: &Block) -> ConsensusResult<()> {
+    //     if block.view < self.view {
+    //         return Ok(());
+    //     }
+    //     debug!("-------------------------------------------------------- printing chain start --------------------------------------------------------");
+    //     let mut current_block = block.clone();
+    //     while current_block.qc != QC::genesis() {
+    //         let parent = match self.synchronizer.get_parent_block(&current_block).await? {
+    //             Some(b) => b,
+    //             None => {
+    //                 debug!("Processing of {} suspended: missing parent", current_block.digest());
+    //                 break;
+    //             }
+    //         };
+    //         debug!("block {:?}", current_block);
+    //         current_block = parent;
+    //     }
+    //     debug!("block {:?}", current_block);
+    //     debug!("-------------------------------------------------------- printing chain end --------------------------------------------------------");
+    //     Ok(())
+    // }
 
     #[async_recursion]
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
@@ -555,16 +453,9 @@ impl VABA {
             same_view &= b1.view == b2.view;
             // For fallback blocks, they need to be proposed by the fallback leader.
             let endorsed = self.valid_qc(&b1.qc) && self.valid_qc(&b2.qc) && self.valid_qc(&block.qc);
-            debug!("same_view {}, endorsed {}", same_view, endorsed);
+            // debug!("same_view {}, endorsed {}", same_view, endorsed);
             if same_view && endorsed {
-                // if !b0.payload.is_empty() {
-                //     info!("Committed {}", b0);
 
-                //     #[cfg(feature = "benchmark")]
-                //     for x in &b0.payload {
-                //         info!("Committed B{}({})", b0.round, base64::encode(x));
-                //     }
-                // }
                 self.commit_ancestors(&b0).await?;
 
                 self.last_committed_round = b0.round;
@@ -592,19 +483,6 @@ impl VABA {
                 self.fallback_qcs.insert(block.qc.proposer, block.qc.clone());
             }
         }
-        //     self.height = block.qc.height+1;
-        //     if block.qc.height == 1 {
-        //         if self.fallback == 1 {
-        //             self.height = 2;
-        //             self.generate_proposal(None, block.qc.clone()).await?;
-        //         }
-        //     }
-        //     if block.qc.height == 2 {
-        //         // sign and multicast height-2 QC
-        //         let message = ConsensusMessage::SignedQC(SignedQC::new(block.qc.clone(), self.name, self.signature_service.clone()).await);
-        //         self.transmit(&message, None).await?;
-        //     }
-        // }
 
         // See if we can vote for this block.
         if let Some(vote) = self.make_vote(block).await {
@@ -670,7 +548,7 @@ impl VABA {
         }
 
         // Ensure the timeout is well formed.
-        timeout.verify(&self.committee)?;
+        timeout.verify_vaba(&self.committee)?;
 
         // Process the QC embedded in the timeout.
         self.process_qc(&timeout.high_qc).await;
@@ -681,20 +559,13 @@ impl VABA {
             debug!("Assembled {:?}", tc);
             info!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", tc.seq);
 
-            // // Enter fallback
-            // self.fallback = 1;
-
             // Update the view to be the view of the TC.
             self.advance_view(tc.seq).await;
 
             // Initialize fallback states
             self.init_fallback_state();
 
-            // // Make a new block for its fallback chain
-            // self.height = 1;
             self.generate_proposal(None, self.high_qc.clone()).await?;
-
-            // self.process_pending_blocks().await?;
         }
         Ok(())
     }
@@ -858,27 +729,8 @@ impl VABA {
     }
 
     pub async fn run(&mut self) {
-        // Upon booting, generate the very first block.
-        // // Also, schedule a timer in case we don't hear from the leader.
-        // self.schedule_timer().await;
-        // if self.name == self.leader_elector.get_leader(self.round) {
-        //     // Simulate DDOS attack on the leader
-        //     if self.parameters.ddos {
-        //         sleep(Duration::from_millis(2 * self.parameters.timeout_delay)).await;
-        //     }
-        //     self.generate_proposal(None, self.high_qc.clone())
-        //         .await
-        //         .expect("Failed to send the first block");
-        // }
-        // // Simulate DDOS attack on the leader
-        // if self.parameters.ddos {
-        //     sleep(Duration::from_millis(2 * self.parameters.timeout_delay)).await;
-        // }
         self.timer.reset();
         self.advance_view(1).await;
-        // self.generate_proposal(None, self.high_qc.clone())
-        //     .await
-        //     .expect("Failed to send the first block");
 
         // This is the main loop: it processes incoming blocks and votes,
         // and receive timeout notifications from our Timeout Manager.
