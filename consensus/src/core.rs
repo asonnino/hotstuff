@@ -47,6 +47,7 @@ pub struct Core {
     commit_channel: Sender<Block>,
     round: RoundNumber,
     last_voted_round: RoundNumber,
+    preferred_round: RoundNumber,
     high_qc: QC,
     timer: Timer,
     aggregator: Aggregator,
@@ -83,6 +84,7 @@ impl Core {
             core_channel,
             round: 1,
             last_voted_round: 0,
+            preferred_round: 0,
             high_qc: QC::genesis(),
             timer,
             aggregator,
@@ -100,15 +102,14 @@ impl Core {
         self.last_voted_round = max(self.last_voted_round, target);
     }
 
+    fn update_preferred_round(&mut self, target: RoundNumber) {
+        self.preferred_round = max(self.preferred_round, target);
+    }
+
     async fn make_vote(&mut self, block: &Block) -> Option<Vote> {
         // Check if we can vote for this block.
         let safety_rule_1 = block.round > self.last_voted_round;
-        let mut safety_rule_2 = block.qc.round + 1 == block.round;
-        if let Some(ref tc) = block.tc {
-            let mut can_extend = tc.round + 1 == block.round;
-            can_extend &= block.qc.round >= *tc.high_qc_rounds().iter().max().expect("Empty TC");
-            safety_rule_2 |= can_extend;
-        }
+        let safety_rule_2 = block.qc.round  >= self.preferred_round;
         if !(safety_rule_1 && safety_rule_2) {
             return None;
         }
@@ -287,7 +288,7 @@ impl Core {
         // If we don't, the synchronizer asks for them to other nodes. It will
         // then ensure we process all three ancestors in the correct order, and
         // finally make us resume processing this block.
-        let (b0, b1) = match self.synchronizer.get_ancestors(block).await? {
+        let (b0, b1, b2) = match self.synchronizer.get_ancestors(block).await? {
             Some(ancestors) => ancestors,
             None => {
                 debug!("Processing of {} suspended: missing parent", block.digest());
@@ -300,7 +301,9 @@ impl Core {
 
         // Check if we can commit the head of the 2-chain.
         // Note that we commit blocks only if we have all its ancestors.
-        if b0.round + 1 == b1.round {
+        let mut commit_rule = b0.round + 1 == b1.round;
+        commit_rule &= b1.round + 1 == b2.round;
+        if commit_rule {
             if !b0.payload.is_empty() {
                 info!("Committed {}", b0);
 
@@ -315,6 +318,7 @@ impl Core {
                 warn!("Failed to send block through the commit channel: {}", e);
             }
         }
+        self.update_preferred_round(b1.round);
 
         // Cleanup the mempool.
         self.mempool_driver.cleanup(&b0, &b1, &block).await;
