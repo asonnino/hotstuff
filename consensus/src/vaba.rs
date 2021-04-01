@@ -448,7 +448,7 @@ impl VABA {
         let (b0, b1, b2) = match self.synchronizer.get_ancestors_3chain(block).await? {
             Some(ancestors) => ancestors,
             None => {
-                debug!("Processing of {} suspended: missing parent", block.digest());
+                debug!("process_block: Processing of {} suspended: missing parent", block.digest());
                 return Ok(());
             }
         };
@@ -523,6 +523,7 @@ impl VABA {
     }
 
     async fn handle_proposal(&mut self, block: &Block) -> ConsensusResult<()> {
+        debug!("Handle proposal {:?}", block);
         let digest = block.digest();
 
         // Check the block is correctly formed.
@@ -537,7 +538,7 @@ impl VABA {
         // Let's see if we have the block's data. If we don't, the mempool
         // will get it and then make us resume processing this block.
         if !self.mempool_driver.verify(block.clone()).await? {
-            debug!("Processing of {} suspended: missing payload", digest);
+            debug!("handle_proposal: Processing of {} suspended: missing payload", digest);
             return Ok(());
         }
 
