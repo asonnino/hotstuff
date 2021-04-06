@@ -1,0 +1,50 @@
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Committee size: 10 nodes
+ Input rate: 3,500 tx/s
+ Transaction size: 512 B
+ Faults: 3 nodes
+ Execution time: 292 s
+
+ Consensus max payloads size: 1,000 B
+ Consensus min block delay: 100 ms
+ Mempool max payloads size: 500,000 B
+ Mempool min block delay: 100 ms
+
+ + RESULTS:
+ Consensus TPS: 2,103 tx/s
+ Consensus BPS: 1,076,703 B/s
+ Consensus latency: 1,119 ms
+
+ End-to-end TPS: 1,876 tx/s
+ End-to-end BPS: 960,521 B/s
+ End-to-end latency: 20,186 ms
+-----------------------------------------
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Committee size: 10 nodes
+ Input rate: 3,500 tx/s
+ Transaction size: 512 B
+ Faults: 3 nodes
+ Execution time: 291 s
+
+ Consensus max payloads size: 1,000 B
+ Consensus min block delay: 100 ms
+ Mempool max payloads size: 500,000 B
+ Mempool min block delay: 100 ms
+
+ + RESULTS:
+ Consensus TPS: 1,849 tx/s
+ Consensus BPS: 946,787 B/s
+ Consensus latency: 1,268 ms
+
+ End-to-end TPS: 1,649 tx/s
+ End-to-end BPS: 844,510 B/s
+ End-to-end latency: 20,615 ms
+-----------------------------------------
