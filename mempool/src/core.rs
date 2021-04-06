@@ -7,7 +7,7 @@ use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
 #[cfg(feature = "benchmark")]
 use log::info;
-use log::{error, warn};
+use log::{error, warn, debug};
 use network::NetMessage;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -135,6 +135,7 @@ impl Core {
     }
 
     async fn handle_payload(&mut self, payload: Payload) -> MempoolResult<()> {
+        debug!("mempool handle payload start {:?}", payload);
         // Ensure the author of the payload is in the committee.
         let author = payload.author;
         ensure!(
@@ -159,6 +160,7 @@ impl Core {
 
         // Add the payload to the queue.
         self.queue.insert(digest);
+        debug!("mempool handle payload end {:?}", payload);
         Ok(())
     }
 

@@ -63,6 +63,7 @@ impl Synchronizer {
                     },
                     Some(result) = waiting.next() => match result {
                         Ok(block) => {
+                            debug!("consensus sync loopback");
                             let _ = pending.remove(&block.digest());
                             let _ = requests.remove(&block.parent());
                             let message = ConsensusMessage::LoopBack(block);

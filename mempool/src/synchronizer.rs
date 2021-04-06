@@ -107,6 +107,7 @@ impl Synchronizer {
                     Some(result) = waiting.next() => {
                         match result {
                             Ok(Some(block)) => {
+                                debug!("mempool sync loopback");
                                 let _ = pending.remove(&block.digest());
                                 for x in &block.payload {
                                     let _ = requests.remove(x);
