@@ -560,7 +560,9 @@ impl Fallback {
                 // }
 
                 self.commit_ancestors(&b0).await?;
-
+                // // Cleanup the mempool.
+                // self.mempool_driver.cleanup(&b0, &b1, &block).await;
+                
                 self.last_committed_round = b0.round;
                 debug!("Committed {:?}", b0);
                 if let Err(e) = self.commit_channel.send(b0.clone()).await {
@@ -569,8 +571,8 @@ impl Fallback {
             }
         }
         
-        // Cleanup the mempool.
-        self.mempool_driver.cleanup(&b0, &b1, &block).await;
+        // // Cleanup the mempool.
+        // self.mempool_driver.cleanup(&b0, &b1, &block).await;
  
         // debug!("{:?}", self.print_chain(block).await?);
 
