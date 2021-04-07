@@ -99,8 +99,8 @@ async fn get_missing_parent_block() {
     // Ensure the synchronizer sends a sync request
     // asking for the parent block.
     match rx_network.recv().await {
-        Some(NetMessage(bytes, mut recipients)) => {
-            match bincode::deserialize(&bytes).unwrap() {
+        Some((message, mut recipients)) => {
+            match message {
                 ConsensusMessage::SyncRequest(b, s) => {
                     assert_eq!(b, parent_block.digest());
                     assert_eq!(s, name);

@@ -10,7 +10,7 @@ async fn core(
     store_path: &str,
 ) -> (
     Sender<ConsensusMessage>,
-    Receiver<NetMessage>,
+    Receiver<FilterInput>,
     Receiver<Block>,
 ) {
     let (tx_core, rx_core) = channel(1);
@@ -82,8 +82,8 @@ async fn handle_proposal() {
 
     // Ensure we get a vote back.
     match rx_network.recv().await {
-        Some(NetMessage(bytes, recipient)) => {
-            match bincode::deserialize(&bytes).unwrap() {
+        Some((message, recipient)) => {
+            match message {
                 ConsensusMessage::Vote(v) => assert_eq!(v, vote),
                 _ => assert!(false),
             }
@@ -137,8 +137,8 @@ async fn generate_proposal() {
 
     // Ensure the core sends a new block.
     match rx_network.recv().await {
-        Some(NetMessage(bytes, mut recipients)) => {
-            match bincode::deserialize(&bytes).unwrap() {
+        Some((message, mut recipients)) => {
+            match message {
                 ConsensusMessage::Propose(b) => {
                     assert_eq!(b.round, 2);
                     assert_eq!(b.qc, qc);
@@ -156,8 +156,8 @@ async fn generate_proposal() {
 
 #[tokio::test]
 async fn commit_block() {
-    // Get 3 successive blocks.
-    let leaders = vec![leader_keys(1), leader_keys(2), leader_keys(3)];
+    // Get enough distinct leaders to form a quorum.
+    let leaders = vec![leader_keys(1), leader_keys(2), leader_keys(4)];
     let chain = chain(leaders);
 
     // Run a core instance.
@@ -165,8 +165,8 @@ async fn commit_block() {
     let (public_key, secret_key) = keys().pop().unwrap();
     let (tx_core, _rx_network, mut rx_commit) = core(public_key, secret_key, store_path).await;
 
-    // Send a 3-chain to the core.
-    for block in chain.clone() {
+    // Send a the blocks to the core.
+    for block in chain {
         let message = ConsensusMessage::Propose(block);
         tx_core.send(message).await.unwrap();
     }
@@ -190,8 +190,8 @@ async fn local_timeout_round() {
 
     // Ensure the following operation happen in the right order.
     match rx_network.recv().await {
-        Some(NetMessage(bytes, mut recipients)) => {
-            match bincode::deserialize(&bytes).unwrap() {
+        Some((message, mut recipients)) => {
+            match message {
                 ConsensusMessage::Timeout(t) => assert_eq!(t, timeout),
                 _ => assert!(false),
             }

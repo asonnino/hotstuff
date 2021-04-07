@@ -2,6 +2,7 @@ use crate::config::{Committee, Parameters};
 use crate::core::Core;
 use crate::error::MempoolResult;
 use crate::front::Front;
+use crate::payload::PayloadMaker;
 use crate::synchronizer::Synchronizer;
 use consensus::{ConsensusMempoolMessage, ConsensusMessage};
 use crypto::{PublicKey, SignatureService};
@@ -59,7 +60,7 @@ impl Mempool {
             x.set_ip("0.0.0.0".parse().unwrap());
             x
         })?;
-        let network_receiver = NetReceiver::new(address, tx_core);
+        let network_receiver = NetReceiver::new(address, tx_core.clone());
         tokio::spawn(async move {
             network_receiver.run().await;
         });
@@ -69,7 +70,7 @@ impl Mempool {
             network_sender.run().await;
         });
 
-        // Make the synchronizer.
+        // Build and run the synchronizer.
         let synchronizer = Synchronizer::new(
             consensus_channel,
             store.clone(),
@@ -79,17 +80,26 @@ impl Mempool {
             parameters.sync_retry_delay,
         );
 
+        // Build and run the payload maker.
+        let payload_maker = PayloadMaker::new(
+            name,
+            signature_service,
+            parameters.max_payload_size,
+            parameters.min_block_delay,
+            rx_client,
+            tx_core,
+        );
+
         // Run the core.
         let mut core = Core::new(
             name,
             committee,
             parameters,
             store,
-            signature_service,
             synchronizer,
+            payload_maker,
             /* core_channel */ rx_core,
             consensus_mempool_channel,
-            /* client_channel */ rx_client,
             /* network_channel */ tx_network,
         );
         tokio::spawn(async move {

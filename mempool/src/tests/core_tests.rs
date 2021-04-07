@@ -1,5 +1,7 @@
 use super::*;
 use crate::common::{committee, keys, payload};
+use crate::messages::Transaction;
+use crypto::SignatureService;
 use std::fs;
 use std::time::Duration;
 use tokio::sync::mpsc::channel;
@@ -38,16 +40,23 @@ async fn core(
         tx_network.clone(),
         parameters.sync_retry_delay,
     );
+    let payload_maker = PayloadMaker::new(
+        name,
+        signature_service,
+        parameters.max_payload_size,
+        parameters.min_block_delay,
+        rx_client,
+        tx_core.clone(),
+    );
     let mut core = Core::new(
         name,
         committee(),
         parameters,
         store,
-        signature_service,
         synchronizer,
+        payload_maker,
         /* core_channel */ rx_core,
         /* consensus_channel */ rx_consensus_mempool,
-        /* client_channel */ rx_client,
         /* network_channel */ tx_network,
     );
     tokio::spawn(async move {

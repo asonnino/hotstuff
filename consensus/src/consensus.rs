@@ -3,6 +3,7 @@ use crate::fallback::Fallback;
 use crate::vaba::VABA;
 use crate::core::{ConsensusMessage, Core};
 use crate::error::ConsensusResult;
+use crate::filter::Filter;
 use crate::leader::LeaderElector;
 use crate::mempool::{ConsensusMempoolMessage, MempoolDriver};
 use crate::messages::Block;
@@ -54,6 +55,7 @@ impl Consensus {
         );
 
         let (tx_network, rx_network) = channel(1000);
+        let (tx_filter, rx_filter) = channel(1000);
 
         // Make the network sender and receiver.
         let address = committee.address(&name).map(|mut x| {
@@ -76,13 +78,16 @@ impl Consensus {
         // Make the mempool driver which will mediate our requests to the mempool.
         let mempool_driver = MempoolDriver::new(tx_consensus_mempool);
 
+        // Custom filter to arbitrary delay network messages.
+        Filter::run(rx_filter, tx_network, parameters.clone());
+
         // Make the synchronizer. This instance runs in a background thread
         // and asks other nodes for any block that we may be missing.
         let synchronizer = Synchronizer::new(
             name,
             committee.clone(),
             store.clone(),
-            /* network_channel */ tx_network.clone(),
+            /* network_filter */ tx_filter.clone(),
             /* core_channel */ tx_core,
             parameters.sync_retry_delay,
         )

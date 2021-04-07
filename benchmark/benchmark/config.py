@@ -151,6 +151,7 @@ class BenchParameters:
             self.nodes = [int(x) for x in nodes]
             self.rate = [int(x) for x in rate]
             self.tx_size = int(json['tx_size'])
+            self.faults = int(json['faults'])
             self.duration = int(json['duration'])
             self.runs = int(json['runs']) if 'runs' in json else 1
         except KeyError as e:
@@ -158,3 +159,35 @@ class BenchParameters:
 
         except ValueError:
             raise ConfigError('Invalid parameters type')
+
+        if min(self.nodes) <= self.faults:
+            raise ConfigError('There should be more nodes than faults')
+
+
+class PlotParameters:
+    def __init__(self, json):
+        try:
+            nodes = json['nodes'] 
+            nodes = nodes if isinstance(nodes, list) else [nodes]
+            if not nodes:
+                raise ConfigError('Missing number of nodes')
+            self.nodes = [int(x) for x in nodes]
+
+            self.tx_size = int(json['tx_size'])
+
+            faults = json['faults'] 
+            faults = faults if isinstance(faults, list) else [faults]
+            self.faults = [int(x) for x in faults] if faults else [0]
+
+            max_lat = json['max_latency'] 
+            max_lat = max_lat if isinstance(max_lat, list) else [max_lat]
+            if not max_lat:
+                raise ConfigError('Missing max latency')
+            self.max_latency = [int(x) for x in max_lat]
+
+        except KeyError as e:
+            raise ConfigError(f'Malformed bench parameters: missing key {e}')
+
+        except ValueError:
+            raise ConfigError('Invalid parameters type')
+

@@ -21,7 +21,7 @@ impl Default for Protocol {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Parameters {
     pub timeout_delay: u64,
     pub sync_retry_delay: u64,

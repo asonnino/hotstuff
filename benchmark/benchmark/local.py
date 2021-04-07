@@ -84,6 +84,9 @@ class LocalBench:
 
             self.node_parameters.print(PathMaker.parameters_file())
 
+            # Do not boot faulty nodes.
+            nodes = nodes - self.faults
+
             # Run the clients (they will wait for the nodes to be ready).
             addresses = committee.front_addresses()
             rate_share = ceil(rate / nodes)

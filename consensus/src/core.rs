@@ -1,17 +1,16 @@
 use crate::aggregator::Aggregator;
 use crate::config::{Committee, Parameters};
 use crate::error::{ConsensusError, ConsensusResult};
+use crate::filter::FilterInput;
 use crate::leader::LeaderElector;
 use crate::messages::{Block, Timeout, Vote, QC, TC, SignedQC, RandomnessShare, RandomCoin};
 use crate::mempool::MempoolDriver;
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
 use async_recursion::async_recursion;
-use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
 use log::{debug, error, info, warn};
-use network::NetMessage;
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
 use store::Store;
@@ -37,6 +36,7 @@ pub enum ConsensusMessage {
     RandomCoin(RandomCoin),
     LoopBack(Block),
     SyncRequest(Digest, PublicKey),
+    SyncReply(Block)
 }
 
 pub struct Core {
@@ -49,7 +49,7 @@ pub struct Core {
     mempool_driver: MempoolDriver,
     synchronizer: Synchronizer,
     core_channel: Receiver<ConsensusMessage>,
-    network_channel: Sender<NetMessage>,
+    network_filter: Sender<FilterInput>,
     commit_channel: Sender<Block>,
     round: SeqNumber,     // current round
     view: SeqNumber,       // current view
@@ -73,7 +73,7 @@ impl Core {
         mempool_driver: MempoolDriver,
         synchronizer: Synchronizer,
         core_channel: Receiver<ConsensusMessage>,
-        network_channel: Sender<NetMessage>,
+        network_filter: Sender<FilterInput>,
         commit_channel: Sender<Block>,
     ) -> Self {
         let aggregator = Aggregator::new(committee.clone());
@@ -87,7 +87,7 @@ impl Core {
             leader_elector,
             mempool_driver,
             synchronizer,
-            network_channel,
+            network_filter,
             commit_channel,
             core_channel,
             round: 1,
@@ -105,27 +105,6 @@ impl Core {
         let key = block.digest().to_vec();
         let value = bincode::serialize(block).expect("Failed to serialize block");
         self.store.write(key, value).await;
-    }
-
-    async fn transmit(
-        &mut self,
-        message: &ConsensusMessage,
-        to: Option<PublicKey>,
-    ) -> ConsensusResult<()> {
-        sleep(Duration::from_millis(self.parameters.network_delay)).await;
-        let addresses = if let Some(to) = to {
-            debug!("Sending {:?} to {}", message, to);
-            vec![self.committee.address(&to)?]
-        } else {
-            debug!("Broadcasting {:?}", message);
-            self.committee.broadcast_addresses(&self.name)
-        };
-        let bytes = bincode::serialize(message).expect("Failed to serialize core message");
-        let message = NetMessage(Bytes::from(bytes), addresses);
-        if let Err(e) = self.network_channel.send(message).await {
-            panic!("Failed to send block through network channel: {}", e);
-        }
-        Ok(())
     }
 
     // -- Start Safety Module --
@@ -173,7 +152,14 @@ impl Core {
         debug!("Created {:?}", timeout);
         self.timer.reset();
         let message = ConsensusMessage::Timeout(timeout.clone());
-        self.transmit(&message, None).await?;
+        Synchronizer::transmit(
+            message,
+            &self.name,
+            None,
+            &self.network_filter,
+            &self.committee,
+        )
+        .await?;
         self.handle_timeout(&timeout).await
     }
 
@@ -223,7 +209,14 @@ impl Core {
 
             // Broadcast the TC.
             let message = ConsensusMessage::TC(tc.clone());
-            self.transmit(&message, None).await?;
+            Synchronizer::transmit(
+                message,
+                &self.name,
+                None,
+                &self.network_filter,
+                &self.committee,
+            )
+            .await?;
 
             // Make a new block if we are the next leader.
             if self.name == self.leader_elector.get_leader(self.round) {
@@ -273,6 +266,7 @@ impl Core {
 
             #[cfg(feature = "benchmark")]
             for x in &block.payload {
+                // NOTE: This log entry is used to compute performance.
                 info!("Created B{}({})", block.round, base64::encode(x));
             }
         }
@@ -284,7 +278,14 @@ impl Core {
 
         // Process our new block and broadcast it.
         let message = ConsensusMessage::Propose(block.clone());
-        self.transmit(&message, None).await?;
+        Synchronizer::transmit(
+            message,
+            &self.name,
+            None,
+            &self.network_filter,
+            &self.committee,
+        )
+        .await?;
         self.process_block(&block).await?;
 
         // Wait for the minimum block delay.
@@ -339,14 +340,13 @@ impl Core {
 
         // Check if we can commit the head of the 2-chain.
         // Note that we commit blocks only if we have all its ancestors.
-        let mut commit_rule = b0.round + 1 == b1.round;
-        commit_rule &= b1.round + 1 == block.round;
-        if commit_rule {
+        if b0.round + 1 == b1.round {
             if !b0.payload.is_empty() {
                 info!("Committed {}", b0);
 
                 #[cfg(feature = "benchmark")]
                 for x in &b0.payload {
+                    // NOTE: This log entry is used to compute performance.
                     info!("Committed B{}({})", b0.round, base64::encode(x));
                 }
             }
@@ -374,7 +374,14 @@ impl Core {
                 self.handle_vote(&vote).await?;
             } else {
                 let message = ConsensusMessage::Vote(vote);
-                self.transmit(&message, Some(next_leader)).await?;
+                Synchronizer::transmit(
+                    message,
+                    &self.name,
+                    Some(&next_leader),
+                    &self.network_filter,
+                    &self.committee,
+                )
+                .await?;
             }
         }
         Ok(())
@@ -422,8 +429,15 @@ impl Core {
     ) -> ConsensusResult<()> {
         if let Some(bytes) = self.store.read(digest.to_vec()).await? {
             let block = bincode::deserialize(&bytes)?;
-            let message = ConsensusMessage::Propose(block);
-            self.transmit(&message, Some(sender)).await?;
+            let message = ConsensusMessage::SyncReply(block);
+            Synchronizer::transmit(
+                message,
+                &self.name,
+                Some(&sender),
+                &self.network_filter,
+                &self.committee,
+            )
+            .await?;
         }
         Ok(())
     }
@@ -473,7 +487,8 @@ impl Core {
                         ConsensusMessage::RandomnessShare(rs) => self.handle_rs(rs).await,
                         ConsensusMessage::RandomCoin(rc) => self.handle_rc(rc).await,
                         ConsensusMessage::LoopBack(block) => self.process_block(&block).await,
-                        ConsensusMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await
+                        ConsensusMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await,
+                        ConsensusMessage::SyncReply(block) => self.handle_proposal(&block).await,
                     }
                 },
                 () = &mut self.timer => self.local_timeout_round().await,
