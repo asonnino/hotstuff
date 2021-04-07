@@ -92,11 +92,7 @@ class LocalBench:
             rate_share = ceil(rate / nodes)
             timeout = self.node_parameters.timeout_delay
             client_logs = [PathMaker.client_log_file(i) for i in range(nodes)]
-            counter = 0
             for addr, log_file in zip(addresses, client_logs):
-                counter += 1
-                if counter > nodes - self.node_parameters.crash:
-                    break
                 cmd = CommandMaker.run_client(
                     addr,
                     self.tx_size,
@@ -114,7 +110,7 @@ class LocalBench:
             else:
                 Print.info('Wrong protocol type!')
 
-            Print.info(f'Crash {self.node_parameters.crash} nodes')
+            Print.info(f'{self.faults} faults')
             Print.info(f'Timeout {self.node_parameters.timeout_delay} ms, Network delay {self.node_parameters.network_delay} ms')
             Print.info(f'DDOS attack {self.node_parameters.ddos}')
 
@@ -122,11 +118,7 @@ class LocalBench:
             dbs = [PathMaker.db_path(i) for i in range(nodes)]
             node_logs = [PathMaker.node_log_file(i) for i in range(nodes)]
             threshold_key_files = [PathMaker.threshold_key_file(i) for i in range(nodes)]
-            counter = 0
             for key_file, threshold_key_file, db, log_file in zip(key_files, threshold_key_files, dbs, node_logs):
-                counter += 1
-                if counter > nodes - self.node_parameters.crash:
-                    break
                 cmd = CommandMaker.run_node(
                     key_file,
                     threshold_key_file,

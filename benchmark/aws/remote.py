@@ -291,7 +291,7 @@ class Bench:
         else:
             Print.info('Wrong protocol type!')
 
-        Print.info(f'Crash {node_parameters.crash} nodes')
+        Print.info(f'{bench_parameters.faults} faults')
         Print.info(f'Timeout {node_parameters.timeout_delay} ms, Network delay {node_parameters.network_delay} ms')
         Print.info(f'DDOS attack {node_parameters.ddos}')
 

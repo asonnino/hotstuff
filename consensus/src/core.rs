@@ -272,10 +272,6 @@ impl Core {
         }
         debug!("Created {:?}", block);
 
-        if self.parameters.ddos {
-            sleep(Duration::from_millis(2 * self.parameters.timeout_delay)).await;
-        }
-
         // Process our new block and broadcast it.
         let message = ConsensusMessage::Propose(block.clone());
         Synchronizer::transmit(

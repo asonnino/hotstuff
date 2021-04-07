@@ -105,8 +105,8 @@ impl Consensus {
                     mempool_driver,
                     synchronizer,
                     /* core_channel */ rx_core,
-                    /* network_channel */ tx_network,
-                    tx_commit,
+                    /* network_filter */ tx_filter,
+                    /* commit_channel */ tx_commit,
                 );
                 tokio::spawn(async move {
                     core.run().await;
@@ -124,8 +124,8 @@ impl Consensus {
                     mempool_driver,
                     synchronizer,
                     /* core_channel */ rx_core,
-                    /* network_channel */ tx_network,
-                    tx_commit,
+                    /* network_filter */ tx_filter,
+                    /* commit_channel */ tx_commit,
                 );
                 tokio::spawn(async move {
                     hotstuff_with_fallback.run().await;
@@ -143,8 +143,8 @@ impl Consensus {
                     mempool_driver,
                     synchronizer,
                     /* core_channel */ rx_core,
-                    /* network_channel */ tx_network,
-                    tx_commit,
+                    /* network_filter */ tx_filter,
+                    /* commit_channel */ tx_commit,
                 );
                 tokio::spawn(async move {
                     vaba.run().await;

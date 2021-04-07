@@ -2,17 +2,16 @@ use crate::aggregator::Aggregator;
 use crate::config::{Committee, Parameters, Stake};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
+use crate::filter::FilterInput;
 use crate::mempool::MempoolDriver;
 use crate::messages::{Block, Timeout, Vote, QC, TC, SignedQC, RandomnessShare, RandomCoin};
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
 use crate::core::{ConsensusMessage, SeqNumber, HeightNumber, Bool};
 use async_recursion::async_recursion;
-use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, SignatureService};
 use log::{debug, error, info, warn};
-use network::NetMessage;
 use std::cmp::max;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -32,7 +31,7 @@ pub struct Fallback {
     mempool_driver: MempoolDriver,
     synchronizer: Synchronizer,
     core_channel: Receiver<ConsensusMessage>,
-    network_channel: Sender<NetMessage>,
+    network_filter: Sender<FilterInput>,
     commit_channel: Sender<Block>,
     round: SeqNumber,     // current round
     view: SeqNumber,       // current view
@@ -72,7 +71,7 @@ impl Fallback {
         mempool_driver: MempoolDriver,
         synchronizer: Synchronizer,
         core_channel: Receiver<ConsensusMessage>,
-        network_channel: Sender<NetMessage>,
+        network_filter: Sender<FilterInput>,
         commit_channel: Sender<Block>,
     ) -> Self {
         let aggregator = Aggregator::new(committee.clone());
@@ -95,7 +94,7 @@ impl Fallback {
             leader_elector,
             mempool_driver,
             synchronizer,
-            network_channel,
+            network_filter,
             commit_channel,
             core_channel,
             round: 1,
@@ -130,26 +129,26 @@ impl Fallback {
         self.store.write(key, value).await;
     }
 
-    async fn transmit(
-        &mut self,
-        message: &ConsensusMessage,
-        to: Option<PublicKey>,
-    ) -> ConsensusResult<()> {
-        sleep(Duration::from_millis(self.parameters.network_delay)).await;
-        let addresses = if let Some(to) = to {
-            debug!("Sending {:?} to {}", message, to);
-            vec![self.committee.address(&to)?]
-        } else {
-            debug!("Broadcasting {:?}", message);
-            self.committee.broadcast_addresses(&self.name)
-        };
-        let bytes = bincode::serialize(message).expect("Failed to serialize core message");
-        let message = NetMessage(Bytes::from(bytes), addresses);
-        if let Err(e) = self.network_channel.send(message).await {
-            panic!("Failed to send block through network channel: {}", e);
-        }
-        Ok(())
-    }
+    // async fn transmit(
+    //     &mut self,
+    //     message: &ConsensusMessage,
+    //     to: Option<PublicKey>,
+    // ) -> ConsensusResult<()> {
+    //     sleep(Duration::from_millis(self.parameters.network_delay)).await;
+    //     let addresses = if let Some(to) = to {
+    //         debug!("Sending {:?} to {}", message, to);
+    //         vec![self.committee.address(&to)?]
+    //     } else {
+    //         debug!("Broadcasting {:?}", message);
+    //         self.committee.broadcast_addresses(&self.name)
+    //     };
+    //     let bytes = bincode::serialize(message).expect("Failed to serialize core message");
+    //     let message = NetMessage(Bytes::from(bytes), addresses);
+    //     if let Err(e) = self.network_channel.send(message).await {
+    //         panic!("Failed to send block through network channel: {}", e);
+    //     }
+    //     Ok(())
+    // }
 
     // -- Start Safety Module --
     // check if qc is nonfallback qc or endorsed fallback qc
@@ -281,7 +280,14 @@ impl Fallback {
         self.timer.update(self.timer.get_duration() * 2);
         self.timer.reset();
         let message = ConsensusMessage::Timeout(timeout.clone());
-        self.transmit(&message, None).await?;
+        Synchronizer::transmit(
+            message,
+            &self.name,
+            None,
+            &self.network_filter,
+            &self.committee,
+        )
+        .await?;
         self.handle_timeout(&timeout).await
     }
 
@@ -306,10 +312,6 @@ impl Fallback {
 
                 // Make a new block if we are the next leader and not in fallback
                 if self.fallback == 0 && self.name == self.leader_elector.get_leader(self.round) {
-                    // Simulate DDOS attack on the leader
-                    if self.parameters.ddos {
-                        sleep(Duration::from_millis(2 * self.parameters.timeout_delay)).await;
-                    }
                     self.generate_proposal(None, None, self.high_qc.clone()).await?;
                 }
             }
@@ -327,7 +329,14 @@ impl Fallback {
                 if qc.height == 2 {
                     let signed_qc = SignedQC::new(qc, None, self.name, self.signature_service.clone()).await;
                     let message = ConsensusMessage::SignedQC(signed_qc.clone());
-                    self.transmit(&message, None).await?;
+                    Synchronizer::transmit(
+                        message,
+                        &self.name,
+                        None,
+                        &self.network_filter,
+                        &self.committee,
+                    )
+                    .await?;
                     self.handle_signed_qc(signed_qc).await?;
                 }
             }
@@ -434,7 +443,14 @@ impl Fallback {
 
         // Process our new block and broadcast it.
         let message = ConsensusMessage::Propose(block.clone());
-        self.transmit(&message, None).await?;
+        Synchronizer::transmit(
+            message,
+            &self.name,
+            None,
+            &self.network_filter,
+            &self.committee,
+        )
+        .await?;
         self.process_block(&block).await?;
         
         // Wait for the minimum block delay. 
@@ -600,7 +616,14 @@ impl Fallback {
                 // sign and multicast height-2 QC
                 let signed_qc = SignedQC::new(block.qc.clone(), None, self.name, self.signature_service.clone()).await;
                 let message = ConsensusMessage::SignedQC(signed_qc.clone());
-                self.transmit(&message, None).await?;
+                Synchronizer::transmit(
+                    message,
+                    &self.name,
+                    None,
+                    &self.network_filter,
+                    &self.committee,
+                )
+                .await?;
                 self.handle_signed_qc(signed_qc).await?;
             }
         }
@@ -617,7 +640,14 @@ impl Fallback {
                 self.handle_vote(&vote).await?;
             } else {
                 let message = ConsensusMessage::Vote(vote);
-                self.transmit(&message, Some(next_leader)).await?;
+                Synchronizer::transmit(
+                    message,
+                    &self.name,
+                    Some(&next_leader),
+                    &self.network_filter,
+                    &self.committee,
+                )
+                .await?;
             }
         }
 
@@ -678,7 +708,14 @@ impl Fallback {
         if let Some(bytes) = self.store.read(digest.to_vec()).await? {
             let block = bincode::deserialize(&bytes)?;
             let message = ConsensusMessage::Propose(block);
-            self.transmit(&message, Some(sender)).await?;
+            Synchronizer::transmit(
+                message,
+                &self.name,
+                Some(&sender),
+                &self.network_filter,
+                &self.committee,
+            )
+            .await?;
         }
         Ok(())
     }
@@ -718,7 +755,14 @@ impl Fallback {
                     // Multicast the randomness share with its height-2 QC
                     let randomness_share = RandomnessShare::new(signed_qc.qc.view, self.name, self.signature_service.clone(), Some(leader_high_qc.clone())).await;
                     let message = ConsensusMessage::RandomnessShare(randomness_share.clone());
-                    self.transmit(&message, None).await?;
+                    Synchronizer::transmit(
+                        message,
+                        &self.name,
+                        None,
+                        &self.network_filter,
+                        &self.committee,
+                    )
+                    .await?;
                     self.handle_randomness_share(randomness_share).await?;
                 }
             },
@@ -814,7 +858,14 @@ impl Fallback {
         let view = random_coin.seq;
         self.fallback_random_coin.insert(view, random_coin.clone());
         let message = ConsensusMessage::RandomCoin(random_coin.clone());
-        self.transmit(&message, None).await?;
+        Synchronizer::transmit(
+            message,
+            &self.name,
+            None,
+            &self.network_filter,
+            &self.committee,
+        )
+        .await?;
 
         self.leader_elector.add_random_coin(random_coin.clone());
 
@@ -856,10 +907,6 @@ impl Fallback {
         self.timeout = 0;
         self.advance_view(view+1).await;
         if self.name == self.leader_elector.get_leader(self.round) {
-        // Simulate DDOS attack on the leader
-        if self.parameters.ddos {
-            sleep(Duration::from_millis(2 * self.parameters.timeout_delay)).await;
-        }
         self.generate_proposal(None, Some(random_coin.clone()), self.high_qc.clone())
             .await
             .expect("Failed to send the first block after fallback");
@@ -871,10 +918,6 @@ impl Fallback {
         // Also, schedule a timer in case we don't hear from the leader.
         self.timer.reset();
         if self.name == self.leader_elector.get_leader(self.round) {
-            // Simulate DDOS attack on the leader
-            if self.parameters.ddos {
-                sleep(Duration::from_millis(2 * self.parameters.timeout_delay)).await;
-            }
             self.generate_proposal(None, None, self.high_qc.clone())
                 .await
                 .expect("Failed to send the first block");
@@ -894,7 +937,8 @@ impl Fallback {
                         ConsensusMessage::RandomnessShare(randomness_share) => self.handle_randomness_share(randomness_share).await,
                         ConsensusMessage::RandomCoin(random_coin) => self.handle_random_coin(random_coin).await,
                         ConsensusMessage::LoopBack(block) => self.process_block(&block).await,
-                        ConsensusMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await
+                        ConsensusMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await,
+                        ConsensusMessage::SyncReply(block) => self.handle_proposal(&block).await,
                     }
                 },
                 () = &mut self.timer => self.local_timeout_view().await,
