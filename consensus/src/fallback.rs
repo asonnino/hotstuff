@@ -386,7 +386,7 @@ impl Fallback {
         if round < self.round {
             return;
         }
-        self.timer.update(self.parameters.timeout_delay);
+        // self.timer.update(self.parameters.timeout_delay);
         self.timer.reset();
         self.round = round + 1;
         debug!("Moved to round {}", self.round);
@@ -398,7 +398,7 @@ impl Fallback {
             return;
         }
         debug!("advance_view: previous view {} with leader {:?} and highqc {:?}, new view {}", self.view, self.leader_elector.get_fallback_leader(self.view), self.high_qc, view);
-        self.timer.update(self.parameters.timeout_delay);
+        // self.timer.update(self.parameters.timeout_delay);
         self.timer.reset();
         self.view = view;
         info!("-------------------------------------------------------- Enter view {} --------------------------------------------------------", view);
