@@ -85,8 +85,10 @@ impl QCMaker {
         if self.weight >= committee.quorum_threshold() {
             self.weight = 0; // Ensures QC is only made once.
             return Ok(Some(QC {
-                hash: vote.hash.clone(),
+                id: vote.id.clone(),
                 round: vote.round,
+                parent_id: vote.parent_id.clone(),
+                parent_round: vote.parent_round,
                 votes: self.votes.clone(),
             }));
         }

@@ -49,7 +49,7 @@ impl Block {
     }
 
     pub fn parent(&self) -> &Digest {
-        &self.qc.hash
+        &self.qc.id
     }
 
     pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
@@ -84,7 +84,7 @@ impl Hash for Block {
         for x in &self.payload {
             hasher.update(x);
         }
-        hasher.update(&self.qc.hash);
+        hasher.update(&self.qc.id);
         Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }
 }
@@ -111,8 +111,10 @@ impl fmt::Display for Block {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Vote {
-    pub hash: Digest,
+    pub id: Digest,
     pub round: RoundNumber,
+    pub parent_id: Digest,
+    pub parent_round: RoundNumber,
     pub author: PublicKey,
     pub signature: Signature,
 }
@@ -124,8 +126,10 @@ impl Vote {
         mut signature_service: SignatureService,
     ) -> Self {
         let vote = Self {
-            hash: block.digest(),
+            id: block.digest(),
             round: block.round,
+            parent_id: block.qc.id.clone(),
+            parent_round: block.qc.round,
             author,
             signature: Signature::default(),
         };
@@ -149,32 +153,32 @@ impl Vote {
 impl Hash for Vote {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
-        hasher.update(&self.hash);
+        hasher.update(&self.id);
         hasher.update(self.round.to_le_bytes());
+        hasher.update(&self.parent_id);
+        hasher.update(self.parent_round.to_le_bytes());
         Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }
 }
 
 impl fmt::Debug for Vote {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "V({}, {}, {})", self.author, self.round, self.hash)
+        write!(f, "V({}, {}, {})", self.author, self.round, self.id)
     }
 }
 
 #[derive(Clone, Serialize, Deserialize, Default)]
 pub struct QC {
-    pub hash: Digest,
+    pub id: Digest,
     pub round: RoundNumber,
+    pub parent_id: Digest,
+    pub parent_round: RoundNumber,
     pub votes: Vec<(PublicKey, Signature)>,
 }
 
 impl QC {
     pub fn genesis() -> Self {
         QC::default()
-    }
-
-    pub fn timeout(&self) -> bool {
-        self.hash == Digest::default() && self.round != 0
     }
 
     pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
@@ -196,26 +200,32 @@ impl QC {
         // Check the signatures.
         Signature::verify_batch(&self.digest(), &self.votes).map_err(ConsensusError::from)
     }
+
+    pub fn voters(&self) -> HashSet<PublicKey> {
+        self.votes.iter().map(|(x, _)| x).cloned().collect()
+    }
 }
 
 impl Hash for QC {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
-        hasher.update(&self.hash);
+        hasher.update(&self.id);
         hasher.update(self.round.to_le_bytes());
+        hasher.update(&self.parent_id);
+        hasher.update(self.parent_round.to_le_bytes());
         Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }
 }
 
 impl fmt::Debug for QC {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "QC({}, {})", self.hash, self.round)
+        write!(f, "QC({}, {})", self.id, self.round)
     }
 }
 
 impl PartialEq for QC {
     fn eq(&self, other: &Self) -> bool {
-        self.hash == other.hash && self.round == other.round
+        self.id == other.id && self.round == other.round
     }
 }
 
