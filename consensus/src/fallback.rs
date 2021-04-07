@@ -277,7 +277,7 @@ impl Fallback {
         )
         .await;
         debug!("Created {:?}", timeout);
-        self.timer.update(self.timer.get_duration() * 2);
+        // self.timer.update(self.timer.get_duration() * 2);
         self.timer.reset();
         let message = ConsensusMessage::Timeout(timeout.clone());
         Synchronizer::transmit(
