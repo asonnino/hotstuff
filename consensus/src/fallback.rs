@@ -182,6 +182,7 @@ impl Fallback {
             // Ensure we won't vote for contradicting blocks.
             self.increase_last_voted_round(block.round);
         } else if block.fallback == 1 {
+            debug!("daniel 5 block {}", block.digest());
             if self.fallback != 1 {
                 return None;
             }
@@ -203,6 +204,8 @@ impl Fallback {
             if block.height <= *voted_height || block.round <= *voted_round {
                 return None;
             }
+            debug!("daniel 6 block {}", block.digest());
+
             match block.height {
                 1 => {
                     match &block.tc {
@@ -224,6 +227,7 @@ impl Fallback {
                 },
                 _ => return None,
             }
+            debug!("daniel 7 block {}", block.digest());
             self.fallback_voted_height.insert(block.author, block.height);
             self.fallback_voted_round.insert(block.author, block.round);
         }
@@ -610,6 +614,7 @@ impl Fallback {
             return Ok(());
         }
 
+        debug!("daniel 1 block {}", block.digest());
         // See if we can propose a fallback block extending the fallback QC
         if self.fallback == 1 && block.qc.fallback == 1 && (block.qc.view == self.view && block.qc.height >= self.height) {
             self.update_fallback_high_qc(&block.qc);
@@ -617,6 +622,7 @@ impl Fallback {
             self.height = block.qc.height+1;
             if block.qc.height == 1 {
                 self.generate_proposal(None, None, block.qc.clone()).await?;
+                debug!("daniel 2 block {}", block.digest());
             }
             if block.qc.height == 2 {
                 // sign and multicast height-2 QC
@@ -631,6 +637,7 @@ impl Fallback {
                 )
                 .await?;
                 self.handle_signed_qc(signed_qc).await?;
+                debug!("daniel 3 block {}", block.digest());
             }
         }
 
