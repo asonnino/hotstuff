@@ -465,18 +465,18 @@ impl VABA {
         // If we don't, the synchronizer asks for them to other nodes. It will
         // then ensure we process all three ancestors in the correct order, and
         // finally make us resume processing this block.
-        let mut has_ancestors = true;
+        // let mut has_ancestors = true;
         let (b0, b1, b2) = match self.synchronizer.get_ancestors_3chain(block).await? {
             Some(ancestors) => ancestors,
             None => {
                 debug!("process_block: Processing of {} suspended: missing parent", block.digest());
-                has_ancestors = false;
-                (Block::genesis(), Block::genesis(), Block::genesis())
-                // return Ok(());
+                // has_ancestors = false;
+                // (Block::genesis(), Block::genesis(), Block::genesis())
+                return Ok(());
             }
         };
 
-        if has_ancestors {
+        // if has_ancestors {
             // Store the block only if we have already processed all its ancestors.
             self.store_block(block).await;
 
@@ -507,7 +507,7 @@ impl VABA {
                     }
                 }
             }
-        }
+        // }
 
         self.update_lock_qc(&b2.qc);
 

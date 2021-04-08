@@ -548,18 +548,18 @@ impl Fallback {
         // If we don't, the synchronizer asks for them to other nodes. It will
         // then ensure we process all three ancestors in the correct order, and
         // finally make us resume processing this block.
-        let mut has_ancestors = true;
+        // let mut has_ancestors = true;
         let (b0, b1) = match self.synchronizer.get_ancestors(block).await? {
             Some(ancestors) => ancestors,
             None => {
                 debug!("Processing of {} suspended: missing parent", block.digest());
-                has_ancestors = false;
-                (Block::genesis(), Block::genesis())
-                // return Ok(());
+                // has_ancestors = false;
+                // (Block::genesis(), Block::genesis())
+                return Ok(());
             }
         };
 
-        if has_ancestors {
+        // if has_ancestors {
             // Store the block only if we have already processed all its ancestors.
             self.store_block(block).await;
 
@@ -597,7 +597,7 @@ impl Fallback {
             
             // // Cleanup the mempool.
             // self.mempool_driver.cleanup(&b0, &b1, &block).await;
-        }
+        // }
         
  
         // debug!("{:?}", self.print_chain(block).await?);
