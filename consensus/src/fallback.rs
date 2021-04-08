@@ -668,10 +668,10 @@ impl Fallback {
     }
 
     async fn handle_proposal(&mut self, block: &Block) -> ConsensusResult<()> {
-        if block.view < self.view {
-            debug!("Received block {} from previous view {}", block.digest(), block.view);
-            return Ok(());
-        }
+        // if block.view < self.view {
+        //     debug!("Received block {} from previous view {}", block.digest(), block.view);
+        //     return Ok(());
+        // }
         let digest = block.digest();
         // Ensure the block proposer is the right leader for the round.
         ensure!(
@@ -695,7 +695,7 @@ impl Fallback {
 
         // Not in fallback, process the fallback blocks when later enter the fallback
         // It is necessary to receive 2f+1 timeout messages with QCs to update the high_qc
-        if block.fallback == 1 && self.fallback == 0 {
+        if block.fallback == 1 && self.fallback == 0 && block.view >= self.view {
             if block.height == 1 || block.height == 2 {
                 debug!("Add block {} to pending", block.digest());
                 let map = self.fallback_pending_blocks.entry(block.view).or_insert(HashMap::new());
