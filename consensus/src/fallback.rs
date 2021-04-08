@@ -298,7 +298,7 @@ impl Fallback {
     #[async_recursion]
     async fn handle_vote(&mut self, vote: &Vote) -> ConsensusResult<()> {
         debug!("Processing {:?}", vote);
-        if vote.view < self.view || (vote.fallback == 0 && vote.round < self.round) {
+        if vote.view < self.view || (vote.fallback == 0 && vote.round < self.round) || (vote.fallback == 1 && vote.view == self.view &&  vote.height < self.height) {
             return Ok(());
         }
 
