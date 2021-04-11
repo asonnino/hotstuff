@@ -104,7 +104,7 @@ impl TwoChainVABA {
             high_qc: QC::genesis(),
             last_committed_round: 0, // initially 0
             timeout: 0,
-            fallback: 0,
+            fallback: 1,
             fallback_voted_round,
             fallback_voted_height,
             fallback_qcs,
@@ -354,7 +354,7 @@ impl TwoChainVABA {
 
     async fn handle_timeout(&mut self, timeout: &Timeout) -> ConsensusResult<()> {
         debug!("Processing {:?}", timeout);
-        if timeout.seq < self.view || (timeout.seq == self.view && self.fallback == 1) {
+        if timeout.seq < self.view {
             return Ok(());
         }
 
