@@ -1,6 +1,7 @@
 use crate::config::{Committee, Parameters, Protocol};
 use crate::fallback::Fallback;
-use crate::vaba::VABA;
+use crate::threechainvaba::ThreeChainVABA;
+use crate::twochainvaba::TwoChainVABA;
 use crate::core::{ConsensusMessage, Core};
 use crate::error::ConsensusResult;
 use crate::filter::Filter;
@@ -131,8 +132,27 @@ impl Consensus {
                     hotstuff_with_fallback.run().await;
                 });
             },
-            Protocol::ChainedVABA => {  // Run Chained-VABA
-                let mut vaba = VABA::new(
+            Protocol::TwoChainVABA => {  // Run TwoChainVABA
+                let mut vaba = TwoChainVABA::new(
+                    name,
+                    committee,
+                    parameters,
+                    signature_service,
+                    pk_set,
+                    store,
+                    leader_elector,
+                    mempool_driver,
+                    synchronizer,
+                    /* core_channel */ rx_core,
+                    /* network_filter */ tx_filter,
+                    /* commit_channel */ tx_commit,
+                );
+                tokio::spawn(async move {
+                    vaba.run().await;
+                });
+            },
+            Protocol::ThreeChainVABA => {  // Run ThreeChainVABA
+                let mut vaba = ThreeChainVABA::new(
                     name,
                     committee,
                     parameters,

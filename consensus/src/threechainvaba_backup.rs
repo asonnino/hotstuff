@@ -20,7 +20,7 @@ use std::collections::{HashMap, HashSet, BTreeMap};
 use threshold_crypto::PublicKeySet;
 use std::convert::TryInto;
 
-pub struct VABA {
+pub struct ThreeChainVABA {
     name: PublicKey,
     committee: Committee,
     parameters: Parameters,
@@ -56,7 +56,7 @@ pub struct VABA {
     aggregator: Aggregator,
 }
 
-impl VABA {
+impl ThreeChainVABA {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         name: PublicKey,
@@ -282,7 +282,7 @@ impl VABA {
         }
 
         // Ensure the vote is well formed.
-        vote.verify_vaba(&self.committee)?;
+        vote.verify_three_chain(&self.committee)?;
 
         // Add the new vote to our aggregator and see if we have a quorum.
         if let Some(qc) = self.aggregator.add_vote(vote.clone())? {
@@ -562,7 +562,7 @@ impl VABA {
         let digest = block.digest();
 
         // Check the block is correctly formed.
-        block.verify_vaba(&self.committee, &self.pk_set)?;
+        block.verify_three_chain(&self.committee, &self.pk_set)?;
 
         if let Some(coin) = block.coin.clone() {
             self.handle_random_coin(coin).await?;
@@ -613,7 +613,7 @@ impl VABA {
         }
 
         // Ensure the timeout is well formed.
-        timeout.verify_vaba(&self.committee)?;
+        timeout.verify_three_chain(&self.committee)?;
 
         // Process the QC embedded in the timeout.
         self.process_qc(&timeout.high_qc).await;
@@ -637,7 +637,7 @@ impl VABA {
 
     // When receiving 2f+1 height-3 fallback QC, send randomness share
     async fn handle_signed_qc(&mut self, signed_qc: SignedQC) -> ConsensusResult<()> {
-        signed_qc.verify_vaba(&self.committee)?;
+        signed_qc.verify_three_chain(&self.committee)?;
         match signed_qc.random_coin {
             None => {
                 // Already receive from the sender.
@@ -649,7 +649,7 @@ impl VABA {
                 if signed_qc.qc.fallback != 1 || signed_qc.qc.height != 3 || signed_qc.qc.view < self.view {
                     return Ok(());
                 }
-                signed_qc.verify_vaba(&self.committee)?;
+                signed_qc.verify_three_chain(&self.committee)?;
 
                 let qc = signed_qc.qc.clone();
                 let fallback_high_qc = self.fallback_qcs.get(&qc.proposer).unwrap();

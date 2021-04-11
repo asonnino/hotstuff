@@ -130,7 +130,7 @@ impl Block {
         Ok(())
     }
 
-    pub fn verify_vaba(&self, committee: &Committee, pk_set: &PublicKeySet) -> ConsensusResult<()> {
+    pub fn verify_three_chain(&self, committee: &Committee, pk_set: &PublicKeySet) -> ConsensusResult<()> {
         // Ensure the authority has voting rights.
         let voting_rights = committee.stake(&self.author);
         ensure!(
@@ -148,7 +148,7 @@ impl Block {
 
         // Check the embedded QC.
         if self.qc != QC::genesis() {
-            self.qc.verify_vaba(committee)?;
+            self.qc.verify_three_chain(committee)?;
         }
 
         // Check the TC embedded in the block (if any).
@@ -252,7 +252,7 @@ impl Vote {
         Ok(())
     }
 
-    pub fn verify_vaba(&self, committee: &Committee) -> ConsensusResult<()> {
+    pub fn verify_three_chain(&self, committee: &Committee) -> ConsensusResult<()> {
         // Ensure the authority has voting rights.
         ensure!(
             committee.stake(&self.author) > 0,
@@ -340,7 +340,7 @@ impl QC {
         Signature::verify_batch(&self.digest(), &self.votes).map_err(ConsensusError::from)
     }
 
-    pub fn verify_vaba(&self, committee: &Committee) -> ConsensusResult<()> {
+    pub fn verify_three_chain(&self, committee: &Committee) -> ConsensusResult<()> {
         // Ensure the QC has a quorum.
         let mut weight = 0;
         let mut used = HashSet::new();
@@ -436,7 +436,7 @@ impl SignedQC {
         Ok(())
     }
 
-    pub fn verify_vaba(&self, committee: &Committee) -> ConsensusResult<()> {
+    pub fn verify_three_chain(&self, committee: &Committee) -> ConsensusResult<()> {
         // Ensure the authority has voting rights.
         ensure!(
             committee.stake(&self.author) > 0,
@@ -448,7 +448,7 @@ impl SignedQC {
 
         // Check the embedded QC.
         if self.qc != QC::genesis() {
-            self.qc.verify_vaba(committee)?;
+            self.qc.verify_three_chain(committee)?;
         }
         Ok(())
     }
@@ -517,7 +517,7 @@ impl Timeout {
         Ok(())
     }
 
-    pub fn verify_vaba(&self, committee: &Committee) -> ConsensusResult<()> {
+    pub fn verify_three_chain(&self, committee: &Committee) -> ConsensusResult<()> {
         // Ensure the authority has voting rights.
         ensure!(
             committee.stake(&self.author) > 0,
@@ -529,7 +529,7 @@ impl Timeout {
 
         // Check the embedded QC.
         if self.high_qc != QC::genesis() {
-            self.high_qc.verify_vaba(committee)?;
+            self.high_qc.verify_three_chain(committee)?;
         }
         Ok(())
     }

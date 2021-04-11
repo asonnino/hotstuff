@@ -11,7 +11,8 @@ pub type EpochNumber = u128;
 pub enum Protocol {
     HotStuff,
     AsyncHotStuff,
-    ChainedVABA,
+    TwoChainVABA,
+    ThreeChainVABA,
     Others,
 }
 
