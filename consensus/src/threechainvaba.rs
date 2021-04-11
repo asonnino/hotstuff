@@ -699,6 +699,7 @@ impl ThreeChainVABA {
     }
 
     async fn handle_proposal(&mut self, block: &Block) -> ConsensusResult<()> {
+        debug!("handle_proposal block {:?}", block);
         // if block.view < self.view {
         //     debug!("Received block {} from previous view {}", block.digest(), block.view);
         //     return Ok(());
@@ -706,7 +707,7 @@ impl ThreeChainVABA {
         let digest = block.digest();
         // Ensure the block proposer is the right leader for the round.
         ensure!(
-            block.fallback == 1 || block.author == self.leader_elector.get_leader(block.round),
+            block.fallback == 1,
             ConsensusError::WrongLeader {
                 digest,
                 leader: block.author,

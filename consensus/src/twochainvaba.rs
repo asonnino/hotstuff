@@ -550,7 +550,7 @@ impl TwoChainVABA {
 
     #[async_recursion]
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
-        debug!("Processing block {}, content {:?}", block.digest(), block);
+        debug!("Processing block {:?}", block);
 
         // Let's see if we have the last three ancestors of the block, that is:
         //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
@@ -613,13 +613,14 @@ impl TwoChainVABA {
 
         // debug!("block round {}, view {}, fallback {}, self round {}, view {}, fallback {}", block.round, block.view, block.fallback, self.round, self.view, self.fallback);
 
-        if block.fallback == 0 && block.round != self.round {
+        if block.fallback != 1 || (block.fallback == 1 && block.view < self.view) {
             return Ok(());
         }
-        if block.fallback == 1 && block.view != self.view {
-            return Ok(());
-        }
-        if block.fallback != self.fallback {
+
+        if block.view > self.view {
+            debug!("Add block {} to pending", block.digest());
+            let map = self.fallback_pending_blocks.entry(block.view).or_insert(HashMap::new());
+            map.insert((block.author, block.height), block.clone());
             return Ok(());
         }
 
@@ -674,6 +675,7 @@ impl TwoChainVABA {
     }
 
     async fn handle_proposal(&mut self, block: &Block) -> ConsensusResult<()> {
+        debug!("handle_proposal block {:?}", block);
         // if block.view < self.view {
         //     debug!("Received block {} from previous view {}", block.digest(), block.view);
         //     return Ok(());
@@ -681,7 +683,7 @@ impl TwoChainVABA {
         let digest = block.digest();
         // Ensure the block proposer is the right leader for the round.
         ensure!(
-            block.fallback == 1 || block.author == self.leader_elector.get_leader(block.round),
+            block.fallback == 1,
             ConsensusError::WrongLeader {
                 digest,
                 leader: block.author,
@@ -699,16 +701,16 @@ impl TwoChainVABA {
         // Process the QC. This may allow us to advance round.
         self.process_qc(&block.qc).await;
 
-        // Not in fallback, process the fallback blocks when later enter the fallback
-        // It is necessary to receive 2f+1 timeout messages with QCs to update the high_qc
-        if block.fallback == 1 && self.fallback == 0 && block.view >= self.view {
-            if block.height == 1 || block.height == 2 {
-                debug!("Add block {} to pending", block.digest());
-                let map = self.fallback_pending_blocks.entry(block.view).or_insert(HashMap::new());
-                map.insert((block.author, block.height), block.clone());
-            }
-            return Ok(());
-        }
+        // // Not in fallback, process the fallback blocks when later enter the fallback
+        // // It is necessary to receive 2f+1 timeout messages with QCs to update the high_qc
+        // if block.fallback == 1 && self.fallback == 0 && block.view >= self.view {
+        //     if block.height == 1 || block.height == 2 {
+        //         debug!("Add block {} to pending", block.digest());
+        //         let map = self.fallback_pending_blocks.entry(block.view).or_insert(HashMap::new());
+        //         map.insert((block.author, block.height), block.clone());
+        //     }
+        //     return Ok(());
+        // }
         // Let's see if we have the block's data. If we don't, the mempool
         // will get it and then make us resume processing this block.
         if !self.mempool_driver.verify(block.clone()).await? {
