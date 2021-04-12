@@ -790,7 +790,9 @@ impl TwoChainVABA {
                 }
             },
             Some(ref random_coin) => {
+                // self.handle_random_coin(random_coin.clone());
                 random_coin.verify(&self.committee, &self.pk_set)?;
+
                 let view = random_coin.seq;
                 if view < self.view {
                     return Ok(());
@@ -801,6 +803,7 @@ impl TwoChainVABA {
                     leader_qcs.push(signed_qc.clone());
                     return Ok(());
                 }
+
                 // Already receive from the sender.
                 let set = self.fallback_leader_qc_sender.entry(view).or_insert(HashSet::new());
                 if set.contains(&signed_qc.author) {
@@ -812,9 +815,9 @@ impl TwoChainVABA {
 
                 // Collected 2f+1 QC of the elected leader, exit the fallback
                 *weight += self.committee.stake(&signed_qc.author);
-                debug!("view change handle_signed_qc {:?} weight {}", signed_qc, weight);
+                debug!("view change view {}, weight {}, handle_signed_qc {:?}", view, weight, signed_qc);
                 if *weight >= self.committee.quorum_threshold() {
-                    debug!("Enough view change SignedQCs for view {}", signed_qc.qc.view);
+                    debug!("Enough view change SignedQCs for view {}", view);
                     *weight = 0; 
 
                     self.exit_fallback(random_coin).await?;
