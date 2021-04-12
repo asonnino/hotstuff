@@ -767,7 +767,9 @@ impl TwoChainVABA {
 
                 // Collected 2f+1 height-2 fallback QC, send randomness share
                 *weight += self.committee.stake(&signed_qc.author);
+                debug!("handle_signed_qc {:?} weight {}", signed_qc, weight);
                 if *weight >= self.committee.quorum_threshold() {
+                    debug!("Enough SignedQCs for view {}", signed_qc.qc.view);
                     *weight = 0; // Only send randomness share once
                     let leader_high_qc = match self.fallback_qcs.get(&self.name) {
                         Some(qc) => qc.clone(),
