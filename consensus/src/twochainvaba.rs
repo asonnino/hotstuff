@@ -56,6 +56,7 @@ pub struct TwoChainVABA {
     fallback_leader_qcs: HashMap<SeqNumber, Vec<SignedQC>>,    // set of leader's qcs
     timer: Timer,
     aggregator: Aggregator,
+    timeout_set: HashSet<PublicKey>,    // set of nodes that send timeout for view 1
 }
 
 impl TwoChainVABA {
@@ -120,6 +121,7 @@ impl TwoChainVABA {
             fallback_leader_qcs: HashMap::new(),
             timer,
             aggregator,
+            timeout_set: HashSet::new(),
         }
     }
 
@@ -354,7 +356,7 @@ impl TwoChainVABA {
 
     async fn handle_timeout(&mut self, timeout: &Timeout) -> ConsensusResult<()> {
         debug!("Processing {:?}", timeout);
-        if timeout.seq < self.view {
+        if timeout.seq != 1 || self.timeout_set.contains(&timeout.author) {
             return Ok(());
         }
 
@@ -364,11 +366,10 @@ impl TwoChainVABA {
         // Process the QC embedded in the timeout.
         self.process_qc(&timeout.high_qc).await;
 
-        // Add the new vote to our aggregator and see if we have a quorum.
-        // Enter the fallback
-        if let Some(tc) = self.aggregator.add_timeout(timeout.clone())? {
-            debug!("Assembled {:?}", tc);
-            info!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", tc.seq);
+        self.timeout_set.insert(timeout.author);
+
+        if self.timeout_set.len() == self.committee.size() {
+            info!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", timeout.seq);
 
             // Enter fallback
             self.fallback = 1;
@@ -378,7 +379,7 @@ impl TwoChainVABA {
             self.init_fallback_state();
 
             // Update the view to be the view of the TC.
-            self.advance_view(tc.seq).await;
+            self.advance_view(timeout.seq).await;
 
             // Make a new block for its fallback chain
             self.height = 1;
