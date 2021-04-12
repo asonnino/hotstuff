@@ -812,7 +812,9 @@ impl TwoChainVABA {
 
                 // Collected 2f+1 QC of the elected leader, exit the fallback
                 *weight += self.committee.stake(&signed_qc.author);
+                debug!("view change handle_signed_qc {:?} weight {}", signed_qc, weight);
                 if *weight >= self.committee.quorum_threshold() {
+                    debug!("Enough view change SignedQCs for view {}", signed_qc.qc.view);
                     *weight = 0; 
 
                     self.exit_fallback(random_coin).await?;
@@ -846,8 +848,10 @@ impl TwoChainVABA {
         shares.push(randomness_share.clone());
 
         *weight += self.committee.stake(&randomness_share.author);
+        debug!("handle_randomness_share {:?} weight {}", randomness_share, weight);
         // Collected enough shares, send random coin
         if *weight >= self.committee.random_coin_threshold() {
+            debug!("Enough randomness share for view {}", randomness_share.seq);
             *weight = 0; // Only send random coin once
             let mut sigs = BTreeMap::new();
             // Check the random shares.
@@ -875,6 +879,7 @@ impl TwoChainVABA {
         if random_coin.seq < self.view || self.fallback_random_coin.contains_key(&random_coin.seq) {
             return Ok(())
         }
+        debug!("handle_random_coin {:?}", random_coin);
 
         random_coin.verify(&self.committee, &self.pk_set)?;
         
