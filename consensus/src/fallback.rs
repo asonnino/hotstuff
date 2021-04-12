@@ -56,6 +56,7 @@ pub struct Fallback {
     fallback_leader_qcs: HashMap<SeqNumber, Vec<SignedQC>>,    // set of leader's qcs
     timer: Timer,
     aggregator: Aggregator,
+    timeout_set: HashSet<PublicKey>,    // set of nodes that send timeout for view 1
 }
 
 impl Fallback {
@@ -120,6 +121,7 @@ impl Fallback {
             fallback_leader_qcs: HashMap::new(),
             timer,
             aggregator,
+            timeout_set: HashSet::new(),
         }
     }
 
@@ -360,27 +362,51 @@ impl Fallback {
         // Process the QC embedded in the timeout.
         self.process_qc(&timeout.high_qc).await;
 
-        // Add the new vote to our aggregator and see if we have a quorum.
-        // Enter the fallback
-        if let Some(tc) = self.aggregator.add_timeout(timeout.clone())? {
-            debug!("Assembled {:?}", tc);
-            info!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", tc.seq);
+        if timeout.seq == 1 {
+            self.timeout_set.insert(timeout.author);
 
-            // Enter fallback
-            self.fallback = 1;
-            self.timeout = 1;
+            if self.timeout_set.len() == self.committee.size() {
+                info!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", timeout.seq);
+    
+                // Enter fallback
+                self.fallback = 1;
+                self.timeout = 1;
+    
+                // Initialize fallback states
+                self.init_fallback_state();
+    
+                // Update the view to be the view of the TC.
+                self.advance_view(timeout.seq).await;
+    
+                // Make a new block for its fallback chain
+                self.height = 1;
+                self.generate_proposal(None, None, self.high_qc.clone()).await?;
+    
+                self.process_pending_blocks().await?;
+            }
+        } else {
+            // Add the new vote to our aggregator and see if we have a quorum.
+            // Enter the fallback
+            if let Some(tc) = self.aggregator.add_timeout(timeout.clone())? {
+                debug!("Assembled {:?}", tc);
+                info!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", tc.seq);
 
-            // Initialize fallback states
-            self.init_fallback_state();
+                // Enter fallback
+                self.fallback = 1;
+                self.timeout = 1;
 
-            // Update the view to be the view of the TC.
-            self.advance_view(tc.seq).await;
+                // Initialize fallback states
+                self.init_fallback_state();
 
-            // Make a new block for its fallback chain
-            self.height = 1;
-            self.generate_proposal(Some(tc), None, self.high_qc.clone()).await?;
+                // Update the view to be the view of the TC.
+                self.advance_view(tc.seq).await;
 
-            self.process_pending_blocks().await?;
+                // Make a new block for its fallback chain
+                self.height = 1;
+                self.generate_proposal(Some(tc), None, self.high_qc.clone()).await?;
+
+                self.process_pending_blocks().await?;
+            }
         }
         Ok(())
     }
