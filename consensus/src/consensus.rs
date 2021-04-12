@@ -65,7 +65,7 @@ impl Consensus {
         });
 
         // The leader elector algorithm.
-        let leader_elector = LeaderElector::new(committee.clone());
+        let leader_elector = LeaderElector::new(committee.clone(), store.clone());
 
         // Make the mempool driver which will mediate our requests to the mempool.
         let mempool_driver = MempoolDriver::new(tx_consensus_mempool);

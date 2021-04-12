@@ -89,6 +89,7 @@ impl QCMaker {
                 round: vote.round,
                 parent_id: vote.parent_id.clone(),
                 parent_round: vote.parent_round,
+                next_leader: vote.next_leader,
                 votes: self.votes.clone(),
             }));
         }

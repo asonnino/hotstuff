@@ -100,7 +100,7 @@ impl Core {
         self.last_voted_round = max(self.last_voted_round, target);
     }
 
-    async fn make_vote(&mut self, block: &Block) -> Option<Vote> {
+    async fn make_vote(&mut self, block: &Block) -> ConsensusResult<Option<Vote>> {
         // Check if we can vote for this block.
         let safety_rule_1 = block.round > self.last_voted_round;
         let mut safety_rule_2 = block.qc.round + 1 == block.round;
@@ -110,13 +110,25 @@ impl Core {
             safety_rule_2 |= can_extend;
         }
         if !(safety_rule_1 && safety_rule_2) {
-            return None;
+            return Ok(None);
         }
 
         // Ensure we won't vote for contradicting blocks.
         self.increase_last_voted_round(block.round);
         // TODO [issue #15]: Write to storage preferred_round and last_voted_round.
-        Some(Vote::new(&block, self.name, self.signature_service.clone()).await)
+        let next_leader = self
+            .leader_elector
+            .elect_next_leader(&block.qc, block.round)
+            .await?;
+        Ok(Some(
+            Vote::new(
+                &block,
+                next_leader,
+                self.name,
+                self.signature_service.clone(),
+            )
+            .await,
+        ))
     }
     // -- End Safety Module --
 
@@ -169,9 +181,14 @@ impl Core {
             self.process_qc(&qc).await;
 
             // Make a new block if we are the next leader.
-            if self.name == self.leader_elector.get_leader(self.round) {
+            // TODO: WRONG: SHOULD USE THE PARENT NOT THE CURRENT QC.
+            // Fix this along with DDoS on vote aggregator by adding the QC to the vote.
+            /*
+            if self.name == self.leader_elector.get_leader(&self.high_qc, self.round) {
                 self.generate_proposal(None).await?;
             }
+            */
+            self.generate_proposal(None).await?;
         }
         Ok(())
     }
@@ -207,7 +224,7 @@ impl Core {
             .await?;
 
             // Make a new block if we are the next leader.
-            if self.name == self.leader_elector.get_leader(self.round) {
+            if self.name == self.leader_elector.get_leader(&self.high_qc, self.round) {
                 self.generate_proposal(Some(tc)).await?;
             }
         }
@@ -295,6 +312,16 @@ impl Core {
             }
         };
 
+        // Ensure the block proposer is the right leader for the round.
+        ensure!(
+            block.author == self.leader_elector.check_block(block, &b1),
+            ConsensusError::WrongLeader {
+                digest: block.digest(),
+                leader: block.author,
+                round: block.round
+            }
+        );
+
         // Store the block only if we have already processed all its ancestors.
         self.store_block(block).await;
 
@@ -327,9 +354,9 @@ impl Core {
         }
 
         // See if we can vote for this block.
-        if let Some(vote) = self.make_vote(block).await {
+        if let Some(vote) = self.make_vote(block).await? {
             debug!("Created {:?}", vote);
-            let next_leader = self.leader_elector.get_leader(self.round + 1);
+            let next_leader = self.leader_elector.get_leader(&block.qc, block.round);
             if next_leader == self.name {
                 self.handle_vote(&vote).await?;
             } else {
@@ -348,18 +375,6 @@ impl Core {
     }
 
     async fn handle_proposal(&mut self, block: &Block) -> ConsensusResult<()> {
-        let digest = block.digest();
-
-        // Ensure the block proposer is the right leader for the round.
-        ensure!(
-            block.author == self.leader_elector.get_leader(block.round),
-            ConsensusError::WrongLeader {
-                digest,
-                leader: block.author,
-                round: block.round
-            }
-        );
-
         // Check the block is correctly formed.
         block.verify(&self.committee)?;
 
@@ -374,11 +389,14 @@ impl Core {
         // Let's see if we have the block's data. If we don't, the mempool
         // will get it and then make us resume processing this block.
         if !self.mempool_driver.verify(block.clone()).await? {
-            debug!("Processing of {} suspended: missing payload", digest);
+            debug!(
+                "Processing of {} suspended: missing payload",
+                block.digest()
+            );
             return Ok(());
         }
 
-        // All check pass, we can process this block.
+        // Process this block.
         self.process_block(block).await
     }
 
@@ -403,10 +421,14 @@ impl Core {
     }
 
     async fn handle_tc(&mut self, tc: TC) -> ConsensusResult<()> {
+        /*
         self.advance_round(tc.round).await;
-        if self.name == self.leader_elector.get_leader(self.round) {
+        // TODO: If someone replays an old TC, we may emit two blocks for the
+        // same round -- Oops.
+        if self.name == self.leader_elector.get_leader(&self.high_qc, self.round) {
             self.generate_proposal(Some(tc)).await?;
         }
+        */
         Ok(())
     }
 
@@ -414,7 +436,7 @@ impl Core {
         // Upon booting, generate the very first block (if we are the leader).
         // Also, schedule a timer in case we don't hear from the leader.
         self.timer.reset();
-        if self.name == self.leader_elector.get_leader(self.round) {
+        if self.name == self.leader_elector.get_leader(&self.high_qc, self.round) {
             self.generate_proposal(None)
                 .await
                 .expect("Failed to send the first block");

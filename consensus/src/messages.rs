@@ -115,6 +115,7 @@ pub struct Vote {
     pub round: RoundNumber,
     pub parent_id: Digest,
     pub parent_round: RoundNumber,
+    pub next_leader: Option<PublicKey>,
     pub author: PublicKey,
     pub signature: Signature,
 }
@@ -122,6 +123,7 @@ pub struct Vote {
 impl Vote {
     pub async fn new(
         block: &Block,
+        next_leader: Option<PublicKey>,
         author: PublicKey,
         mut signature_service: SignatureService,
     ) -> Self {
@@ -130,6 +132,7 @@ impl Vote {
             round: block.round,
             parent_id: block.qc.id.clone(),
             parent_round: block.qc.round,
+            next_leader,
             author,
             signature: Signature::default(),
         };
@@ -157,6 +160,9 @@ impl Hash for Vote {
         hasher.update(self.round.to_le_bytes());
         hasher.update(&self.parent_id);
         hasher.update(self.parent_round.to_le_bytes());
+        if let Some(next_leader) = self.next_leader {
+            hasher.update(&next_leader);
+        }
         Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }
 }
@@ -173,6 +179,7 @@ pub struct QC {
     pub round: RoundNumber,
     pub parent_id: Digest,
     pub parent_round: RoundNumber,
+    pub next_leader: Option<PublicKey>,
     pub votes: Vec<(PublicKey, Signature)>,
 }
 
@@ -213,6 +220,9 @@ impl Hash for QC {
         hasher.update(self.round.to_le_bytes());
         hasher.update(&self.parent_id);
         hasher.update(self.parent_round.to_le_bytes());
+        if let Some(next_leader) = self.next_leader {
+            hasher.update(&next_leader);
+        }
         Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }
 }
@@ -225,7 +235,7 @@ impl fmt::Debug for QC {
 
 impl PartialEq for QC {
     fn eq(&self, other: &Self) -> bool {
-        self.id == other.id && self.round == other.round
+        self.id == other.id && self.round == other.round && self.next_leader == other.next_leader
     }
 }
 
