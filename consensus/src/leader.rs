@@ -33,7 +33,7 @@ impl ReputationLeaderElector {
         keys[(round / 2) as usize % self.committee.size()]
     }
 
-    pub fn get_next_leader(&self, qc: &QC, round: RoundNumber) -> PublicKey {
+    pub fn next_leader(&self, qc: &QC, round: RoundNumber) -> PublicKey {
         // Use the leader embedded in the QC if there is one and if the block
         // and QC rounds are consecutive.
         if qc.round + 1 == round {
@@ -48,7 +48,7 @@ impl ReputationLeaderElector {
 
     pub fn check_block(&self, block: &Block, parent: &Block) -> ConsensusResult<()> {
         let next_leader = match parent.round + 1 == block.round {
-            true => self.get_next_leader(&parent.qc, parent.round),
+            true => self.next_leader(&parent.qc, parent.round),
             false => self.round_robin(block.round),
         };
         ensure!(
@@ -64,7 +64,7 @@ impl ReputationLeaderElector {
 
     pub fn check_vote(&self, vote: &Vote, name: PublicKey) -> ConsensusResult<()> {
         ensure!(
-            name == self.get_next_leader(&vote.parent_qc, vote.round),
+            name == self.next_leader(&vote.parent_qc, vote.round),
             ConsensusError::UnexpectedVote {
                 digest: vote.digest(),
                 round: vote.round

@@ -220,11 +220,7 @@ impl Core {
             .await?;
 
             // Make a new block if we are the next leader.
-            if self.name
-                == self
-                    .leader_elector
-                    .get_next_leader(&self.high_qc, self.round)
-            {
+            if self.name == self.leader_elector.next_leader(&self.high_qc, self.round) {
                 self.generate_proposal(Some(tc)).await?;
             }
         }
@@ -349,7 +345,7 @@ impl Core {
         // See if we can vote for this block.
         if let Some(vote) = self.make_vote(block).await? {
             debug!("Created {:?}", vote);
-            let next_leader = self.leader_elector.get_next_leader(&block.qc, block.round);
+            let next_leader = self.leader_elector.next_leader(&block.qc, block.round);
             if next_leader == self.name {
                 self.handle_vote(&vote).await?;
             } else {
@@ -429,11 +425,7 @@ impl Core {
         // Upon booting, generate the very first block (if we are the leader).
         // Also, schedule a timer in case we don't hear from the leader.
         self.timer.reset();
-        if self.name
-            == self
-                .leader_elector
-                .get_next_leader(&self.high_qc, self.round)
-        {
+        if self.name == self.leader_elector.next_leader(&self.high_qc, self.round) {
             self.generate_proposal(None)
                 .await
                 .expect("Failed to send the first block");
