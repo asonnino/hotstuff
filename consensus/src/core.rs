@@ -95,7 +95,6 @@ impl Core {
         self.store.write(key, value).await;
     }
 
-    // -- Start Safety Module --
     fn increase_last_voted_round(&mut self, target: RoundNumber) {
         self.last_voted_round = max(self.last_voted_round, target);
     }
@@ -115,7 +114,9 @@ impl Core {
 
         // Ensure we won't vote for contradicting blocks.
         self.increase_last_voted_round(block.round);
-        // TODO [issue #15]: Write to storage preferred_round and last_voted_round.
+
+        // TODO [issue #15]: Write to storage last_voted_round.
+
         let next_leader = self
             .leader_elector
             .elect_future_leader(&block.qc, block.round)
@@ -130,16 +131,22 @@ impl Core {
             .await,
         ))
     }
-    // -- End Safety Module --
 
-    // -- Start Pacemaker --
-    fn update_high_qc(&mut self, qc: &QC) {
-        if qc.round > self.high_qc.round {
-            self.high_qc = qc.clone();
+    #[async_recursion]
+    async fn advance_round(&mut self, round: RoundNumber) {
+        if round < self.round {
+            return;
         }
+        // Reset the timer and advance round.
+        self.timer.reset();
+        self.round = round + 1;
+        debug!("Moved to round {}", self.round);
+
+        // Cleanup the vote aggregator.
+        self.aggregator.cleanup(&self.round);
     }
 
-    async fn local_timeout_round(&mut self) -> ConsensusResult<()> {
+    async fn local_timeout(&mut self) -> ConsensusResult<()> {
         warn!("Timeout reached for round {}", self.round);
         self.increase_last_voted_round(self.round);
         let timeout = Timeout::new(
@@ -228,21 +235,6 @@ impl Core {
     }
 
     #[async_recursion]
-    async fn advance_round(&mut self, round: RoundNumber) {
-        if round < self.round {
-            return;
-        }
-        // Reset the timer and advance round.
-        self.timer.reset();
-        self.round = round + 1;
-        debug!("Moved to round {}", self.round);
-
-        // Cleanup the vote aggregator.
-        self.aggregator.cleanup(&self.round);
-    }
-    // -- End Pacemaker --
-
-    #[async_recursion]
     async fn generate_proposal(&mut self, tc: Option<TC>) -> ConsensusResult<()> {
         // Make a new block.
         let payload = self
@@ -287,8 +279,13 @@ impl Core {
     }
 
     async fn process_qc(&mut self, qc: &QC) {
+        // Try to advance round.
         self.advance_round(qc.round).await;
-        self.update_high_qc(qc);
+
+        // Update high QC.
+        if qc.round > self.high_qc.round {
+            self.high_qc = qc.clone();
+        }
     }
 
     #[async_recursion]
@@ -332,7 +329,8 @@ impl Core {
             }
         }
 
-        // Cleanup the mempool.
+        // Optimistically cleanup the mempool. This may result in some transactions
+        // loss: the client will have to resubmit them.
         self.mempool_driver.cleanup(&b0, &b1, &block).await;
 
         // Ensure the block's round is as expected.
@@ -410,14 +408,18 @@ impl Core {
     }
 
     async fn handle_tc(&mut self, tc: TC) -> ConsensusResult<()> {
+        debug!("Processing {:?}", tc);
+        if tc.round < self.round {
+            return Ok(());
+        }
+
+        // Try to advance round.
         self.advance_round(tc.round).await;
-        /*
-        // TODO: If someone replays an old TC, we may emit two blocks for the
-        // same round -- Oops.
-        if self.name == self.leader_elector.get_leader(&self.high_qc, self.round) {
+
+        // Propose a block if we are the leader.
+        if self.name == self.leader_elector.next_leader(&self.high_qc, self.round) {
             self.generate_proposal(Some(tc)).await?;
         }
-        */
         Ok(())
     }
 
@@ -445,7 +447,7 @@ impl Core {
                         ConsensusMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await
                     }
                 },
-                () = &mut self.timer => self.local_timeout_round().await,
+                () = &mut self.timer => self.local_timeout().await,
                 else => break,
             };
             match result {

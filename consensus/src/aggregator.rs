@@ -39,7 +39,7 @@ impl Aggregator {
     }
 
     pub fn add_timeout(&mut self, timeout: Timeout) -> ConsensusResult<Option<TC>> {
-        // TODO: A bad node may make us run out of memory by sending many timeouts
+        // TODO [issue #7]: A bad node may make us run out of memory by sending many timeouts
         // with different round numbers.
 
         // Add the new timeout to our aggregator and see if we have a TC.

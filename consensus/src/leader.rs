@@ -46,33 +46,6 @@ impl ReputationLeaderElector {
         self.round_robin(round)
     }
 
-    pub fn check_block(&self, block: &Block, parent: &Block) -> ConsensusResult<()> {
-        let next_leader = match parent.round + 1 == block.round {
-            true => self.next_leader(&parent.qc, parent.round),
-            false => self.round_robin(block.round),
-        };
-        ensure!(
-            block.author == next_leader,
-            ConsensusError::WrongLeader {
-                digest: block.digest(),
-                leader: block.author,
-                round: block.round
-            }
-        );
-        Ok(())
-    }
-
-    pub fn check_vote(&self, vote: &Vote, name: PublicKey) -> ConsensusResult<()> {
-        ensure!(
-            name == self.next_leader(&vote.parent_qc, vote.round),
-            ConsensusError::UnexpectedVote {
-                digest: vote.digest(),
-                round: vote.round
-            }
-        );
-        Ok(())
-    }
-
     pub async fn elect_future_leader(
         &mut self,
         qc: &QC,
@@ -114,5 +87,32 @@ impl ReputationLeaderElector {
         Ok(Some(
             *candidates.remove(current_qc.round as usize % candidates.len()),
         ))
+    }
+
+    pub fn check_block(&self, block: &Block, parent: &Block) -> ConsensusResult<()> {
+        let next_leader = match parent.round + 1 == block.round {
+            true => self.next_leader(&parent.qc, parent.round),
+            false => self.round_robin(block.round),
+        };
+        ensure!(
+            block.author == next_leader,
+            ConsensusError::WrongLeader {
+                digest: block.digest(),
+                leader: block.author,
+                round: block.round
+            }
+        );
+        Ok(())
+    }
+
+    pub fn check_vote(&self, vote: &Vote, name: PublicKey) -> ConsensusResult<()> {
+        ensure!(
+            name == self.next_leader(&vote.parent_qc, vote.round),
+            ConsensusError::UnexpectedVote {
+                digest: vote.digest(),
+                round: vote.round
+            }
+        );
+        Ok(())
     }
 }
