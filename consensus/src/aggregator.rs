@@ -87,8 +87,8 @@ impl QCMaker {
             return Ok(Some(QC {
                 id: vote.id.clone(),
                 round: vote.round,
-                parent_id: vote.parent_id.clone(),
-                parent_round: vote.parent_round,
+                parent_id: vote.parent_qc.id.clone(),
+                parent_round: vote.parent_qc.round,
                 next_leader: vote.next_leader,
                 votes: self.votes.clone(),
             }));

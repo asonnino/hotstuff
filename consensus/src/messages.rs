@@ -113,8 +113,7 @@ impl fmt::Display for Block {
 pub struct Vote {
     pub id: Digest,
     pub round: RoundNumber,
-    pub parent_id: Digest,
-    pub parent_round: RoundNumber,
+    pub parent_qc: QC,
     pub next_leader: Option<PublicKey>,
     pub author: PublicKey,
     pub signature: Signature,
@@ -130,8 +129,7 @@ impl Vote {
         let vote = Self {
             id: block.digest(),
             round: block.round,
-            parent_id: block.qc.id.clone(),
-            parent_round: block.qc.round,
+            parent_qc: block.qc.clone(),
             next_leader,
             author,
             signature: Signature::default(),
@@ -158,8 +156,8 @@ impl Hash for Vote {
         let mut hasher = Sha512::new();
         hasher.update(&self.id);
         hasher.update(self.round.to_le_bytes());
-        hasher.update(&self.parent_id);
-        hasher.update(self.parent_round.to_le_bytes());
+        hasher.update(&self.parent_qc.id);
+        hasher.update(self.parent_qc.round.to_le_bytes());
         if let Some(next_leader) = self.next_leader {
             hasher.update(&next_leader);
         }

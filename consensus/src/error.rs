@@ -60,6 +60,9 @@ pub enum ConsensusError {
         round: RoundNumber,
     },
 
+    #[error("Received unexpected vote {digest} for round {round}")]
+    UnexpectedVote { digest: Digest, round: RoundNumber },
+
     #[error("Invalid payload")]
     InvalidPayload,
 }

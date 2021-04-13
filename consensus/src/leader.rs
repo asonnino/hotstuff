@@ -1,9 +1,9 @@
 use crate::config::Committee;
 use crate::core::RoundNumber;
-use crate::error::ConsensusResult;
-use crate::messages::{Block, QC};
+use crate::error::{ConsensusError, ConsensusResult};
+use crate::messages::{Block, Vote, QC};
+use crypto::Hash as _;
 use crypto::PublicKey;
-use log::info;
 use std::collections::HashSet;
 use store::Store;
 
@@ -27,36 +27,53 @@ impl ReputationLeaderElector {
         }
     }
 
-    pub fn get_leader(&self, qc: &QC, round: RoundNumber) -> PublicKey {
+    fn round_robin(&self, round: RoundNumber) -> PublicKey {
+        let mut keys: Vec<_> = self.committee.authorities.keys().cloned().collect();
+        keys.sort();
+        keys[(round / 2) as usize % self.committee.size()]
+    }
+
+    pub fn get_next_leader(&self, qc: &QC, round: RoundNumber) -> PublicKey {
         // Use the leader embedded in the QC if there is one and if the block
         // and QC rounds are consecutive.
         if qc.round + 1 == round {
             if let Some(leader) = qc.next_leader {
-                info!("RETURNING REP LEADER {}", leader);
                 return leader;
             }
         }
 
         // Otherwise, fall back to round robin.
-        let mut keys: Vec<_> = self.committee.authorities.keys().cloned().collect();
-        keys.sort();
-        let leader = keys[(round / 2) as usize % self.committee.size()];
-        info!("RETURNING RR LEADER {} on round {}", leader, round);
-        leader
+        self.round_robin(round)
     }
 
-    pub fn check_block(&self, block: &Block, parent: &Block) -> PublicKey {
-        if parent.round + 1 == block.round {
-            return self.get_leader(&parent.qc, parent.round);
-        }
-
-        let mut keys: Vec<_> = self.committee.authorities.keys().cloned().collect();
-        keys.sort();
-        let leader = keys[(block.round / 2) as usize % self.committee.size()];
-        leader
+    pub fn check_block(&self, block: &Block, parent: &Block) -> ConsensusResult<()> {
+        let next_leader = match parent.round + 1 == block.round {
+            true => self.get_next_leader(&parent.qc, parent.round),
+            false => self.round_robin(block.round),
+        };
+        ensure!(
+            block.author == next_leader,
+            ConsensusError::WrongLeader {
+                digest: block.digest(),
+                leader: block.author,
+                round: block.round
+            }
+        );
+        Ok(())
     }
 
-    pub async fn elect_next_leader(
+    pub fn check_vote(&self, vote: &Vote, name: PublicKey) -> ConsensusResult<()> {
+        ensure!(
+            name == self.get_next_leader(&vote.parent_qc, vote.round),
+            ConsensusError::UnexpectedVote {
+                digest: vote.digest(),
+                round: vote.round
+            }
+        );
+        Ok(())
+    }
+
+    pub async fn elect_future_leader(
         &mut self,
         qc: &QC,
         round: RoundNumber,

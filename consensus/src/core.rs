@@ -118,7 +118,7 @@ impl Core {
         // TODO [issue #15]: Write to storage preferred_round and last_voted_round.
         let next_leader = self
             .leader_elector
-            .elect_next_leader(&block.qc, block.round)
+            .elect_future_leader(&block.qc, block.round)
             .await?;
         Ok(Some(
             Vote::new(
@@ -173,6 +173,9 @@ impl Core {
         // Ensure the vote is well formed.
         vote.verify(&self.committee)?;
 
+        // Ensure the vote is meant for us (ie. we are the next leader).
+        self.leader_elector.check_vote(vote, self.name)?;
+
         // Add the new vote to our aggregator and see if we have a quorum.
         if let Some(qc) = self.aggregator.add_vote(vote.clone())? {
             debug!("Assembled {:?}", qc);
@@ -180,14 +183,7 @@ impl Core {
             // Process the QC.
             self.process_qc(&qc).await;
 
-            // Make a new block if we are the next leader.
-            // TODO: WRONG: SHOULD USE THE PARENT NOT THE CURRENT QC.
-            // Fix this along with DDoS on vote aggregator by adding the QC to the vote.
-            /*
-            if self.name == self.leader_elector.get_leader(&self.high_qc, self.round) {
-                self.generate_proposal(None).await?;
-            }
-            */
+            // Make a new block.
             self.generate_proposal(None).await?;
         }
         Ok(())
@@ -224,7 +220,11 @@ impl Core {
             .await?;
 
             // Make a new block if we are the next leader.
-            if self.name == self.leader_elector.get_leader(&self.high_qc, self.round) {
+            if self.name
+                == self
+                    .leader_elector
+                    .get_next_leader(&self.high_qc, self.round)
+            {
                 self.generate_proposal(Some(tc)).await?;
             }
         }
@@ -313,14 +313,7 @@ impl Core {
         };
 
         // Ensure the block proposer is the right leader for the round.
-        ensure!(
-            block.author == self.leader_elector.check_block(block, &b1),
-            ConsensusError::WrongLeader {
-                digest: block.digest(),
-                leader: block.author,
-                round: block.round
-            }
-        );
+        self.leader_elector.check_block(block, &b1)?;
 
         // Store the block only if we have already processed all its ancestors.
         self.store_block(block).await;
@@ -356,7 +349,7 @@ impl Core {
         // See if we can vote for this block.
         if let Some(vote) = self.make_vote(block).await? {
             debug!("Created {:?}", vote);
-            let next_leader = self.leader_elector.get_leader(&block.qc, block.round);
+            let next_leader = self.leader_elector.get_next_leader(&block.qc, block.round);
             if next_leader == self.name {
                 self.handle_vote(&vote).await?;
             } else {
@@ -421,8 +414,8 @@ impl Core {
     }
 
     async fn handle_tc(&mut self, tc: TC) -> ConsensusResult<()> {
-        /*
         self.advance_round(tc.round).await;
+        /*
         // TODO: If someone replays an old TC, we may emit two blocks for the
         // same round -- Oops.
         if self.name == self.leader_elector.get_leader(&self.high_qc, self.round) {
@@ -436,7 +429,11 @@ impl Core {
         // Upon booting, generate the very first block (if we are the leader).
         // Also, schedule a timer in case we don't hear from the leader.
         self.timer.reset();
-        if self.name == self.leader_elector.get_leader(&self.high_qc, self.round) {
+        if self.name
+            == self
+                .leader_elector
+                .get_next_leader(&self.high_qc, self.round)
+        {
             self.generate_proposal(None)
                 .await
                 .expect("Failed to send the first block");
