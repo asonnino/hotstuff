@@ -362,7 +362,7 @@ impl Fallback {
         // Process the QC embedded in the timeout.
         self.process_qc(&timeout.high_qc).await;
 
-        if timeout.seq == 1 {
+        if timeout.seq == 0 {
             self.timeout_set.insert(timeout.author);
 
             if self.timeout_set.len() == self.committee.size() {
