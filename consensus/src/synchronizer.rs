@@ -156,23 +156,4 @@ impl Synchronizer {
             .expect("We should have all ancestors of delivered blocks");
         Ok(Some((b0, b1)))
     }
-
-    pub async fn get_ancestors_3chain(
-        &mut self,
-        block: &Block,
-    ) -> ConsensusResult<Option<(Block, Block, Block)>> {
-        let b2 = match self.get_parent_block(block).await? {
-            Some(b) => b,
-            None => return Ok(None),
-        };
-        let b1 = self
-            .get_parent_block(&b2)
-            .await?
-            .expect("We should have all ancestors of delivered blocks");
-        let b0 = self
-            .get_parent_block(&b1)
-            .await?
-            .expect("We should have all ancestors of delivered blocks");
-        Ok(Some((b0, b1, b2)))
-    }
 }

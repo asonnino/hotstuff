@@ -5,7 +5,6 @@ mod config;
 mod consensus;
 mod core;
 mod fallback;
-mod threechainvaba;
 mod twochainvaba;
 mod filter;
 mod leader;

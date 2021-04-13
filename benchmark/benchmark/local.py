@@ -106,9 +106,10 @@ class LocalBench:
             elif self.node_parameters.protocol == 1:
                 Print.info('Running Async HotStuff')
             elif self.node_parameters.protocol == 2:
-                Print.info('Running Chained-VABA')
+                Print.info('Running TwoChainVABA')
             else:
                 Print.info('Wrong protocol type!')
+                return
 
             Print.info(f'{self.faults} faults')
             Print.info(f'Timeout {self.node_parameters.timeout_delay} ms, Network delay {self.node_parameters.network_delay} ms')
@@ -140,7 +141,7 @@ class LocalBench:
 
             # Parse logs and return the parser.
             Print.info('Parsing logs...')
-            return LogParser.process('./logs')
+            return LogParser.process('./logs', self.faults, self.node_parameters.protocol, self.node_parameters.ddos)
 
         except (subprocess.SubprocessError, ParseError) as e:
             self._kill_nodes()

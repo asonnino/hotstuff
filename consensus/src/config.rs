@@ -12,7 +12,6 @@ pub enum Protocol {
     HotStuff,
     AsyncHotStuff,
     TwoChainVABA,
-    ThreeChainVABA,
     Others,
 }
 

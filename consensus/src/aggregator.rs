@@ -5,6 +5,7 @@ use crate::messages::{Timeout, Vote, QC, TC};
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, Signature};
 use std::collections::{HashMap, HashSet};
+use std::convert::TryInto;
 
 #[cfg(test)]
 #[path = "tests/aggregator_tests.rs"]
@@ -137,7 +138,11 @@ impl TCMaker {
         self.votes
             .push((author, timeout.signature, timeout.high_qc.round));
         self.weight += committee.stake(&author);
-        if self.weight >= committee.quorum_threshold() {
+        let mut threshold = committee.quorum_threshold();
+        if timeout.seq == 0 {
+            threshold = committee.size().try_into().unwrap();
+        }
+        if self.weight >= threshold {
             self.weight = 0; // Ensures TC is only created once.
             return Ok(Some(TC {
                 seq: timeout.seq,
