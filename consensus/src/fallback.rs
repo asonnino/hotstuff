@@ -99,7 +99,7 @@ impl Fallback {
             commit_channel,
             core_channel,
             round: 1,
-            view: 0,
+            view: 1,
             height: 0,
             last_voted_round: 0,
             high_qc: QC::genesis(),
@@ -352,7 +352,7 @@ impl Fallback {
 
     async fn handle_timeout(&mut self, timeout: &Timeout) -> ConsensusResult<()> {
         debug!("Processing {:?}", timeout);
-        if timeout.seq < self.view || (timeout.seq == self.view && self.fallback == 1) {
+        if timeout.seq != 0 && (timeout.seq < self.view || (timeout.seq == self.view && self.fallback == 1)) {
             return Ok(());
         }
 
@@ -363,26 +363,21 @@ impl Fallback {
         self.process_qc(&timeout.high_qc).await;
 
         if timeout.seq == 0 {
+            if self.timeout_set.contains(&timeout.author) {
+                return Ok(());
+            }
             self.timeout_set.insert(timeout.author);
 
+            // for synchronization, all nodes start the protocol
             if self.timeout_set.len() == self.committee.size() {
-                info!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", timeout.seq);
-    
-                // Enter fallback
-                self.fallback = 1;
-                self.timeout = 1;
-    
-                // Initialize fallback states
-                self.init_fallback_state();
-    
-                // Update the view to be the view of the TC.
-                self.advance_view(timeout.seq).await;
-    
-                // Make a new block for its fallback chain
-                self.height = 1;
-                self.generate_proposal(None, None, self.high_qc.clone()).await?;
-    
-                self.process_pending_blocks().await?;
+                info!("-------------------------------------------------------- All nodes start the protocol --------------------------------------------------------");
+
+                self.timer.reset();
+                if self.name == self.leader_elector.get_leader(self.round) {
+                    self.generate_proposal(None, None, self.high_qc.clone())
+                        .await
+                        .expect("Failed to send the first block");
+                }
             }
         } else {
             // Add the new vote to our aggregator and see if we have a quorum.
@@ -953,14 +948,35 @@ impl Fallback {
     }
 
     pub async fn run(&mut self) {
+        // for synchronization
+        let timeout = Timeout::new(
+            self.high_qc.clone(),
+            0,
+            self.name,
+            self.signature_service.clone(),
+        )
+        .await;
+        debug!("Created {:?}", timeout);
+        let message = ConsensusMessage::Timeout(timeout.clone());
+        Synchronizer::transmit(
+            message,
+            &self.name,
+            None,
+            &self.network_filter,
+            &self.committee,
+        )
+        .await
+        .expect("Failed to send the first timeout");
+        self.handle_timeout(&timeout).await.expect("Failed to handle the first timeout");
+
         // Upon booting, generate the very first block (if we are the leader).
         // Also, schedule a timer in case we don't hear from the leader.
-        self.timer.reset();
-        if self.name == self.leader_elector.get_leader(self.round) {
-            self.generate_proposal(None, None, self.high_qc.clone())
-                .await
-                .expect("Failed to send the first block");
-        }
+        // self.timer.reset();
+        // if self.name == self.leader_elector.get_leader(self.round) {
+        //     self.generate_proposal(None, None, self.high_qc.clone())
+        //         .await
+        //         .expect("Failed to send the first block");
+        // }
 
         // This is the main loop: it processes incoming blocks and votes,
         // and receive timeout notifications from our Timeout Manager.
