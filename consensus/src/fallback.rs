@@ -57,6 +57,7 @@ pub struct Fallback {
     timer: Timer,
     aggregator: Aggregator,
     timeout_set: HashSet<PublicKey>,    // set of nodes that send timeout for view 1
+    all_start_protocol: bool,   // True when all nodes started the protocol
 }
 
 impl Fallback {
@@ -122,6 +123,7 @@ impl Fallback {
             timer,
             aggregator,
             timeout_set: HashSet::new(),
+            all_start_protocol: False,
         }
     }
 
@@ -362,7 +364,7 @@ impl Fallback {
         // Process the QC embedded in the timeout.
         self.process_qc(&timeout.high_qc).await;
 
-        if timeout.seq == 0 {
+        if timeout.seq == 0 && !self.all_start_protocol {
             if self.timeout_set.contains(&timeout.author) {
                 return Ok(());
             }
@@ -378,8 +380,9 @@ impl Fallback {
                         .await
                         .expect("Failed to send the first block");
                 }
+                self.all_start_protocol = True;
             }
-        } else {
+        } else if self.all_start_protocol {
             // Add the new vote to our aggregator and see if we have a quorum.
             // Enter the fallback
             if let Some(tc) = self.aggregator.add_timeout(timeout.clone())? {
