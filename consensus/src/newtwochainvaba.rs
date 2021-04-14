@@ -255,7 +255,6 @@ impl NewTwoChainVABA {
     }
 
     fn clean_fallback_state(&mut self, view: &SeqNumber) {
-        self.height = 0;
         // Cleanup the pending fallback blocks
         self.fallback_pending_blocks.retain(|v, _| v >= &view);
         self.fallback_signed_qc_sender.retain(|v, _| v >= &view);
@@ -270,6 +269,10 @@ impl NewTwoChainVABA {
     }
 
     async fn local_timeout_view(&mut self) -> ConsensusResult<()> {
+        if self.view > 1 {
+            self.timer.reset();
+            return Ok(());
+        }
         warn!("Timeout reached for view {}", self.view);
         self.timeout = 1;  // Timeout and stop voting for non-fallback blocks
 
@@ -402,7 +405,7 @@ impl NewTwoChainVABA {
         }
         debug!("advance_view: previous view {} with leader {:?} and highqc {:?}, new view {}", self.view, self.leader_elector.get_fallback_leader(self.view), self.high_qc, view);
         // self.timer.update(self.parameters.timeout_delay);
-        self.timer.reset();
+        // self.timer.reset();
         self.view = view;
         info!("-------------------------------------------------------- Enter view {} --------------------------------------------------------", view);
 
@@ -952,7 +955,6 @@ impl NewTwoChainVABA {
         // Upon booting, generate the very first block (if we are the leader).
         // Also, schedule a timer in case we don't hear from the leader.
         self.timer.reset();
-        self.advance_view(1).await;
 
         // This is the main loop: it processes incoming blocks and votes,
         // and receive timeout notifications from our Timeout Manager.
