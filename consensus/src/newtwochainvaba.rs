@@ -158,7 +158,7 @@ impl NewTwoChainVABA {
         } else if qc.fallback == 1 {
             match self.leader_elector.get_fallback_leader(qc.view) {
                 None => return false,
-                Some(leader) => return qc.proposer == leader,
+                Some(leader) => return qc.acceptor == leader,
             }
         }
         false
@@ -511,36 +511,36 @@ impl NewTwoChainVABA {
         Ok(())
     }
 
-    // #[async_recursion]
-    // async fn print_chain(&mut self, block: &Block) -> ConsensusResult<()> {
-    //     if block.view < self.view {
-    //         return Ok(());
-    //     }
-    //     debug!("-------------------------------------------------------- printing chain start --------------------------------------------------------");
-    //     let mut current_block = block.clone();
-    //     while current_block.qc != QC::genesis() {
-    //         let parent = match self.synchronizer.get_parent_block(&current_block).await? {
-    //             Some(b) => b,
-    //             None => {
-    //                 debug!("Processing of {} suspended: missing parent", current_block.digest());
-    //                 break;
-    //             }
-    //         };
-    //         debug!("block {:?}", current_block);
-    //         current_block = parent;
-    //     }
-    //     debug!("block {:?}", current_block);
-    //     debug!("-------------------------------------------------------- printing chain end --------------------------------------------------------");
-    //     Ok(())
-    // }
+    #[async_recursion]
+    async fn print_chain(&mut self, block: &Block) -> ConsensusResult<()> {
+        if block.view < self.view {
+            return Ok(());
+        }
+        debug!("-------------------------------------------------------- printing chain start --------------------------------------------------------");
+        let mut current_block = block.clone();
+        while current_block.qc != QC::genesis() {
+            let parent = match self.synchronizer.get_parent_block(&current_block).await? {
+                Some(b) => b,
+                None => {
+                    debug!("Processing of {} suspended: missing parent", current_block.digest());
+                    break;
+                }
+            };
+            debug!("block {:?}", current_block);
+            current_block = parent;
+        }
+        debug!("block {:?}", current_block);
+        debug!("-------------------------------------------------------- printing chain end --------------------------------------------------------");
+        Ok(())
+    }
 
     fn update_fallback_high_qc(&mut self, qc: &QC) {
-        let fallback_high_qc = match self.fallback_qcs.get(&qc.proposer) {
+        let fallback_high_qc = match self.fallback_qcs.get(&qc.acceptor) {
             Some(qc) => qc.clone(),
             None => self.high_qc.clone()
         };
         if qc.view > fallback_high_qc.view || (qc.view == fallback_high_qc.view && qc.height > fallback_high_qc.height) {
-            self.fallback_qcs.insert(qc.proposer, qc.clone());
+            self.fallback_qcs.insert(qc.acceptor, qc.clone());
         }
     }
 
@@ -574,10 +574,15 @@ impl NewTwoChainVABA {
             ensure!(consecutive_rounds || block.qc == QC::genesis(), ConsensusError::NonConsecutiveRounds{rd1: b0.round, rd2: b1.round, rd3: block.round});
 
             if b0.round > self.last_committed_round {
+                debug!("{:?}", self.print_chain(block).await?);
+
                 // The new commit rule requires blocks of the same view.
                 let same_view = b0.view == b1.view;
                 // For fallback blocks, they need to be proposed by the fallback leader.
                 let endorsed = self.valid_qc(&b1.qc) && self.valid_qc(&block.qc);
+
+                debug!("endorsed {}, same view {}", endorsed, same_view);
+
                 if same_view && endorsed {
                     // if !b0.payload.is_empty() {
                     //     info!("Committed {}", b0);
@@ -624,12 +629,14 @@ impl NewTwoChainVABA {
             self.update_fallback_high_qc(&block.qc);
             
             self.height = block.qc.height+1;
+            let mut qc = block.qc.clone();
+            qc.acceptor = self.name;
+
             if block.qc.height == 1 {
-                self.generate_proposal(None, None, block.qc.clone()).await?;
-            }
-            if block.qc.height == 2 {
+                self.generate_proposal(None, None, qc).await?;
+            } else if block.qc.height == 2 {
                 // sign and multicast height-2 QC
-                let signed_qc = SignedQC::new(block.qc.clone(), None, self.name, self.signature_service.clone()).await;
+                let signed_qc = SignedQC::new(qc, None, self.name, self.signature_service.clone()).await;
                 let message = ConsensusMessage::SignedQC(signed_qc.clone());
                 Synchronizer::transmit(
                     message,

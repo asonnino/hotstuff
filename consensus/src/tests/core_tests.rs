@@ -117,6 +117,7 @@ async fn generate_proposal() {
         height: block.height,
         fallback: block.fallback,
         proposer: block.author,
+        acceptor: block.author,
         votes: votes
             .iter()
             .cloned()

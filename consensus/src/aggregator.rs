@@ -98,6 +98,7 @@ impl QCMaker {
                 height: vote.height,
                 fallback: vote.fallback,
                 proposer: vote.proposer,
+                acceptor: vote.proposer,
                 votes: self.votes.clone(),
             }));
         }

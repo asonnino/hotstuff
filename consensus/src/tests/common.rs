@@ -156,6 +156,7 @@ pub fn qc() -> QC {
         height: 0,
         fallback: 0,
         proposer: public_key,
+        acceptor: public_key,
         votes: Vec::new(),
     };
     let digest = qc.digest();
@@ -195,6 +196,7 @@ pub fn chain(keys: Vec<(PublicKey, SecretKey)>) -> Vec<Block> {
                 height: block.height,
                 fallback: block.fallback,
                 proposer: block.author,
+                acceptor: block.author,
                 votes: Vec::new(),
             };
             let digest = qc.digest();

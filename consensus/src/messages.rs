@@ -303,6 +303,7 @@ pub struct QC {
     pub height: HeightNumber,
     pub fallback: Bool,
     pub proposer: PublicKey,  // proposer of the block
+    pub acceptor: PublicKey,    // Node that accepts the QC and builds its f-chain extending it
     pub votes: Vec<(PublicKey, Signature)>,
 }
 
