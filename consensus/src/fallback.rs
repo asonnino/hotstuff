@@ -98,7 +98,7 @@ impl Fallback {
             commit_channel,
             core_channel,
             round: 1,
-            view: 0,
+            view: 1,
             height: 0,
             last_voted_round: 0,
             high_qc: QC::genesis(),
@@ -587,8 +587,8 @@ impl Fallback {
                     // }
 
                     self.commit_ancestors(&b0).await?;
-                    // // Cleanup the mempool.
-                    // self.mempool_driver.cleanup(&b0, &b1, &block).await;
+                    // Cleanup the mempool.
+                    self.mempool_driver.cleanup(&b0, &b1, &block).await;
                     
                     self.last_committed_round = b0.round;
                     debug!("Committed {:?}", b0);
