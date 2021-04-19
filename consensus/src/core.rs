@@ -352,8 +352,8 @@ impl Core {
             }
         }
 
-        // // Cleanup the mempool.
-        // self.mempool_driver.cleanup(&b0, &b1, &block).await;
+        // Cleanup the mempool.
+        self.mempool_driver.cleanup(&b0, &b1, &block).await;
 
         // Ensure the block's round is as expected.
         // This check is important: it prevents bad leaders from producing blocks

@@ -587,8 +587,11 @@ impl Fallback {
                     // }
 
                     self.commit_ancestors(&b0).await?;
-                    // Cleanup the mempool.
-                    self.mempool_driver.cleanup(&b0, &b1, &block).await;
+                    
+                    if b0.fallback == 0 && b1.fallback == 0 {
+                        // Cleanup the mempool.
+                        self.mempool_driver.cleanup(&b0, &b1, &block).await;
+                    }
                     
                     self.last_committed_round = b0.round;
                     debug!("Committed {:?}", b0);
