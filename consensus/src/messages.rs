@@ -129,39 +129,6 @@ impl Block {
         }
         Ok(())
     }
-
-    pub fn verify_three_chain(&self, committee: &Committee, pk_set: &PublicKeySet) -> ConsensusResult<()> {
-        // Ensure the authority has voting rights.
-        let voting_rights = committee.stake(&self.author);
-        ensure!(
-            voting_rights > 0,
-            ConsensusError::UnknownAuthority(self.author)
-        );
-
-        ensure!(
-            self.fallback == 1 && (self.height == 1 || self.height == 2 || self.height == 3),
-            ConsensusError::InvalidHeight(self.height)
-        );
-
-        // Check the signature.
-        self.signature.verify(&self.digest(), &self.author)?;
-
-        // Check the embedded QC.
-        if self.qc != QC::genesis() {
-            self.qc.verify_three_chain(committee)?;
-        }
-
-        // Check the TC embedded in the block (if any).
-        if let Some(ref tc) = self.tc {
-            tc.verify(committee)?;
-        }
-
-        // Check the coin embedded in the block (if any).
-        if let Some(ref coin) = self.coin {
-            coin.verify(committee, pk_set)?;
-        }
-        Ok(())
-    }
 }
 
 impl Hash for Block {
@@ -251,23 +218,6 @@ impl Vote {
         self.signature.verify(&self.digest(), &self.author)?;
         Ok(())
     }
-
-    pub fn verify_three_chain(&self, committee: &Committee) -> ConsensusResult<()> {
-        // Ensure the authority has voting rights.
-        ensure!(
-            committee.stake(&self.author) > 0,
-            ConsensusError::UnknownAuthority(self.author)
-        );
-
-        ensure!(
-            self.fallback == 1 && (self.height == 1 || self.height == 2 || self.height == 3),
-            ConsensusError::InvalidHeight(self.height)
-        );
-
-        // Check the signature.
-        self.signature.verify(&self.digest(), &self.author)?;
-        Ok(())
-    }
 }
 
 impl Hash for Vote {
@@ -334,31 +284,6 @@ impl QC {
 
         ensure!(
             (self.fallback == 0 && self.height == 0) || (self.fallback == 1 && (self.height == 1 || self.height == 2)),
-            ConsensusError::InvalidHeight(self.height)
-        );
-
-        // Check the signatures.
-        Signature::verify_batch(&self.digest(), &self.votes).map_err(ConsensusError::from)
-    }
-
-    pub fn verify_three_chain(&self, committee: &Committee) -> ConsensusResult<()> {
-        // Ensure the QC has a quorum.
-        let mut weight = 0;
-        let mut used = HashSet::new();
-        for (name, _) in self.votes.iter() {
-            ensure!(!used.contains(name), ConsensusError::AuthorityReuseinQC(*name));
-            let voting_rights = committee.stake(name);
-            ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
-            used.insert(*name);
-            weight += voting_rights;
-        }
-        ensure!(
-            weight >= committee.quorum_threshold(),
-            ConsensusError::QCRequiresQuorum
-        );
-
-        ensure!(
-            self.fallback == 1 && (self.height == 1 || self.height == 2 || self.height == 3),
             ConsensusError::InvalidHeight(self.height)
         );
 
@@ -436,23 +361,6 @@ impl SignedQC {
         }
         Ok(())
     }
-
-    pub fn verify_three_chain(&self, committee: &Committee) -> ConsensusResult<()> {
-        // Ensure the authority has voting rights.
-        ensure!(
-            committee.stake(&self.author) > 0,
-            ConsensusError::UnknownAuthority(self.author)
-        );
-
-        // Check the signature.
-        self.signature.verify(&self.digest(), &self.author)?;
-
-        // Check the embedded QC.
-        if self.qc != QC::genesis() {
-            self.qc.verify_three_chain(committee)?;
-        }
-        Ok(())
-    }
 }
 
 impl Hash for SignedQC {
@@ -514,23 +422,6 @@ impl Timeout {
         // Check the embedded QC.
         if self.high_qc != QC::genesis() {
             self.high_qc.verify(committee)?;
-        }
-        Ok(())
-    }
-
-    pub fn verify_three_chain(&self, committee: &Committee) -> ConsensusResult<()> {
-        // Ensure the authority has voting rights.
-        ensure!(
-            committee.stake(&self.author) > 0,
-            ConsensusError::UnknownAuthority(self.author)
-        );
-
-        // Check the signature.
-        self.signature.verify(&self.digest(), &self.author)?;
-
-        // Check the embedded QC.
-        if self.high_qc != QC::genesis() {
-            self.high_qc.verify_three_chain(committee)?;
         }
         Ok(())
     }
@@ -604,9 +495,6 @@ impl fmt::Debug for TC {
     }
 }
 
-// daniel: 
-// TODO: Shared randomness for VABA and async fallback
-//
 #[derive(Clone, Serialize, Deserialize)]
 pub struct RandomnessShare {
     pub seq: SeqNumber, // view

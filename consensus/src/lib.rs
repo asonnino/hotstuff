@@ -6,7 +6,6 @@ mod consensus;
 mod core;
 mod fallback;
 mod twochainvaba;
-mod newtwochainvaba;
 mod filter;
 mod leader;
 mod mempool;

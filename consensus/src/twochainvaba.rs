@@ -56,7 +56,6 @@ pub struct TwoChainVABA {
     fallback_leader_qcs: HashMap<SeqNumber, Vec<SignedQC>>,    // set of leader's qcs
     timer: Timer,
     aggregator: Aggregator,
-    timeout_set: HashSet<PublicKey>,    // set of nodes that send timeout for view 1
 }
 
 impl TwoChainVABA {
@@ -100,12 +99,12 @@ impl TwoChainVABA {
             core_channel,
             round: 1,
             view: 0,
-            height: 1,
+            height: 0,
             last_voted_round: 0,
             high_qc: QC::genesis(),
             last_committed_round: 0, // initially 0
             timeout: 0,
-            fallback: 1,
+            fallback: 0,
             fallback_voted_round,
             fallback_voted_height,
             fallback_qcs,
@@ -121,7 +120,6 @@ impl TwoChainVABA {
             fallback_leader_qcs: HashMap::new(),
             timer,
             aggregator,
-            timeout_set: HashSet::new(),
         }
     }
 
@@ -131,105 +129,64 @@ impl TwoChainVABA {
         self.store.write(key, value).await;
     }
 
-    // async fn transmit(
-    //     &mut self,
-    //     message: &ConsensusMessage,
-    //     to: Option<PublicKey>,
-    // ) -> ConsensusResult<()> {
-    //     sleep(Duration::from_millis(self.parameters.network_delay)).await;
-    //     let addresses = if let Some(to) = to {
-    //         debug!("Sending {:?} to {}", message, to);
-    //         vec![self.committee.address(&to)?]
-    //     } else {
-    //         debug!("Broadcasting {:?}", message);
-    //         self.committee.broadcast_addresses(&self.name)
-    //     };
-    //     let bytes = bincode::serialize(message).expect("Failed to serialize core message");
-    //     let message = NetMessage(Bytes::from(bytes), addresses);
-    //     if let Err(e) = self.network_channel.send(message).await {
-    //         panic!("Failed to send block through network channel: {}", e);
-    //     }
-    //     Ok(())
-    // }
-
     // -- Start Safety Module --
     // check if qc is nonfallback qc or endorsed fallback qc
     fn valid_qc(&mut self, qc: &QC) -> bool {
-        if qc.fallback == 0 {
-            return true;
-        } else if qc.fallback == 1 {
+        if qc.fallback == 1 {
             match self.leader_elector.get_fallback_leader(qc.view) {
                 None => return false,
-                Some(leader) => return qc.proposer == leader,
+                Some(leader) => return qc.acceptor == leader,
             }
         }
         false
     }
-    fn increase_last_voted_round(&mut self, target: SeqNumber) {
-        self.last_voted_round = max(self.last_voted_round, target);
-    }
 
     async fn make_vote(&mut self, block: &Block) -> Option<Vote> {
-        if block.fallback == 0 {
-            // For non-fallback blocks
-            // Check if we can vote for this block.
-            if self.timeout != 0 {
-                return None;
-            }
-            let safety_rule_1 = block.round > self.last_voted_round && block.round == block.qc.round+1;
-            let safety_rule_2 = block.qc.round >= self.high_qc.round;
-            if !(safety_rule_1 && safety_rule_2) {
-                return None;
-            }
-            // Ensure we won't vote for contradicting blocks.
-            self.increase_last_voted_round(block.round);
-        } else if block.fallback == 1 {
-            if self.fallback != 1 {
-                return None;
-            }
-            // For fallback blocks
-            let voted_height = match self.fallback_voted_height.get(&block.author) {
-                Some(h) => h,
-                None => {
-                    warn!("Receiving block from {} outside the committee", block.author);
-                    return None;
-                }
-            };
-            let voted_round = match self.fallback_voted_round.get(&block.author) {
-                Some(r) => r,
-                None => {
-                    warn!("Receiving block from {} outside the committee", block.author);
-                    return None;
-                }
-            };
-            if block.height <= *voted_height || block.round <= *voted_round {
-                return None;
-            }
-
-            match block.height {
-                1 => {
-                    // match &block.tc {
-                    //     None => return None,
-                    //     Some(tc) => {
-                    let safety_rule_1 = (block.qc.view > self.high_qc.view) || (block.qc.view == self.high_qc.view && block.qc.round >= self.high_qc.round);
-                    let safety_rule_2 = block.round == (block.qc.round+1);
-                    if !(safety_rule_1 && safety_rule_2) {
-                        return None;
-                    }
-                    //     }
-                    // }
-                },
-                2 => {
-                    let safety_rule = (block.round == block.qc.round+1) && (block.view == self.view) && (block.height == block.qc.height+1);
-                    if !(safety_rule) {
-                        return None;
-                    }
-                },
-                _ => return None,
-            }
-            self.fallback_voted_height.insert(block.author, block.height);
-            self.fallback_voted_round.insert(block.author, block.round);
+        if block.fallback != 1 || self.fallback != 1 {
+            return None;
         }
+        // For fallback blocks
+        let voted_height = match self.fallback_voted_height.get(&block.author) {
+            Some(h) => h,
+            None => {
+                warn!("Receiving block from {} outside the committee", block.author);
+                return None;
+            }
+        };
+        let voted_round = match self.fallback_voted_round.get(&block.author) {
+            Some(r) => r,
+            None => {
+                warn!("Receiving block from {} outside the committee", block.author);
+                return None;
+            }
+        };
+        if block.height <= *voted_height || block.round <= *voted_round {
+            return None;
+        }
+
+        match block.height {
+            1 => {
+                match &block.tc {
+                    None => return None,
+                    Some(tc) => {
+                        let safety_rule_1 = (block.qc.view > self.high_qc.view) || (block.qc.view == self.high_qc.view && block.qc.round >= self.high_qc.round);
+                        let safety_rule_2 = (block.round == block.qc.round+1) && (block.view == tc.seq);
+                        if !(safety_rule_1 && safety_rule_2) {
+                            return None;
+                        }
+                    }
+                }
+            },
+            2 => {
+                let safety_rule = (block.round == block.qc.round+1) && (block.view == self.view) && (block.height == block.qc.height+1);
+                if !(safety_rule) {
+                    return None;
+                }
+            },
+            _ => return None,
+        }
+        self.fallback_voted_height.insert(block.author, block.height);
+        self.fallback_voted_round.insert(block.author, block.round);
         
         // TODO: Write to storage preferred_round and last_voted_round.
         Some(Vote::new(&block, self.name, self.signature_service.clone()).await)
@@ -257,7 +214,6 @@ impl TwoChainVABA {
     }
 
     fn clean_fallback_state(&mut self, view: &SeqNumber) {
-        // self.height = 0;
         // Cleanup the pending fallback blocks
         self.fallback_pending_blocks.retain(|v, _| v >= &view);
         self.fallback_signed_qc_sender.retain(|v, _| v >= &view);
@@ -304,7 +260,7 @@ impl TwoChainVABA {
     #[async_recursion]
     async fn handle_vote(&mut self, vote: &Vote) -> ConsensusResult<()> {
         debug!("Processing {:?}", vote);
-        if vote.view < self.view || (vote.fallback == 0 && vote.round < self.round) || (vote.fallback == 1 && vote.view == self.view &&  vote.height < self.height) {
+        if vote.view < self.view || vote.fallback != 1 || (vote.fallback == 1 && vote.view == self.view &&  vote.height < self.height) {
             return Ok(());
         }
 
@@ -315,16 +271,6 @@ impl TwoChainVABA {
         if let Some(qc) = self.aggregator.add_vote(vote.clone())? {
             debug!("Assembled {:?}", qc);
 
-            // Process non-fallback QC directly.
-            if qc.fallback == 0 {
-                // Process the QC.
-                self.process_qc(&qc).await;
-
-                // Make a new block if we are the next leader and not in fallback
-                if self.fallback == 0 && self.name == self.leader_elector.get_leader(self.round) {
-                    self.generate_proposal(None, None, self.high_qc.clone()).await?;
-                }
-            }
             // Fallback QC of my proposed block
             if qc.fallback == 1 && qc.proposer == self.name {
                 // Update the highest fallback QC
@@ -356,7 +302,7 @@ impl TwoChainVABA {
 
     async fn handle_timeout(&mut self, timeout: &Timeout) -> ConsensusResult<()> {
         debug!("Processing {:?}", timeout);
-        if timeout.seq != 1 || self.timeout_set.contains(&timeout.author) {
+        if timeout.seq < self.view {
             return Ok(());
         }
 
@@ -366,10 +312,10 @@ impl TwoChainVABA {
         // Process the QC embedded in the timeout.
         self.process_qc(&timeout.high_qc).await;
 
-        self.timeout_set.insert(timeout.author);
-
-        if self.timeout_set.len() == self.committee.size() {
-            info!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", timeout.seq);
+        // Add the new vote to our aggregator and see if we have a quorum.
+        // Enter the fallback
+        if let Some(tc) = self.aggregator.add_timeout(timeout.clone())? {
+            debug!("Assembled {:?}", tc);
 
             // Enter fallback
             self.fallback = 1;
@@ -379,11 +325,11 @@ impl TwoChainVABA {
             self.init_fallback_state();
 
             // Update the view to be the view of the TC.
-            self.advance_view(timeout.seq).await;
+            self.advance_view(tc.seq).await;
 
             // Make a new block for its fallback chain
             self.height = 1;
-            self.generate_proposal(None, None, self.high_qc.clone()).await?;
+            self.generate_proposal(Some(tc), None, self.high_qc.clone()).await?;
 
             self.process_pending_blocks().await?;
         }
@@ -408,7 +354,7 @@ impl TwoChainVABA {
         }
         debug!("advance_view: previous view {} with leader {:?} and highqc {:?}, new view {}", self.view, self.leader_elector.get_fallback_leader(self.view), self.high_qc, view);
         // self.timer.update(self.parameters.timeout_delay);
-        self.timer.reset();
+        // self.timer.reset();
         self.view = view;
         info!("-------------------------------------------------------- Enter view {} --------------------------------------------------------", view);
 
@@ -416,8 +362,6 @@ impl TwoChainVABA {
         self.aggregator.cleanup_async(&self.view, &self.round);
         
         self.clean_fallback_state(&view);
-
-        self.init_fallback_state();
     }
 
     // -- End Pacemaker --
@@ -502,6 +446,8 @@ impl TwoChainVABA {
                 for x in &current_block.payload {
                     info!("Committed B{}({})", current_block.round, base64::encode(x));
                 }
+                // Cleanup the mempool.
+                self.mempool_driver.cleanup_async(&current_block).await;
             }
             debug!("Committed {}", current_block);
             let parent = match self.synchronizer.get_parent_block(&current_block).await? {
@@ -516,42 +462,47 @@ impl TwoChainVABA {
         Ok(())
     }
 
-    // #[async_recursion]
-    // async fn print_chain(&mut self, block: &Block) -> ConsensusResult<()> {
-    //     if block.view < self.view {
-    //         return Ok(());
-    //     }
-    //     debug!("-------------------------------------------------------- printing chain start --------------------------------------------------------");
-    //     let mut current_block = block.clone();
-    //     while current_block.qc != QC::genesis() {
-    //         let parent = match self.synchronizer.get_parent_block(&current_block).await? {
-    //             Some(b) => b,
-    //             None => {
-    //                 debug!("Processing of {} suspended: missing parent", current_block.digest());
-    //                 break;
-    //             }
-    //         };
-    //         debug!("block {:?}", current_block);
-    //         current_block = parent;
-    //     }
-    //     debug!("block {:?}", current_block);
-    //     debug!("-------------------------------------------------------- printing chain end --------------------------------------------------------");
-    //     Ok(())
-    // }
+    #[async_recursion]
+    async fn print_chain(&mut self, block: &Block) -> ConsensusResult<()> {
+        if block.view < self.view {
+            return Ok(());
+        }
+        debug!("-------------------------------------------------------- printing chain start --------------------------------------------------------");
+        let mut current_block = block.clone();
+        while current_block.qc != QC::genesis() {
+            let parent = match self.synchronizer.get_parent_block(&current_block).await? {
+                Some(b) => b,
+                None => {
+                    debug!("Processing of {} suspended: missing parent", current_block.digest());
+                    break;
+                }
+            };
+            debug!("block {:?}", current_block);
+            current_block = parent;
+        }
+        debug!("block {:?}", current_block);
+        debug!("-------------------------------------------------------- printing chain end --------------------------------------------------------");
+        Ok(())
+    }
 
     fn update_fallback_high_qc(&mut self, qc: &QC) {
-        let fallback_high_qc = match self.fallback_qcs.get(&qc.proposer) {
+        let fallback_high_qc = match self.fallback_qcs.get(&qc.acceptor) {
             Some(qc) => qc.clone(),
             None => self.high_qc.clone()
         };
         if qc.view > fallback_high_qc.view || (qc.view == fallback_high_qc.view && qc.height > fallback_high_qc.height) {
-            self.fallback_qcs.insert(qc.proposer, qc.clone());
+            self.fallback_qcs.insert(qc.acceptor, qc.clone());
         }
     }
 
     #[async_recursion]
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
-        debug!("Processing block {:?}", block);
+        debug!("Processing block {}, content {:?}", block.digest(), block);
+
+        ensure!(
+            block.fallback == 1,
+            ConsensusError::MalformedBlock(block.digest())
+        );
 
         // Let's see if we have the last three ancestors of the block, that is:
         //      b0 <- |qc0; b1| <- |qc1; b2| <- |qc2; block|
@@ -579,10 +530,15 @@ impl TwoChainVABA {
             ensure!(consecutive_rounds || block.qc == QC::genesis(), ConsensusError::NonConsecutiveRounds{rd1: b0.round, rd2: b1.round, rd3: block.round});
 
             if b0.round > self.last_committed_round {
+                debug!("{:?}", self.print_chain(block).await?);
+
                 // The new commit rule requires blocks of the same view.
                 let same_view = b0.view == b1.view;
                 // For fallback blocks, they need to be proposed by the fallback leader.
                 let endorsed = self.valid_qc(&b1.qc) && self.valid_qc(&block.qc);
+
+                debug!("endorsed {}, same view {}", endorsed, same_view);
+
                 if same_view && endorsed {
                     // if !b0.payload.is_empty() {
                     //     info!("Committed {}", b0);
@@ -598,7 +554,7 @@ impl TwoChainVABA {
                     // self.mempool_driver.cleanup(&b0, &b1, &block).await;
                     
                     self.last_committed_round = b0.round;
-                    // debug!("Committed {:?}", b0);
+                    debug!("Committed {:?}", b0);
                     if let Err(e) = self.commit_channel.send(b0.clone()).await {
                         warn!("Failed to send block through the commit channel: {}", e);
                     }
@@ -614,14 +570,7 @@ impl TwoChainVABA {
 
         // debug!("block round {}, view {}, fallback {}, self round {}, view {}, fallback {}", block.round, block.view, block.fallback, self.round, self.view, self.fallback);
 
-        if block.fallback != 1 || (block.fallback == 1 && block.view < self.view) {
-            return Ok(());
-        }
-
-        if block.view > self.view {
-            debug!("Add block {} to pending", block.digest());
-            let map = self.fallback_pending_blocks.entry(block.view).or_insert(HashMap::new());
-            map.insert((block.author, block.height), block.clone());
+        if block.view != self.view {
             return Ok(());
         }
 
@@ -630,12 +579,14 @@ impl TwoChainVABA {
             self.update_fallback_high_qc(&block.qc);
             
             self.height = block.qc.height+1;
+            let mut qc = block.qc.clone();
+            qc.acceptor = self.name;
+
             if block.qc.height == 1 {
-                self.generate_proposal(None, None, block.qc.clone()).await?;
-            }
-            if block.qc.height == 2 {
+                self.generate_proposal(None, None, qc).await?;
+            } else if block.qc.height == 2 {
                 // sign and multicast height-2 QC
-                let signed_qc = SignedQC::new(block.qc.clone(), None, self.name, self.signature_service.clone()).await;
+                let signed_qc = SignedQC::new(qc, None, self.name, self.signature_service.clone()).await;
                 let message = ConsensusMessage::SignedQC(signed_qc.clone());
                 Synchronizer::transmit(
                     message,
@@ -676,7 +627,6 @@ impl TwoChainVABA {
     }
 
     async fn handle_proposal(&mut self, block: &Block) -> ConsensusResult<()> {
-        debug!("handle_proposal block {:?}", block);
         // if block.view < self.view {
         //     debug!("Received block {} from previous view {}", block.digest(), block.view);
         //     return Ok(());
@@ -685,11 +635,7 @@ impl TwoChainVABA {
         // Ensure the block proposer is the right leader for the round.
         ensure!(
             block.fallback == 1,
-            ConsensusError::WrongLeader {
-                digest,
-                leader: block.author,
-                round: block.round
-            }
+            ConsensusError::MalformedBlock(digest)
         );
 
         // Check the block is correctly formed.
@@ -702,16 +648,16 @@ impl TwoChainVABA {
         // Process the QC. This may allow us to advance round.
         self.process_qc(&block.qc).await;
 
-        // // Not in fallback, process the fallback blocks when later enter the fallback
-        // // It is necessary to receive 2f+1 timeout messages with QCs to update the high_qc
-        // if block.fallback == 1 && self.fallback == 0 && block.view >= self.view {
-        //     if block.height == 1 || block.height == 2 {
-        //         debug!("Add block {} to pending", block.digest());
-        //         let map = self.fallback_pending_blocks.entry(block.view).or_insert(HashMap::new());
-        //         map.insert((block.author, block.height), block.clone());
-        //     }
-        //     return Ok(());
-        // }
+        // Not in fallback, process the fallback blocks when later enter the fallback
+        // It is necessary to receive 2f+1 timeout messages with QCs to update the high_qc
+        if block.fallback == 1 && block.view > self.view {
+            if block.height == 1 || block.height == 2 {
+                debug!("Add block {} to pending", block.digest());
+                let map = self.fallback_pending_blocks.entry(block.view).or_insert(HashMap::new());
+                map.insert((block.author, block.height), block.clone());
+            }
+            return Ok(());
+        }
         // Let's see if we have the block's data. If we don't, the mempool
         // will get it and then make us resume processing this block.
         if !self.mempool_driver.verify(block.clone()).await? {
@@ -747,7 +693,7 @@ impl TwoChainVABA {
         Ok(())
     }
 
-    // When receiving 2f+1 height-3 fallback QC, send randomness share
+    // When receiving 2f+1 height-2 fallback QC, send randomness share
     async fn handle_signed_qc(&mut self, signed_qc: SignedQC) -> ConsensusResult<()> {
         signed_qc.verify(&self.committee)?;
         self.update_fallback_high_qc(&signed_qc.qc);
@@ -768,9 +714,7 @@ impl TwoChainVABA {
 
                 // Collected 2f+1 height-2 fallback QC, send randomness share
                 *weight += self.committee.stake(&signed_qc.author);
-                debug!("handle_signed_qc {:?} weight {}", signed_qc, weight);
                 if *weight >= self.committee.quorum_threshold() {
-                    debug!("Enough SignedQCs for view {}", signed_qc.qc.view);
                     *weight = 0; // Only send randomness share once
                     let leader_high_qc = match self.fallback_qcs.get(&self.name) {
                         Some(qc) => qc.clone(),
@@ -791,9 +735,7 @@ impl TwoChainVABA {
                 }
             },
             Some(ref random_coin) => {
-                // self.handle_random_coin(random_coin.clone());
                 random_coin.verify(&self.committee, &self.pk_set)?;
-
                 let view = random_coin.seq;
                 if view < self.view {
                     return Ok(());
@@ -804,7 +746,6 @@ impl TwoChainVABA {
                     leader_qcs.push(signed_qc.clone());
                     return Ok(());
                 }
-
                 // Already receive from the sender.
                 let set = self.fallback_leader_qc_sender.entry(view).or_insert(HashSet::new());
                 if set.contains(&signed_qc.author) {
@@ -816,9 +757,7 @@ impl TwoChainVABA {
 
                 // Collected 2f+1 QC of the elected leader, exit the fallback
                 *weight += self.committee.stake(&signed_qc.author);
-                debug!("view change view {}, weight {}, handle_signed_qc {:?}", view, weight, signed_qc);
                 if *weight >= self.committee.quorum_threshold() {
-                    debug!("Enough view change SignedQCs for view {}", view);
                     *weight = 0; 
 
                     self.exit_fallback(random_coin).await?;
@@ -852,10 +791,8 @@ impl TwoChainVABA {
         shares.push(randomness_share.clone());
 
         *weight += self.committee.stake(&randomness_share.author);
-        debug!("handle_randomness_share {:?} weight {}", randomness_share, weight);
         // Collected enough shares, send random coin
         if *weight >= self.committee.random_coin_threshold() {
-            debug!("Enough randomness share for view {}", randomness_share.seq);
             *weight = 0; // Only send random coin once
             let mut sigs = BTreeMap::new();
             // Check the random shares.
@@ -883,7 +820,6 @@ impl TwoChainVABA {
         if random_coin.seq < self.view || self.fallback_random_coin.contains_key(&random_coin.seq) {
             return Ok(())
         }
-        debug!("handle_random_coin {:?}", random_coin);
 
         random_coin.verify(&self.committee, &self.pk_set)?;
         
@@ -901,33 +837,7 @@ impl TwoChainVABA {
 
         self.leader_elector.add_random_coin(random_coin.clone());
 
-        // self.exit_fallback(&random_coin).await?;
-
-
-        // sign and multicast leader's high QC
-        if let Some(qc) = self.fallback_qcs.get_mut(&random_coin.leader).cloned() {
-            self.process_qc(&qc).await;
-        }
-        let signed_qc = SignedQC::new(self.high_qc.clone(), Some(random_coin), self.name, self.signature_service.clone()).await;
-        let message = ConsensusMessage::SignedQC(signed_qc.clone());
-        Synchronizer::transmit(
-            message,
-            &self.name,
-            None,
-            &self.network_filter,
-            &self.committee,
-        )
-        .await?;
-        self.handle_signed_qc(signed_qc).await?;
-
-        if let Some(map) = self.fallback_leader_qcs.remove(&self.view) {
-            debug!("process fallback leader qcs {:?}", map);
-            for signed_qc in map {
-                if let Err(e) = self.handle_signed_qc(signed_qc).await {
-                    warn!("Failed to process pending signed_qc: {}", e);
-                }
-            }
-        }
+        self.exit_fallback(&random_coin).await?;
 
         Ok(())
     }
@@ -941,29 +851,33 @@ impl TwoChainVABA {
         if let Some(qc) = self.fallback_qcs.get_mut(&fallback_leader).cloned() {
             self.process_qc(&qc).await;
         }
-        // Exit fallback
-        // self.fallback = 0;
-        // self.timeout = 0;
-        self.advance_view(view+1).await;
-        // if self.name == self.leader_elector.get_leader(self.round) {
-        self.generate_proposal(None, Some(random_coin.clone()), self.high_qc.clone())
-            .await
-            .expect("Failed to send the first block after fallback");
-        // }
-        self.process_pending_blocks().await?;
-        Ok(())
+
+        // use timeout to exchange highest qcs
+        let timeout = Timeout::new(
+            self.high_qc.clone(),
+            self.view+1,
+            self.name,
+            self.signature_service.clone(),
+        )
+        .await;
+        debug!("Created {:?}", timeout);
+        self.timer.reset();
+        let message = ConsensusMessage::Timeout(timeout.clone());
+        Synchronizer::transmit(
+            message,
+            &self.name,
+            None,
+            &self.network_filter,
+            &self.committee,
+        )
+        .await?;
+        self.handle_timeout(&timeout).await
     }
 
     pub async fn run(&mut self) {
         // Upon booting, generate the very first block (if we are the leader).
         // Also, schedule a timer in case we don't hear from the leader.
         self.timer.reset();
-        self.advance_view(1).await;
-        // if self.name == self.leader_elector.get_leader(self.round) {
-        //     self.generate_proposal(None, None, self.high_qc.clone())
-        //         .await
-        //         .expect("Failed to send the first block");
-        // }
 
         // This is the main loop: it processes incoming blocks and votes,
         // and receive timeout notifications from our Timeout Manager.
