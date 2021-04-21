@@ -495,6 +495,8 @@ impl Fallback {
                 for x in &current_block.payload {
                     info!("Committed B{}({})", current_block.round, base64::encode(x));
                 }
+                // Cleanup the mempool.
+                self.mempool_driver.cleanup_async(&current_block).await;
             }
             debug!("Committed {}", current_block);
             let parent = match self.synchronizer.get_parent_block(&current_block).await? {
@@ -587,11 +589,6 @@ impl Fallback {
                     // }
 
                     self.commit_ancestors(&b0).await?;
-                    
-                    if b0.fallback == 0 && b1.fallback == 0 {
-                        // Cleanup the mempool.
-                        self.mempool_driver.cleanup(&b0, &b1, &block).await;
-                    }
                     
                     self.last_committed_round = b0.round;
                     debug!("Committed {:?}", b0);
