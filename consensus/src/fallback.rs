@@ -98,7 +98,7 @@ impl Fallback {
             commit_channel,
             core_channel,
             round: 1,
-            view: 1,
+            view: 0,
             height: 0,
             last_voted_round: 0,
             high_qc: QC::genesis(),
