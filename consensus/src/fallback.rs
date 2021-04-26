@@ -282,7 +282,7 @@ impl Fallback {
         .await;
         debug!("Created {:?}", timeout);
         if self.timer.get_duration() < 10 * self.parameters.timeout_delay {
-            self.timer.update(self.timer.get_duration() * 2);
+            self.timer.update(self.timer.get_duration() + self.parameters.timeout_delay);
         }
         self.timer.reset();
         let message = ConsensusMessage::Timeout(timeout.clone());

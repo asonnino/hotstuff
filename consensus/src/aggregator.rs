@@ -129,11 +129,16 @@ impl TCMaker {
     ) -> ConsensusResult<Option<TC>> {
         let author = timeout.author;
 
-        // Ensure it is the first time this authority votes.
-        ensure!(
-            self.used.insert(author),
-            ConsensusError::AuthorityReuseinTC(author)
-        );
+        if self.used.contains(&author) {
+            return Ok(None);
+        }
+        self.used.insert(author);
+
+        // // Ensure it is the first time this authority votes.
+        // ensure!(
+        //     self.used.insert(author),
+        //     ConsensusError::AuthorityReuseinTC(author)
+        // );
 
         // Add the timeout to the accumulator.
         self.votes
