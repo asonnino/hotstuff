@@ -24,14 +24,14 @@ impl Timer {
             .reset(Instant::now() + Duration::from_millis(self.duration));
     }
 
-    // pub fn update(&mut self, duration: u64) {
-    //     self.sleep = Box::pin(sleep(Duration::from_millis(duration)));
-    //     self.duration = duration;
-    // }
+    pub fn update(&mut self, duration: u64) {
+        self.sleep = Box::pin(sleep(Duration::from_millis(duration)));
+        self.duration = duration;
+    }
 
-    // pub fn get_duration(&self) -> u64 {
-    //     self.duration
-    // }
+    pub fn get_duration(&self) -> u64 {
+        self.duration
+    }
 }
 
 impl Future for Timer {
