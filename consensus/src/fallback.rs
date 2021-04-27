@@ -281,7 +281,7 @@ impl Fallback {
         )
         .await;
         debug!("Created {:?}", timeout);
-        if self.timer.get_duration() < 10 * self.parameters.timeout_delay {
+        if self.timer.get_duration() < 1000 {
             self.timer.update(self.timer.get_duration() + self.parameters.timeout_delay);
         }
         self.timer.reset();
