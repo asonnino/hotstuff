@@ -58,10 +58,10 @@ def destroy(ctx):
 
 
 @task
-def start(ctx):
-    ''' Start all machines '''
+def start(ctx, max=2):
+    ''' Start at most `max` machines per data center '''
     try:
-        InstanceManager.make().start_instances()
+        InstanceManager.make().start_instances(max)
     except BenchError as e:
         Print.error(e)
 
