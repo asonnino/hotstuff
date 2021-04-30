@@ -103,12 +103,20 @@ impl Core {
         info!("Payload {:?} contains {} B", digest, payload.size());
 
         #[cfg(feature = "benchmark")]
-        if payload.sample_txs > 0 {
-            // NOTE: This log entry is used to compute performance.
-            info!(
-                "Payload {:?} contains {} sample tx(s)",
-                digest, payload.sample_txs
-            );
+        for tx in &payload.transactions {
+            // Look for sample txs (they all start with 0).
+            if tx[0] == 0u8 {
+                // Gather the ids of the sample txs in the payload. All txs in the
+                // benchmark are guaranteed to be at least 9 bytes.
+                let id = u64::from_be_bytes(
+                    tx[1..9]
+                        .try_into()
+                        .expect(" All txs should be at least 9 bytes"),
+                );
+
+                // NOTE: This log entry is used to compute performance.
+                info!("Payload {:?} contains sample tx {}", digest, id);
+            }
         }
 
         // Store the payload.

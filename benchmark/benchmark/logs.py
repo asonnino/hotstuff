@@ -59,6 +59,7 @@ class LogParser:
             Print.warn(f'Nodes timed out {self.timeouts:,} time(s)')
 
     def _merge_results(self, input):
+        # Keep the earliest timestamp.
         merged = {}
         for x in input:
             for k, v in x:
@@ -78,8 +79,8 @@ class LogParser:
 
         misses = len(findall(r'rate too high', log))
 
-        tmp = findall(r'\[(.*Z) .* sample transaction', log)
-        samples = [self._to_posix(x) for x in tmp]
+        tmp = findall(r'\[(.*Z) .* sample transaction (\d+)', log)
+        samples = {int(s): self._to_posix(t) for t, s in tmp}
 
         return size, rate, start, misses, samples
 
@@ -98,8 +99,8 @@ class LogParser:
         tmp = findall(r'Payload ([^ ]+) contains (\d+) B', log)
         sizes = {d: int(s) for d, s in tmp}
 
-        tmp = findall(r'\[(.*Z) .* Payload ([^ ]+) contains (\d+) sample', log)
-        samples = {d: (int(s), self._to_posix(t)) for t, d, s in tmp}
+        tmp = findall(r'Payload ([^ ]+) contains sample tx (\d+)', log)
+        samples = {int(s): d for d, s in tmp}
 
         tmp = findall(r'.* WARN .* Timeout', log)
         timeouts = len(tmp)
@@ -155,16 +156,13 @@ class LogParser:
 
     def _end_to_end_latency(self):
         latency = []
-        for sent, data in zip(self.sent_samples, self.received_samples):
-            sent.sort()
-
-            ordered = sorted(list(data.items()), key=lambda x: x[1][1])
-            commit = []
-            for digest, (occurrences, _) in ordered:
-                tmp = self.commits.get(digest)
-                commit += [tmp] * occurrences
-
-            latency += [x - y for x, y in zip(commit, sent) if x is not None]
+        for sent, received in zip(self.sent_samples, self.received_samples):
+            for tx_id, batch_id in received.items():
+                if batch_id in self.commits:
+                    assert tx_id in sent  # We receive txs that we sent.
+                    start = sent[tx_id]
+                    end = self.commits[batch_id]
+                    latency += [end-start]
         return mean(latency) if latency else 0
 
     def result(self):
