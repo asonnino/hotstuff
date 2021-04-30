@@ -14,6 +14,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
+#[cfg(feature = "benchmark")]
+use std::convert::TryInto as _;
 
 #[cfg(test)]
 #[path = "tests/core_tests.rs"]
