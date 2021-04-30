@@ -214,11 +214,11 @@ class LogParser:
         assert isinstance(directory, str)
 
         clients = []
-        for filename in glob(join(directory, 'client-*.log')):
+        for filename in sorted(glob(join(directory, 'client-*.log'))):
             with open(filename, 'r') as f:
                 clients += [f.read()]
         nodes = []
-        for filename in glob(join(directory, 'node-*.log')):
+        for filename in sorted(glob(join(directory, 'node-*.log'))):
             with open(filename, 'r') as f:
                 nodes += [f.read()]
 
