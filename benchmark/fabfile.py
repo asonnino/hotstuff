@@ -58,10 +58,10 @@ def destroy(ctx):
 
 
 @task
-def start(ctx):
-    ''' Start all machines '''
+def start(ctx, max=2):
+    ''' Start at most `max` machines per data center '''
     try:
-        InstanceManager.make().start_instances()
+        InstanceManager.make().start_instances(max)
     except BenchError as e:
         Print.error(e)
 
@@ -98,11 +98,11 @@ def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
         'nodes': [10, 20],
-        'rate': [10_000, 50_000],
+        'rate': [20_000, 50_000],
         'tx_size': 512,
         'faults': 0,
         'duration': 300,
-        'runs': 1,
+        'runs': 2,
     }
     node_params = {
         'consensus': {

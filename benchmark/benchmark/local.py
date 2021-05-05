@@ -76,7 +76,7 @@ class LocalBench:
             nodes = nodes - self.faults
 
             # Run the clients (they will wait for the nodes to be ready).
-            addresses = committee.front_addresses()
+            addresses = committee.front
             rate_share = ceil(rate / nodes)
             timeout = self.node_parameters.timeout_delay
             client_logs = [PathMaker.client_log_file(i) for i in range(nodes)]
@@ -113,7 +113,7 @@ class LocalBench:
 
             # Parse logs and return the parser.
             Print.info('Parsing logs...')
-            return LogParser.process('./logs')
+            return LogParser.process('./logs', faults=self.faults)
 
         except (subprocess.SubprocessError, ParseError) as e:
             self._kill_nodes()
