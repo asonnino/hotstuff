@@ -12,10 +12,10 @@ use log::{error, warn};
 use network::NetMessage;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use store::Store;
-use tokio::sync::mpsc::{Receiver, Sender};
 #[cfg(feature = "benchmark")]
 use std::convert::TryInto as _;
+use store::Store;
+use tokio::sync::mpsc::{Receiver, Sender};
 
 #[cfg(test)]
 #[path = "tests/core_tests.rs"]
@@ -106,18 +106,17 @@ impl Core {
 
         #[cfg(feature = "benchmark")]
         for tx in &payload.transactions {
-            // Look for sample txs (they all start with 0).
-            if tx[0] == 0u8 {
-                // Gather the ids of the sample txs in the payload. All txs in the
-                // benchmark are guaranteed to be at least 9 bytes.
-                let id = u64::from_be_bytes(
-                    tx[1..9]
-                        .try_into()
-                        .expect(" All txs should be at least 9 bytes"),
-                );
-
-                // NOTE: This log entry is used to compute performance.
-                info!("Payload {:?} contains sample tx {}", digest, id);
+            // Look for sample txs (they all start with 0) and gather their
+            // txs id (the next 8 bytes).
+            if tx[0] == 0u8 && tx.len() > 8{
+                if let Ok(id) = tx[1..9].try_into() {
+                    // NOTE: This log entry is used to compute performance.
+                    info!(
+                        "Payload {:?} contains sample tx {}",
+                        digest,
+                        u64::from_be_bytes(id)
+                    );
+                }
             }
         }
 
