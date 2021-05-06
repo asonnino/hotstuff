@@ -13,6 +13,7 @@ use log::{debug, error, info, warn};
 use network::NetMessage;
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
+use std::collections::VecDeque;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::{sleep, Duration};
@@ -48,6 +49,7 @@ pub struct Core {
     round: RoundNumber,
     last_voted_round: RoundNumber,
     preferred_round: RoundNumber,
+    last_committed_round: RoundNumber,
     high_qc: QC,
     timer: Timer,
     aggregator: Aggregator,
@@ -85,6 +87,7 @@ impl Core {
             round: 1,
             last_voted_round: 0,
             preferred_round: 0,
+            last_committed_round: 0,
             high_qc: QC::genesis(),
             timer,
             aggregator,
@@ -116,8 +119,52 @@ impl Core {
 
         // Ensure we won't vote for contradicting blocks.
         self.increase_last_voted_round(block.round);
+
         // TODO [issue #15]: Write to storage preferred_round and last_voted_round.
+
         Some(Vote::new(&block, self.name, self.signature_service.clone()).await)
+    }
+
+    async fn commit(&mut self, block: Block) -> ConsensusResult<()> {
+        if self.last_committed_round >= block.round {
+            return Ok(());
+        }
+
+        let mut to_commit = VecDeque::new();
+        to_commit.push_back(block.clone());
+
+        // Ensure we commit the entire chain. This is needed after view-change.
+        let mut parent = block.clone();
+        while self.last_committed_round + 1 < parent.round {
+            let ancestor = self
+                .synchronizer
+                .get_parent_block(&parent)
+                .await?
+                .expect("We should have all the ancestors by now");
+            to_commit.push_front(ancestor.clone());
+            parent = ancestor;
+        }
+
+        // Save the last committed block.
+        self.last_committed_round = block.round;
+
+        // Send all the newly committed blocks to the node's application layer.
+        while let Some(block) = to_commit.pop_back() {
+            if !block.payload.is_empty() {
+                info!("Committed {}", block);
+
+                #[cfg(feature = "benchmark")]
+                for x in &block.payload {
+                    // NOTE: This log entry is used to compute performance.
+                    info!("Committed B{}({})", block.round, base64::encode(x));
+                }
+            }
+            debug!("Committed {:?}", block);
+            if let Err(e) = self.commit_channel.send(block).await {
+                warn!("Failed to send block through the commit channel: {}", e);
+            }
+        }
+        Ok(())
     }
     // -- End Safety Module --
 
@@ -304,19 +351,7 @@ impl Core {
         let mut commit_rule = b0.round + 1 == b1.round;
         commit_rule &= b1.round + 1 == b2.round;
         if commit_rule {
-            if !b0.payload.is_empty() {
-                info!("Committed {}", b0);
-
-                #[cfg(feature = "benchmark")]
-                for x in &b0.payload {
-                    // NOTE: This log entry is used to compute performance.
-                    info!("Committed B{}({})", b0.round, base64::encode(x));
-                }
-            }
-            debug!("Committed {:?}", b0);
-            if let Err(e) = self.commit_channel.send(b0.clone()).await {
-                warn!("Failed to send block through the commit channel: {}", e);
-            }
+            self.commit(b0.clone()).await?;
         }
         self.update_preferred_round(b1.round);
 

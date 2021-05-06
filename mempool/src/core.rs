@@ -108,7 +108,7 @@ impl Core {
         for tx in &payload.transactions {
             // Look for sample txs (they all start with 0) and gather their
             // txs id (the next 8 bytes).
-            if tx[0] == 0u8 && tx.len() > 8{
+            if tx[0] == 0u8 && tx.len() > 8 {
                 if let Ok(id) = tx[1..9].try_into() {
                     // NOTE: This log entry is used to compute performance.
                     info!(
