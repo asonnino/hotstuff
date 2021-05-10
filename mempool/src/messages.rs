@@ -12,8 +12,6 @@ pub struct Payload {
     pub transactions: Vec<Transaction>,
     pub author: PublicKey,
     pub signature: Signature,
-    #[cfg(feature = "benchmark")]
-    pub sample_txs: usize,
 }
 
 impl Payload {
@@ -21,14 +19,11 @@ impl Payload {
         transactions: Vec<Transaction>,
         author: PublicKey,
         mut signature_service: SignatureService,
-        #[cfg(feature = "benchmark")] sample_txs: usize,
     ) -> Self {
         let payload = Self {
             transactions,
             author,
             signature: Signature::default(),
-            #[cfg(feature = "benchmark")]
-            sample_txs,
         };
         let signature = signature_service.request_signature(payload.digest()).await;
         Self {

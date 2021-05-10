@@ -88,7 +88,7 @@ class LocalBench:
             nodes = nodes - self.faults
 
             # Run the clients (they will wait for the nodes to be ready).
-            addresses = committee.front_addresses()
+            addresses = committee.front
             rate_share = ceil(rate / nodes)
             timeout = self.node_parameters.timeout_delay
             client_logs = [PathMaker.client_log_file(i) for i in range(nodes)]

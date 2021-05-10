@@ -19,7 +19,7 @@ impl RandomLeaderElector {
     pub fn get_leader(&self, round: SeqNumber) -> PublicKey {
         let mut keys: Vec<_> = self.committee.authorities.keys().cloned().collect();
         keys.sort();
-        keys[(round / 2) as usize % self.committee.size()]
+        keys[round as usize % self.committee.size()]
     }
 
     pub fn add_random_coin(&mut self, random_coin: RandomCoin) {

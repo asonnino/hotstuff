@@ -12,8 +12,6 @@ struct Runner {
     min_block_delay: u64,
     name: PublicKey,
     signature_service: SignatureService,
-    #[cfg(feature = "benchmark")]
-    sample_txs: usize,
     client_channel: Receiver<Transaction>,
     core_channel: Sender<MempoolMessage>,
     request_channel: Receiver<oneshot::Sender<Payload>>,
@@ -36,8 +34,6 @@ impl Runner {
             min_block_delay,
             name,
             signature_service,
-            #[cfg(feature = "benchmark")]
-            sample_txs: 0,
             client_channel,
             core_channel,
             request_channel,
@@ -51,12 +47,6 @@ impl Runner {
             false => None,
         };
 
-        #[cfg(feature = "benchmark")]
-        if tx.iter().all(|x| *x == 5u8) {
-            // Count the number of sample transactions in the payload.
-            self.sample_txs += 1;
-        }
-
         self.transactions.push(tx);
         self.size += length;
         ret
@@ -64,25 +54,12 @@ impl Runner {
 
     async fn make(&mut self) -> Payload {
         let transactions = self.transactions.drain(..).collect();
-        #[cfg(feature = "benchmark")]
-        let sample_txs = self.sample_txs;
 
         // Cleanup state.
         self.size = 0;
-        #[cfg(feature = "benchmark")]
-        {
-            self.sample_txs = 0;
-        }
 
         // Make a payload.
-        Payload::new(
-            transactions,
-            self.name,
-            self.signature_service.clone(),
-            #[cfg(feature = "benchmark")]
-            sample_txs,
-        )
-        .await
+        Payload::new(transactions, self.name, self.signature_service.clone()).await
     }
 
     async fn run(&mut self) {

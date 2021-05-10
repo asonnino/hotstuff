@@ -163,13 +163,13 @@ class Bench:
 
         names = [x.name for x in keys]
         consensus_addr = [f'{x}:{self.settings.consensus_port}' for x in hosts]
-        mempool_addr = [f'{x}:{self.settings.mempool_port}' for x in hosts]
         front_addr = [f'{x}:{self.settings.front_port}' for x in hosts]
         tss_keys = []
         for i in range(nodes):
             tss_keys += [TSSKey.from_file(PathMaker.threshold_key_file(i))]
         ids = [x.id for x in tss_keys]
-        committee = Committee(names, ids, consensus_addr, mempool_addr, front_addr)
+        mempool_addr = [f'{x}:{self.settings.mempool_port}' for x in hosts]
+        committee = Committee(names, ids, consensus_addr, front_addr, mempool_addr)
         committee.print(PathMaker.committee_file())
 
         node_parameters.print(PathMaker.parameters_file())
@@ -200,9 +200,8 @@ class Bench:
         # Filter all faulty nodes from the client addresses (or they will wait
         # for the faulty nodes to be online).
         committee = Committee.load(PathMaker.committee_file())
-        addresses = committee.front_addresses()
-        addresses = [x for x in addresses if any(host in x for host in hosts)]
-        rate_share = ceil(rate / committee.size())
+        addresses = [f'{x}:{self.settings.front_port}' for x in hosts]
+        rate_share = ceil(rate / committee.size())  # Take faults into account.
         timeout = node_parameters.timeout_delay
         client_logs = [PathMaker.client_log_file(i) for i in range(len(hosts))]
         for host, addr, log_file in zip(hosts, addresses, client_logs):
