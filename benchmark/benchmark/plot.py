@@ -73,6 +73,7 @@ class Ploter:
         plt.ylim(bottom=0)
         plt.xlabel(x_label)
         plt.ylabel(y_label[0])
+        plt.grid()
         ax = plt.gca()
         ax.xaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
         ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
@@ -147,14 +148,14 @@ class Ploter:
         for f in params.faults:
             for n in params.nodes:
                 robustness_files += glob(
-                    PathMaker.agg_file(n, 'x', tx_size, f, 'any')
+                    PathMaker.agg_file('robustness', n, 'x', tx_size, f, 'any')
                 )
                 latency_files += glob(
-                    PathMaker.agg_file(n, 'any', tx_size, f, 'any')
+                    PathMaker.agg_file('latency', n, 'any', tx_size, f, 'any')
                 )
             for l in params.max_latency:
                 tps_files += glob(
-                    PathMaker.agg_file('x', 'any', tx_size, f, l)
+                    PathMaker.agg_file('tps', 'x', 'any', tx_size, f, l)
                 )
 
         # Make the plots.

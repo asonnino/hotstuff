@@ -65,10 +65,10 @@ class PathMaker:
         return 'plots'
 
     @staticmethod
-    def agg_file(nodes, rate, tx_size, faults, max_latency):
+    def agg_file(type, nodes, rate, tx_size, faults, max_latency):
         return join(
             PathMaker.plots_path(),
-            f'agg-{nodes}-{rate}-{tx_size}-{faults}-{max_latency}.txt'
+            f'{type}-{nodes}-{rate}-{tx_size}-{faults}-{max_latency}.txt'
         )
 
     @staticmethod

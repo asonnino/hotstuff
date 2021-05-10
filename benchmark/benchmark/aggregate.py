@@ -98,7 +98,7 @@ class LogAggregator:
         results = [
             self._print_latency(), self._print_tps(), self._print_robustness()
         ]
-        for records in results:
+        for name, records in results:
             for setup, values in records.items():
                 data = '\n'.join(
                     f' Variable value: X={x}\n{y}' for x, y in values
@@ -114,6 +114,7 @@ class LogAggregator:
                     '-----------------------------------------\n'
                 )
                 filename = PathMaker.agg_file(
+                    name,
                     setup.nodes, 
                     setup.rate, 
                     setup.tx_size, 
@@ -135,7 +136,7 @@ class LogAggregator:
             results.sort(key=lambda x: x[2])
             organized[setup] = [(x, y) for x, y, _ in results]
 
-        return organized
+        return 'latency', organized
 
     def _print_tps(self):
         records = deepcopy(self.records)
@@ -159,7 +160,7 @@ class LogAggregator:
                         organized[setup] += [(nodes, result)]
 
         [v.sort(key=lambda x: x[0]) for v in organized.values()]
-        return organized
+        return 'tps', organized
 
     def _print_robustness(self):
         records = deepcopy(self.records)
@@ -170,4 +171,4 @@ class LogAggregator:
             organized[setup] += [(rate, result)]
 
         [v.sort(key=lambda x: x[0]) for v in organized.values()]
-        return organized
+        return 'robustness', organized
