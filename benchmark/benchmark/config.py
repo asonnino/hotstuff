@@ -52,10 +52,6 @@ class Committee:
         with open(filename, 'w') as f:
             dump(self.json, f, indent=4, sort_keys=True)
 
-    def front_addresses(self):
-        authorities = self.json['mempool']['authorities']
-        return [x['front_address'] for x in authorities.values()]
-
     def size(self):
         return len(self.json['consensus']['authorities'])
 
