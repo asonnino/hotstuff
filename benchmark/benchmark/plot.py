@@ -2,6 +2,7 @@ from re import findall, search, split
 import matplotlib.pyplot as plt
 from matplotlib.ticker import StrMethodFormatter
 from glob import glob
+from itertools import cycle
 
 from benchmark.utils import PathMaker
 from benchmark.config import PlotParameters
@@ -54,6 +55,7 @@ class Ploter:
 
     def _plot(self, x_label, y_label, y_axis, z_axis, type):
         plt.figure()
+        markers = cycle(['o', 'v', 's', 'p', 'D', 'P'])
         self.results.sort(key=self._natural_keys, reverse=(type == 'tps'))
         for result in self.results:
             y_values, y_err = y_axis(result)
@@ -63,10 +65,8 @@ class Ploter:
 
             plt.errorbar(
                 x_values, y_values, yerr=y_err,  # uplims=True, lolims=True,
-                marker='o', label=z_axis(result), linestyle='dotted'
+                marker=next(markers), label=z_axis(result), linestyle='dotted'
             )
-            # if type == 'latency':
-            #    plt.yscale('log')
 
         plt.legend(loc='lower center', bbox_to_anchor=(0.5, 1), ncol=2)
         plt.xlim(xmin=0)

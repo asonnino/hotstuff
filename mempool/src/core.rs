@@ -12,6 +12,8 @@ use log::{error, warn};
 use network::NetMessage;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+#[cfg(feature = "benchmark")]
+use std::convert::TryInto as _;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -103,12 +105,19 @@ impl Core {
         info!("Payload {:?} contains {} B", digest, payload.size());
 
         #[cfg(feature = "benchmark")]
-        if payload.sample_txs > 0 {
-            // NOTE: This log entry is used to compute performance.
-            info!(
-                "Payload {:?} contains {} sample tx(s)",
-                digest, payload.sample_txs
-            );
+        for tx in &payload.transactions {
+            // Look for sample txs (they all start with 0) and gather their
+            // txs id (the next 8 bytes).
+            if tx[0] == 0u8 && tx.len() > 8 {
+                if let Ok(id) = tx[1..9].try_into() {
+                    // NOTE: This log entry is used to compute performance.
+                    info!(
+                        "Payload {:?} contains sample tx {}",
+                        digest,
+                        u64::from_be_bytes(id)
+                    );
+                }
+            }
         }
 
         // Store the payload.
