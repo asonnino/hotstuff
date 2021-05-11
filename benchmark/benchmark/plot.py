@@ -64,8 +64,8 @@ class Ploter:
                 raise PlotError('Unequal number of x, y, and y_err values')
 
             plt.errorbar(
-                x_values, y_values, yerr=y_err,  # uplims=True, lolims=True,
-                marker=next(markers), label=z_axis(result), linestyle='dotted'
+                x_values, y_values, yerr=y_err, label=z_axis(result),
+                linestyle='dotted', marker=next(markers), capsize=3
             )
 
         plt.legend(loc='lower center', bbox_to_anchor=(0.5, 1), ncol=2)
