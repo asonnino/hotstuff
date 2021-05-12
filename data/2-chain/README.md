@@ -41,4 +41,4 @@ node_params = {
     }
 }
 ```
-We then decrease the consensus timeout delay (`'timeout_delay`) to 5 seconds when benchmarking with faults.
+We then decrease the consensus timeout delay (`timeout_delay`) to 5 seconds when benchmarking with faults.
