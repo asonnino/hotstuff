@@ -24,7 +24,7 @@ The content of our [settings.json](https://github.com/asonnino/hotstuff/blob/mai
     }
 }
 ```
-When benchmarking the code base with not faulty nodes, we set the following `node_params`:
+When benchmarking the code base with not faulty nodes, we set the following `node_params` in our [fabfile](https://github.com/asonnino/hotstuff/blob/main/benchmark/fabfile.py):
 ```python
 node_params = {
     'consensus': {
