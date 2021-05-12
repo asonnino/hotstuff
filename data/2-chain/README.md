@@ -1,4 +1,4 @@
-This folder contains benchmark data for the tagged as [v0.2.4](https://github.com/asonnino/hotstuff/tree/v0.2.4).
+This folder contains some benchmark data and plots for the tagged as [v0.2.4](https://github.com/asonnino/hotstuff/tree/v0.2.4).
 
 ### Experimental step
 The content of our [settings.json](https://github.com/asonnino/hotstuff/blob/main/benchmark/settings.json) file looks as follows:
