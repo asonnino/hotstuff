@@ -78,7 +78,7 @@ async fn main() {
         ("deploy", Some(subm)) => {
             let nodes = subm.value_of("nodes").unwrap();
             match nodes.parse::<usize>() {
-                Ok(nodes) if nodes > 0 => match deploy_testbed(nodes) {
+                Ok(nodes) if nodes > 1 => match deploy_testbed(nodes) {
                     Ok(handles) => {
                         let _ = join_all(handles).await;
                     }
