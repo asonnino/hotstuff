@@ -10,4 +10,4 @@ where:
 - `TX_SIZE`: The size of each transactions.
 - `FAULTS`: The number of faulty (dead) nodes.
 
-For instnace, a file name called `bench-10-30000-512-3.txt` indicates it contains results of a benchmark run with 10 nodes, 30,000 input rate, a transaction size of 512B, and 3 faulty nodes.
+For instnace, a file called `bench-10-30000-512-3.txt` indicates it contains results of a benchmark run with 10 nodes, 30,000 input rate, a transaction size of 512B, and 3 faulty nodes.
