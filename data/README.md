@@ -1,3 +1,4 @@
+# Experimental Data
 This folder contains some raw data and plots obtained running a geo-replicated benchmark on AWS as explained in the [wiki](https://github.com/asonnino/hotstuff/wiki). The section [Interpreting Results](https://github.com/asonnino/hotstuff/wiki/Interpreting-the-Results) of the Wiki provides insights on how to interpret those results.
 
 The filename format of raw data is the following:
