@@ -1,4 +1,4 @@
-## 2-Chain HotStuff
+# 2-Chain HotStuff
 This folder contains some benchmark data and plots for the tagged as [v0.2.4](https://github.com/asonnino/hotstuff/tree/v0.2.4).
 
 ### Experimental step
