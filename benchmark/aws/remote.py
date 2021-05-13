@@ -196,6 +196,9 @@ class Bench:
         # Kill any potentially unfinished run and delete logs.
         self.kill(hosts=hosts, delete_logs=True)
 
+        Print.info('Killed previous instances')
+        sleep(10)
+
         # Run the clients (they will wait for the nodes to be ready).
         # Filter all faulty nodes from the client addresses (or they will wait
         # for the faulty nodes to be online).
@@ -213,6 +216,9 @@ class Bench:
                 nodes=addresses
             )
             self._background_run(host, cmd, log_file)
+
+        Print.info('Clients boosted...')
+        sleep(10)
 
         # Run the nodes.
         key_files = [PathMaker.key_file(i) for i in range(len(hosts))]
