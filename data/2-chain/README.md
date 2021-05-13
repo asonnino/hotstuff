@@ -28,16 +28,16 @@ When benchmarking the code base with not faulty nodes, we set the following `nod
 ```python
 node_params = {
     'consensus': {
-        'timeout_delay': 30_000,
-        'sync_retry_delay': 100_000,
-        'max_payload_size': 1_000,
-        'min_block_delay': 100
+        'timeout_delay': 30_000,      # ms
+        'sync_retry_delay': 100_000,  # ms
+        'max_payload_size': 1_000,    # bytes
+        'min_block_delay': 100        # ms
     },
     'mempool': {
-        'queue_capacity': 100_000,
-        'sync_retry_delay': 100_000,
-        'max_payload_size': 500_000,
-        'min_block_delay': 100
+        'queue_capacity': 100_000,    # bytes
+        'sync_retry_delay': 100_000,  # ms
+        'max_payload_size': 500_000,  # bytes
+        'min_block_delay': 100        # ms
     }
 }
 ```
