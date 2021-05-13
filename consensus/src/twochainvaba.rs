@@ -327,11 +327,22 @@ impl TwoChainVABA {
             // Update the view to be the view of the TC.
             self.advance_view(tc.seq).await;
 
+            // Broadcast the TC.
+            let message = ConsensusMessage::TC(tc.clone());
+            Synchronizer::transmit(
+                message,
+                &self.name,
+                None,
+                &self.network_filter,
+                &self.committee,
+            )
+            .await?;
+
+            self.process_pending_blocks().await?;
+
             // Make a new block for its fallback chain
             self.height = 1;
             self.generate_proposal(Some(tc), None, self.high_qc.clone()).await?;
-
-            self.process_pending_blocks().await?;
         }
         Ok(())
     }
@@ -689,7 +700,44 @@ impl TwoChainVABA {
     }
 
     // With async fallback, do not handle TC directly. The reason is that any node needs to receive 2f+1 Timeout to update the high QC.
-    async fn handle_tc(&mut self, _: TC) -> ConsensusResult<()> {
+    // Update: the above is not necessary anymore, since each replica can adopt others' certified fallback block
+    // So now replica can enter fallback when receiving TC
+    async fn handle_tc(&mut self, tc: TC) -> ConsensusResult<()> {
+        debug!("Processing {:?}", tc);
+        if tc.seq < self.view || (tc.seq == self.view && self.fallback == 1) {
+            return Ok(());
+        }
+
+        // Ensure the TC is well formed.
+        tc.verify(&self.committee)?;
+
+        // Enter the fallback
+        self.fallback = 1;
+        self.timeout = 1;
+
+        // Initialize fallback states
+        self.init_fallback_state();
+
+        // Update the view to be the view of the TC.
+        self.advance_view(tc.seq).await;
+
+        // Broadcast the TC.
+        let message = ConsensusMessage::TC(tc.clone());
+        Synchronizer::transmit(
+            message,
+            &self.name,
+            None,
+            &self.network_filter,
+            &self.committee,
+        )
+        .await?;
+
+        self.process_pending_blocks().await?;
+
+        // Make a new block for its fallback chain
+        self.height = 1;
+        self.generate_proposal(Some(tc), None, self.high_qc.clone()).await?;
+
         Ok(())
     }
 
