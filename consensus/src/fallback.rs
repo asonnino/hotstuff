@@ -277,13 +277,11 @@ impl Fallback {
     }
 
     async fn local_timeout_view(&mut self) -> ConsensusResult<()> {
-        if self.round == self.round_after_fallback {
+        if self.round == self.round_after_fallback && self.timeout == 0 {
             self.exp_num *= self.parameters.exp;
-            self.exp_counter = 0;
             warn!("Timeout right after fallback, number of fallback to execute {}", self.exp_num);
-        } else {
+        } else if self.round > self.round_after_fallback && self.timeout == 0  {
             self.exp_num = 1;
-            self.exp_counter = 0;
         }
         warn!("Timeout reached for view {}", self.view);
         self.timeout = 1;  // Timeout and stop voting for non-fallback blocks
@@ -1010,6 +1008,7 @@ impl Fallback {
             .await
             .expect("Failed to handle timeouts");
         } else {
+            self.exp_counter = 0;
             if self.name == self.leader_elector.get_leader(self.round) {
                 self.generate_proposal(None, Some(random_coin.clone()), self.high_qc.clone())
                     .await
