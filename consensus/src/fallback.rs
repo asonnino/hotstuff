@@ -54,6 +54,9 @@ pub struct Fallback {
     fallback_leader_qc_sender: HashMap<SeqNumber, HashSet<PublicKey>>,    // set of nodes that send high qc of the elected leader
     fallback_leader_qc_weight: HashMap<SeqNumber, Stake>,    // weight of the above nodes
     fallback_leader_qcs: HashMap<SeqNumber, Vec<SignedQC>>,    // set of leader's qcs
+    exp_num: u64,   // number of fallbacks to execution, exponentially increasing everytime when leader fails immediately after fallback, reset when leader does not fail
+    exp_counter: u64,   // number of fallback executed
+    round_after_fallback: SeqNumber, // record the round number after exiting the fallback
     timer: Timer,
     aggregator: Aggregator,
 }
@@ -118,6 +121,9 @@ impl Fallback {
             fallback_leader_qc_sender: HashMap::new(),
             fallback_leader_qc_weight: HashMap::new(),
             fallback_leader_qcs: HashMap::new(),
+            exp_num: 1,
+            exp_counter: 0,
+            round_after_fallback: 1,
             timer,
             aggregator,
         }
@@ -175,7 +181,8 @@ impl Fallback {
                 return None;
             }
             let safety_rule_1 = block.round > self.last_voted_round && block.round == block.qc.round+1;
-            let safety_rule_2 = block.qc.round >= self.high_qc.round;
+            // let safety_rule_2 = block.qc.round >= self.high_qc.round;
+            let safety_rule_2 = (block.qc.view > self.high_qc.view) || (block.qc.view == self.high_qc.view && block.qc.round >= self.high_qc.round);
             if !(safety_rule_1 && safety_rule_2) {
                 return None;
             }
@@ -270,6 +277,14 @@ impl Fallback {
     }
 
     async fn local_timeout_view(&mut self) -> ConsensusResult<()> {
+        if self.round == self.round_after_fallback {
+            self.exp_num *= self.parameters.exp;
+            self.exp_counter = 0;
+            warn!("Timeout right after fallback, number of fallback to execute {}", self.exp_num);
+        } else {
+            self.exp_num = 1;
+            self.exp_counter = 0;
+        }
         warn!("Timeout reached for view {}", self.view);
         self.timeout = 1;  // Timeout and stop voting for non-fallback blocks
 
@@ -281,9 +296,6 @@ impl Fallback {
         )
         .await;
         debug!("Created {:?}", timeout);
-        if self.timer.get_duration() < 1000 {
-            self.timer.update(self.timer.get_duration() + self.parameters.timeout_delay);
-        }
         self.timer.reset();
         let message = ConsensusMessage::Timeout(timeout.clone());
         Synchronizer::transmit(
@@ -403,7 +415,6 @@ impl Fallback {
         if round < self.round {
             return;
         }
-        self.timer.update(self.parameters.timeout_delay);
         self.timer.reset();
         self.round = round + 1;
         debug!("Moved to round {}", self.round);
@@ -415,7 +426,6 @@ impl Fallback {
             return;
         }
         debug!("advance_view: previous view {} with leader {:?} and highqc {:?}, new view {}", self.view, self.leader_elector.get_fallback_leader(self.view), self.high_qc, view);
-        self.timer.update(self.parameters.timeout_delay);
         self.timer.reset();
         self.view = view;
         info!("-------------------------------------------------------- Enter view {} --------------------------------------------------------", view);
@@ -971,10 +981,40 @@ impl Fallback {
         self.fallback = 0;
         self.timeout = 0;
         self.advance_view(view+1).await;
-        if self.name == self.leader_elector.get_leader(self.round) {
-        self.generate_proposal(None, Some(random_coin.clone()), self.high_qc.clone())
+
+        self.round_after_fallback = self.round;
+        if self.exp_counter < self.exp_num {
+            // Immediately timeouts
+            // use timeout to exchange highest qcs
+            self.exp_counter += 1 ;
+
+            let timeout = Timeout::new(
+                self.high_qc.clone(),
+                self.view+1,
+                self.name,
+                self.signature_service.clone(),
+            )
+            .await;
+            debug!("Created {:?}", timeout);
+            self.timer.reset();
+            let message = ConsensusMessage::Timeout(timeout.clone());
+            Synchronizer::transmit(
+                message,
+                &self.name,
+                None,
+                &self.network_filter,
+                &self.committee,
+            )
+            .await.expect("Failed to send timeouts");
+            self.handle_timeout(&timeout)
             .await
-            .expect("Failed to send the first block after fallback");
+            .expect("Failed to handle timeouts");
+        } else {
+            if self.name == self.leader_elector.get_leader(self.round) {
+                self.generate_proposal(None, Some(random_coin.clone()), self.high_qc.clone())
+                    .await
+                    .expect("Failed to send the first block after fallback");
+            }
         }
     }
 

@@ -20,12 +20,13 @@ def local(ctx):
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 500,
+            'timeout_delay': 2000,
             'sync_retry_delay': 10_000,
             'max_payload_size': 500,
             'min_block_delay': 0,
             'network_delay': 2000,
-            'ddos': True # True for DDOS attack on the leader, False otherwise
+            'ddos': False, # True for DDOS attack on the leader, False otherwise
+            'exp': 1 # multiplicative factor for exponential fallback
         },
         'mempool': {
             'queue_capacity': 10_000,
@@ -33,7 +34,7 @@ def local(ctx):
             'max_payload_size': 15_000,
             'min_block_delay': 0
         },
-        'protocol': 2, # 0 for HotStuff, 1 for AsyncHotStuff, 2 for TwoChainVABA
+        'protocol': 1, # 0 for HotStuff, 1 for AsyncHotStuff, 2 for TwoChainVABA
     }
     try:
         ret = LocalBench(bench_params, node_params).run(debug=False).result()
@@ -61,7 +62,7 @@ def destroy(ctx):
 
 
 @task
-def start(ctx, max=14):
+def start(ctx, max=2):
     ''' Start at most `max` machines per data center '''
     try:
         InstanceManager.make().start_instances(max)
@@ -100,21 +101,22 @@ def install(ctx):
 def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
-        'nodes': [70],
-        'rate': [40_000],
+        'nodes': [10],
+        'rate': [80_000, 85_000],
         'tx_size': 512,
         'faults': 0, 
         'duration': 300,
-        'runs': 1,
+        'runs': 3,
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 1_000,
+            'timeout_delay': 5_000,
             'sync_retry_delay': 100_000,
             'max_payload_size': 1_000,
             'min_block_delay': 100,
             'network_delay': 4_000,
-            'ddos': True # True for DDOS attack on the leader, False otherwise
+            'ddos': False, # True for DDOS attack on the leader, False otherwise
+            'exp': 2 # multiplicative factor for exponential fallback
         },
         'mempool': {
             'queue_capacity': 100_000,

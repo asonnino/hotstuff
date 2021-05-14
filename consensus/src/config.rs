@@ -29,6 +29,7 @@ pub struct Parameters {
     pub max_payload_size: usize,
     pub min_block_delay: u64,
     pub ddos: bool,
+    pub exp: u64,
 }
 
 impl Default for Parameters {
@@ -40,6 +41,7 @@ impl Default for Parameters {
             network_delay: 100,
             max_payload_size: 500,
             ddos: false,
+            exp: 1,
         }
     }
 }

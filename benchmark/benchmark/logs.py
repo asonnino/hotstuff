@@ -109,6 +109,14 @@ class LogParser:
 
         configs = {
             'consensus': {
+                'timeout_delay': int(
+                    search(r'Consensus timeout delay .* (\d+)', log).group(1)
+                ),
+                'sync_retry_delay': int(
+                    search(
+                        r'Consensus synchronizer retry delay .* (\d+)', log
+                    ).group(1)
+                ),
                 'max_payload_size': int(
                     search(r'Consensus max payload size .* (\d+)', log).group(1)
                 ),
@@ -117,6 +125,14 @@ class LogParser:
                 ),
             },
             'mempool': {
+                'queue_capacity': int(
+                    search(r'Mempool queue capacity set to (\d+)', log).group(1)
+                ),
+                # 'sync_retry_delay': int(
+                #     search(
+                #         r'Mempool synchronizer retry delay .* (\d+)', log
+                #     ).group(1)
+                # ),
                 'max_payload_size': int(
                     search(r'Mempool max payload size .* (\d+)', log).group(1)
                 ),
@@ -173,8 +189,12 @@ class LogParser:
         end_to_end_tps, end_to_end_bps, duration = self._end_to_end_throughput()
         end_to_end_latency = self._end_to_end_latency() * 1000
 
+        consensus_timeout_delay = self.configs[0]['consensus']['timeout_delay']
+        consensus_sync_retry_delay = self.configs[0]['consensus']['sync_retry_delay']
         consensus_max_payload_size = self.configs[0]['consensus']['max_payload_size']
         consensus_min_block_delay = self.configs[0]['consensus']['min_block_delay']
+        mempool_queue_capacity = self.configs[0]['mempool']['queue_capacity']
+        # mempool_sync_retry_delay = self.configs[0]['mempool']['sync_retry_delay']
         mempool_max_payload_size = self.configs[0]['mempool']['max_payload_size']
         mempool_min_block_delay = self.configs[0]['mempool']['min_block_delay']
 
@@ -192,8 +212,12 @@ class LogParser:
             f' Faults: {self.faults} nodes\n'
             f' Execution time: {round(duration):,} s\n'
             '\n'
+            f' Consensus timeout delay: {consensus_timeout_delay:,} ms\n'
+            f' Consensus sync retry delay: {consensus_sync_retry_delay:,} ms\n'
             f' Consensus max payloads size: {consensus_max_payload_size:,} B\n'
             f' Consensus min block delay: {consensus_min_block_delay:,} ms\n'
+            f' Mempool queue capacity: {mempool_queue_capacity:,} B\n'
+            # f' Mempool sync retry delay: {mempool_sync_retry_delay:,} ms\n'
             f' Mempool max payloads size: {mempool_max_payload_size:,} B\n'
             f' Mempool min block delay: {mempool_min_block_delay:,} ms\n'
             '\n'

@@ -11,7 +11,7 @@
     "repo": {
         "name": "hotstuff",
         "url": "https://github.com/danielxiangzl/hotstuff.git",
-        "branch": "scripts_fix"
+        "branch": "async_fallback"
     },
     "instances": {
         "type": "m5d.8xlarge",
