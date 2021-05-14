@@ -123,7 +123,7 @@ impl Fallback {
             fallback_leader_qcs: HashMap::new(),
             exp_num: 1,
             exp_counter: 0,
-            round_after_fallback: 1,
+            round_after_fallback: 0,
             timer,
             aggregator,
         }
