@@ -768,6 +768,8 @@ impl Fallback {
         // Ensure the TC is well formed.
         tc.verify(&self.committee)?;
 
+        info!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", tc.seq);
+
         // Enter the fallback
         self.fallback = 1;
         self.timeout = 1;
