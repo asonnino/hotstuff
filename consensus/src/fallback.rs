@@ -986,9 +986,10 @@ impl Fallback {
             // use timeout to exchange highest qcs
             self.exp_counter += 1 ;
 
+            self.timeout = 1;
             let timeout = Timeout::new(
                 self.high_qc.clone(),
-                self.view+1,
+                self.view,
                 self.name,
                 self.signature_service.clone(),
             )
