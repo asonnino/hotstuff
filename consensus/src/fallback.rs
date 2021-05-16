@@ -38,7 +38,7 @@ pub struct Fallback {
     height: HeightNumber,    // current height, 0 not in fallback, 1 or 2 in fallback
     last_voted_round: SeqNumber,
     high_qc: QC,
-    last_committed_round: SeqNumber,    // round of last committed block, initially -1
+    last_committed_round: SeqNumber,    // round of last committed block, initially 0
     timeout: Bool,  // 0 if not timeout, 1 if timeout
     fallback: Bool, // 0 if not in async fallback, 1 if in async fallback
     fallback_voted_round: HashMap<PublicKey, SeqNumber>,    // voted round number during fallback for each i
@@ -56,7 +56,7 @@ pub struct Fallback {
     fallback_leader_qcs: HashMap<SeqNumber, Vec<SignedQC>>,    // set of leader's qcs
     exp_num: u64,   // number of fallbacks to execution, exponentially increasing everytime when leader fails immediately after fallback, reset when leader does not fail
     exp_counter: u64,   // number of fallback executed
-    round_after_fallback: SeqNumber, // record the round number after exiting the fallback
+    receive_from_leader: bool,  // whether receive proposal from the leader aftr fallback
     timer: Timer,
     aggregator: Aggregator,
 }
@@ -122,8 +122,8 @@ impl Fallback {
             fallback_leader_qc_weight: HashMap::new(),
             fallback_leader_qcs: HashMap::new(),
             exp_num: 1,
-            exp_counter: 0,
-            round_after_fallback: 0,
+            exp_counter: 1,
+            receive_from_leader: false,
             timer,
             aggregator,
         }
@@ -277,12 +277,6 @@ impl Fallback {
     }
 
     async fn local_timeout_view(&mut self) -> ConsensusResult<()> {
-        if self.round == self.round_after_fallback && self.timeout == 0 {
-            self.exp_num *= self.parameters.exp;
-            warn!("Timeout right after fallback, number of fallback to execute {}", self.exp_num);
-        } else if self.round > self.round_after_fallback && self.timeout == 0  {
-            self.exp_num = 1;
-        }
         warn!("Timeout reached for view {}", self.view);
         self.timeout = 1;  // Timeout and stop voting for non-fallback blocks
 
@@ -378,6 +372,14 @@ impl Fallback {
             debug!("Assembled {:?}", tc);
             info!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", tc.seq);
 
+            if !self.receive_from_leader && self.exp_counter == 1 {
+                self.exp_num *= self.parameters.exp;
+                warn!("Timeout right after fallback, number of fallback to execute {}", self.exp_num);
+            } else if self.receive_from_leader {
+                self.exp_num = 1;
+                // warn!("Timeout right after fallback, number of fallback to execute {}, last_committed_round {}, last_committed_round_after_fallback {}", self.exp_num, self.last_committed_round, self.last_committed_round_after_fallback);
+            }
+
             // Enter fallback
             self.fallback = 1;
             self.timeout = 1;
@@ -432,6 +434,8 @@ impl Fallback {
         self.aggregator.cleanup_async(&self.view, &self.round);
         
         self.clean_fallback_state(&view);
+
+        self.receive_from_leader = false;
     }
 
     // -- End Pacemaker --
@@ -716,6 +720,10 @@ impl Fallback {
         // Process the QC. This may allow us to advance round.
         self.process_qc(&block.qc).await;
 
+        if block.fallback == 0 && block.view == self.view {
+            self.receive_from_leader = true;
+        }
+
         // Not in fallback, process the fallback blocks when later enter the fallback
         // It is necessary to receive 2f+1 timeout messages with QCs to update the high_qc
         if block.fallback == 1 && self.fallback == 0 && block.view >= self.view {
@@ -769,6 +777,14 @@ impl Fallback {
         tc.verify(&self.committee)?;
 
         info!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", tc.seq);
+
+        if !self.receive_from_leader && self.exp_counter == 1 {
+            self.exp_num *= self.parameters.exp;
+            warn!("Timeout right after fallback, number of fallback to execute {}", self.exp_num);
+        } else if self.receive_from_leader {
+            self.exp_num = 1;
+            // warn!("Timeout right after fallback, number of fallback to execute {}, last_committed_round {}, last_committed_round_after_fallback {}", self.exp_num, self.last_committed_round, self.last_committed_round_after_fallback);
+        }
 
         // Enter the fallback
         self.fallback = 1;
@@ -982,7 +998,6 @@ impl Fallback {
         self.timeout = 0;
         self.advance_view(view+1).await;
 
-        self.round_after_fallback = self.round;
         if self.exp_counter < self.exp_num {
             // Immediately timeouts
             // use timeout to exchange highest qcs
@@ -1011,7 +1026,7 @@ impl Fallback {
             .await
             .expect("Failed to handle timeouts");
         } else {
-            self.exp_counter = 0;
+            self.exp_counter = 1;
             if self.name == self.leader_elector.get_leader(self.round) {
                 self.generate_proposal(None, Some(random_coin.clone()), self.high_qc.clone())
                     .await
