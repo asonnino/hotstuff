@@ -5,7 +5,6 @@ mod config;
 mod consensus;
 mod core;
 mod fallback;
-mod twochainvaba;
 mod filter;
 mod leader;
 mod mempool;

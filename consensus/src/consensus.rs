@@ -1,6 +1,5 @@
 use crate::config::{Committee, Parameters, Protocol};
 use crate::fallback::Fallback;
-use crate::twochainvaba::TwoChainVABA;
 use crate::core::{ConsensusMessage, Core};
 use crate::error::ConsensusResult;
 use crate::filter::Filter;
@@ -126,13 +125,14 @@ impl Consensus {
                     /* core_channel */ rx_core,
                     /* network_filter */ tx_filter,
                     /* commit_channel */ tx_commit,
+                    1,
                 );
                 tokio::spawn(async move {
                     hotstuff_with_fallback.run().await;
                 });
             },
-            Protocol::TwoChainVABA => {  // Run TwoChainVABA
-                let mut vaba = TwoChainVABA::new(
+            Protocol::TwoChainVABA => {  // Run TwoChainVABA, which is just fallback with timeout=0
+                let mut vaba = Fallback::new(
                     name,
                     committee,
                     parameters,
@@ -145,6 +145,7 @@ impl Consensus {
                     /* core_channel */ rx_core,
                     /* network_filter */ tx_filter,
                     /* commit_channel */ tx_commit,
+                    100000, // set the exp number to be large, so that timeout immediately after fallback
                 );
                 tokio::spawn(async move {
                     vaba.run().await;

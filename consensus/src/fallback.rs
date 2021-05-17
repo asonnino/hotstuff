@@ -76,6 +76,7 @@ impl Fallback {
         core_channel: Receiver<ConsensusMessage>,
         network_filter: Sender<FilterInput>,
         commit_channel: Sender<Block>,
+        exp_num: u64,
     ) -> Self {
         let aggregator = Aggregator::new(committee.clone());
         let timer = Timer::new(parameters.timeout_delay);
@@ -121,7 +122,7 @@ impl Fallback {
             fallback_leader_qc_sender: HashMap::new(),
             fallback_leader_qc_weight: HashMap::new(),
             fallback_leader_qcs: HashMap::new(),
-            exp_num: 1,
+            exp_num,
             exp_counter: 1,
             receive_from_leader: false,
             timer,
