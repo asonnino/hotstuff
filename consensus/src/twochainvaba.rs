@@ -704,7 +704,7 @@ impl TwoChainVABA {
     // So now replica can enter fallback when receiving TC
     async fn handle_tc(&mut self, tc: TC) -> ConsensusResult<()> {
         debug!("Processing {:?}", tc);
-        if tc.seq < self.view || (tc.seq == self.view && self.fallback == 1) {
+        if tc.seq < self.view {
             return Ok(());
         }
 
