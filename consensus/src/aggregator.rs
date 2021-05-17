@@ -146,7 +146,7 @@ impl TCMaker {
         self.weight += committee.stake(&author);
         let mut threshold = committee.quorum_threshold();
         if timeout.seq == 0 {
-            threshold = committee.size().try_into().unwrap();
+            threshold = committee.large_threshold();
         }
         if self.weight >= threshold {
             self.weight = 0; // Ensures TC is only created once.
