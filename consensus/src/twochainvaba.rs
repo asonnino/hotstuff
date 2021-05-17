@@ -473,28 +473,28 @@ impl TwoChainVABA {
         Ok(())
     }
 
-    #[async_recursion]
-    async fn print_chain(&mut self, block: &Block) -> ConsensusResult<()> {
-        if block.view < self.view {
-            return Ok(());
-        }
-        debug!("-------------------------------------------------------- printing chain start --------------------------------------------------------");
-        let mut current_block = block.clone();
-        while current_block.qc != QC::genesis() {
-            let parent = match self.synchronizer.get_parent_block(&current_block).await? {
-                Some(b) => b,
-                None => {
-                    debug!("Processing of {} suspended: missing parent", current_block.digest());
-                    break;
-                }
-            };
-            debug!("block {:?}", current_block);
-            current_block = parent;
-        }
-        debug!("block {:?}", current_block);
-        debug!("-------------------------------------------------------- printing chain end --------------------------------------------------------");
-        Ok(())
-    }
+    // #[async_recursion]
+    // async fn print_chain(&mut self, block: &Block) -> ConsensusResult<()> {
+    //     if block.view < self.view {
+    //         return Ok(());
+    //     }
+    //     debug!("-------------------------------------------------------- printing chain start --------------------------------------------------------");
+    //     let mut current_block = block.clone();
+    //     while current_block.qc != QC::genesis() {
+    //         let parent = match self.synchronizer.get_parent_block(&current_block).await? {
+    //             Some(b) => b,
+    //             None => {
+    //                 debug!("Processing of {} suspended: missing parent", current_block.digest());
+    //                 break;
+    //             }
+    //         };
+    //         debug!("block {:?}", current_block);
+    //         current_block = parent;
+    //     }
+    //     debug!("block {:?}", current_block);
+    //     debug!("-------------------------------------------------------- printing chain end --------------------------------------------------------");
+    //     Ok(())
+    // }
 
     fn update_fallback_high_qc(&mut self, qc: &QC) {
         let fallback_high_qc = match self.fallback_qcs.get(&qc.acceptor) {
@@ -541,7 +541,7 @@ impl TwoChainVABA {
             ensure!(consecutive_rounds || block.qc == QC::genesis(), ConsensusError::NonConsecutiveRounds{rd1: b0.round, rd2: b1.round, rd3: block.round});
 
             if b0.round > self.last_committed_round {
-                debug!("{:?}", self.print_chain(block).await?);
+                // debug!("{:?}", self.print_chain(block).await?);
 
                 // The new commit rule requires blocks of the same view.
                 let same_view = b0.view == b1.view;
