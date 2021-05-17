@@ -228,7 +228,7 @@ impl TwoChainVABA {
     }
 
     async fn local_timeout_view(&mut self) -> ConsensusResult<()> {
-        if self.view > 1 {
+        if self.view > 0 {
             self.timer.reset();
             return Ok(());
         }
@@ -237,7 +237,7 @@ impl TwoChainVABA {
 
         let timeout = Timeout::new(
             self.high_qc.clone(),
-            self.view,
+            1,
             self.name,
             self.signature_service.clone(),
         )
@@ -458,7 +458,7 @@ impl TwoChainVABA {
                     info!("Committed B{}({})", current_block.round, base64::encode(x));
                 }
                 // Cleanup the mempool.
-                // self.mempool_driver.cleanup_async(&current_block).await;
+                self.mempool_driver.cleanup_async(&current_block).await;
             }
             debug!("Committed {}", current_block);
             let parent = match self.synchronizer.get_parent_block(&current_block).await? {
@@ -704,7 +704,7 @@ impl TwoChainVABA {
     // So now replica can enter fallback when receiving TC
     async fn handle_tc(&mut self, tc: TC) -> ConsensusResult<()> {
         debug!("Processing {:?}", tc);
-        if tc.seq < self.view {
+        if tc.seq <= self.view {
             return Ok(());
         }
 
