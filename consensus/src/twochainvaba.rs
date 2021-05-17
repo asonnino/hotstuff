@@ -702,7 +702,7 @@ impl TwoChainVABA {
     // With async fallback, do not handle TC directly. The reason is that any node needs to receive 2f+1 Timeout to update the high QC.
     // Update: the above is not necessary anymore, since each replica can adopt others' certified fallback block
     // So now replica can enter fallback when receiving TC
-    async fn handle_tc(&mut self, tc: TC) -> ConsensusResult<()> {
+    async fn handle_tc(&mut self, _tc: TC) -> ConsensusResult<()> {
         // debug!("Processing {:?}", tc);
         // if tc.seq <= self.view {
         //     return Ok(());

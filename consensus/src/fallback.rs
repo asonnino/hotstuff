@@ -767,51 +767,51 @@ impl Fallback {
     // With async fallback, do not handle TC directly. The reason is that any node needs to receive 2f+1 Timeout to update the high QC.
     // Update: the above is not necessary anymore, since each replica can adopt others' certified fallback block
     // So now replica can enter fallback when receiving TC
-    async fn handle_tc(&mut self, tc: TC) -> ConsensusResult<()> {
-        debug!("Processing {:?}", tc);
-        if tc.seq < self.view || (tc.seq == self.view && self.fallback == 1) {
-            return Ok(());
-        }
+    async fn handle_tc(&mut self, _tc: TC) -> ConsensusResult<()> {
+        // debug!("Processing {:?}", tc);
+        // if tc.seq < self.view || (tc.seq == self.view && self.fallback == 1) {
+        //     return Ok(());
+        // }
 
-        // Ensure the TC is well formed.
-        tc.verify(&self.committee)?;
+        // // Ensure the TC is well formed.
+        // tc.verify(&self.committee)?;
 
-        info!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", tc.seq);
+        // info!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", tc.seq);
 
-        if !self.receive_from_leader && self.exp_counter == 1 {
-            self.exp_num *= self.parameters.exp;
-            warn!("Timeout right after fallback, number of fallback to execute {}", self.exp_num);
-        } else if self.receive_from_leader {
-            self.exp_num = 1;
-            // warn!("Timeout right after fallback, number of fallback to execute {}, last_committed_round {}, last_committed_round_after_fallback {}", self.exp_num, self.last_committed_round, self.last_committed_round_after_fallback);
-        }
+        // if !self.receive_from_leader && self.exp_counter == 1 {
+        //     self.exp_num *= self.parameters.exp;
+        //     warn!("Timeout right after fallback, number of fallback to execute {}", self.exp_num);
+        // } else if self.receive_from_leader {
+        //     self.exp_num = 1;
+        //     // warn!("Timeout right after fallback, number of fallback to execute {}, last_committed_round {}, last_committed_round_after_fallback {}", self.exp_num, self.last_committed_round, self.last_committed_round_after_fallback);
+        // }
 
-        // Enter the fallback
-        self.fallback = 1;
-        self.timeout = 1;
+        // // Enter the fallback
+        // self.fallback = 1;
+        // self.timeout = 1;
 
-        // Initialize fallback states
-        self.init_fallback_state();
+        // // Initialize fallback states
+        // self.init_fallback_state();
 
-        // Update the view to be the view of the TC.
-        self.advance_view(tc.seq).await;
+        // // Update the view to be the view of the TC.
+        // self.advance_view(tc.seq).await;
 
-        // Broadcast the TC.
-        let message = ConsensusMessage::TC(tc.clone());
-        Synchronizer::transmit(
-            message,
-            &self.name,
-            None,
-            &self.network_filter,
-            &self.committee,
-        )
-        .await?;
+        // // Broadcast the TC.
+        // let message = ConsensusMessage::TC(tc.clone());
+        // Synchronizer::transmit(
+        //     message,
+        //     &self.name,
+        //     None,
+        //     &self.network_filter,
+        //     &self.committee,
+        // )
+        // .await?;
 
-        self.process_pending_blocks().await?;
+        // self.process_pending_blocks().await?;
 
-        // Make a new block for its fallback chain
-        self.height = 1;
-        self.generate_proposal(Some(tc), None, self.high_qc.clone()).await?;
+        // // Make a new block for its fallback chain
+        // self.height = 1;
+        // self.generate_proposal(Some(tc), None, self.high_qc.clone()).await?;
 
         Ok(())
     }
