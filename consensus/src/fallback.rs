@@ -57,6 +57,7 @@ pub struct Fallback {
     exp_num: u64,   // number of fallbacks to execution, exponentially increasing everytime when leader fails immediately after fallback, reset when leader does not fail
     exp_counter: u64,   // number of fallback executed
     receive_from_leader: bool,  // whether receive proposal from the leader aftr fallback
+    is_vaba: bool,  // whether running vaba or not
     timer: Timer,
     aggregator: Aggregator,
 }
@@ -76,7 +77,7 @@ impl Fallback {
         core_channel: Receiver<ConsensusMessage>,
         network_filter: Sender<FilterInput>,
         commit_channel: Sender<Block>,
-        exp_num: u64,
+        is_vaba: bool,
     ) -> Self {
         let aggregator = Aggregator::new(committee.clone());
         let timer = Timer::new(parameters.timeout_delay);
@@ -122,9 +123,10 @@ impl Fallback {
             fallback_leader_qc_sender: HashMap::new(),
             fallback_leader_qc_weight: HashMap::new(),
             fallback_leader_qcs: HashMap::new(),
-            exp_num,
+            exp_num: 1,
             exp_counter: 1,
             receive_from_leader: false,
+            is_vaba,
             timer,
             aggregator,
         }
@@ -373,10 +375,10 @@ impl Fallback {
             debug!("Assembled {:?}", tc);
             info!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", tc.seq);
 
-            if !self.receive_from_leader && self.exp_counter == 1 {
+            if !self.receive_from_leader && self.exp_counter == 1 && !self.is_vaba {
                 self.exp_num *= self.parameters.exp;
-                warn!("Timeout right after fallback, number of fallback to execute {}", self.exp_num);
-            } else if self.receive_from_leader {
+                info!("Timeout right after fallback, number of fallback to execute {}", self.exp_num);
+            } else if self.receive_from_leader && !self.is_vaba {
                 self.exp_num = 1;
                 // warn!("Timeout right after fallback, number of fallback to execute {}, last_committed_round {}, last_committed_round_after_fallback {}", self.exp_num, self.last_committed_round, self.last_committed_round_after_fallback);
             }
@@ -999,7 +1001,7 @@ impl Fallback {
         self.timeout = 0;
         self.advance_view(view+1).await;
 
-        if self.exp_counter < self.exp_num {
+        if self.exp_counter < self.exp_num || self.is_vaba {
             // Immediately timeouts
             // use timeout to exchange highest qcs
             self.exp_counter += 1 ;
@@ -1040,10 +1042,13 @@ impl Fallback {
         // Upon booting, generate the very first block (if we are the leader).
         // Also, schedule a timer in case we don't hear from the leader.
         self.timer.reset();
-        if self.name == self.leader_elector.get_leader(self.round) {
-            self.generate_proposal(None, None, self.high_qc.clone())
-                .await
-                .expect("Failed to send the first block");
+        if self.exp_num == 1 {
+            // if running async hotstuff
+            if self.name == self.leader_elector.get_leader(self.round) {
+                self.generate_proposal(None, None, self.high_qc.clone())
+                    .await
+                    .expect("Failed to send the first block");
+            }
         }
 
         // This is the main loop: it processes incoming blocks and votes,

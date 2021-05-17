@@ -125,7 +125,7 @@ impl Consensus {
                     /* core_channel */ rx_core,
                     /* network_filter */ tx_filter,
                     /* commit_channel */ tx_commit,
-                    1,
+                    false,
                 );
                 tokio::spawn(async move {
                     hotstuff_with_fallback.run().await;
@@ -145,7 +145,7 @@ impl Consensus {
                     /* core_channel */ rx_core,
                     /* network_filter */ tx_filter,
                     /* commit_channel */ tx_commit,
-                    100000, // set the exp number to be large, so that timeout immediately after fallback
+                    true, // running vaba
                 );
                 tokio::spawn(async move {
                     vaba.run().await;
