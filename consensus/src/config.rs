@@ -100,7 +100,7 @@ impl Committee {
 
     pub fn large_threshold(&self) -> Stake {
         let total_votes: Stake = self.authorities.values().map(|x| x.stake).sum();
-        total_votes - 3
+        total_votes
     }
 
     pub fn random_coin_threshold(&self) -> Stake {
