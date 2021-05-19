@@ -40,9 +40,9 @@ impl Mempool {
             parameters.min_block_delay
         );
 
-        let (tx_network, rx_network) = channel(1000);
-        let (tx_core, rx_core) = channel(1000);
-        let (tx_client, rx_client) = channel(1000);
+        let (tx_network, rx_network) = channel(10000);
+        let (tx_core, rx_core) = channel(10000);
+        let (tx_client, rx_client) = channel(10000);
 
         // Run the front end that receives client transactions.
         let address = committee.front_address(&name).map(|mut x| {

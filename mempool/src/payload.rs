@@ -98,7 +98,7 @@ impl PayloadMaker {
         client_channel: Receiver<Transaction>,
         core_channel: Sender<MempoolMessage>,
     ) -> Self {
-        let (tx_request, rx_request) = channel(1000);
+        let (tx_request, rx_request) = channel(10000);
         tokio::spawn(async move {
             Runner::new(
                 name,

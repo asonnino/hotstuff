@@ -39,7 +39,7 @@ impl Synchronizer {
         network_channel: Sender<NetMessage>,
         sync_retry_delay: u64,
     ) -> Self {
-        let (tx_inner, mut rx_inner): (_, Receiver<SynchronizerMessage>) = channel(1000);
+        let (tx_inner, mut rx_inner): (_, Receiver<SynchronizerMessage>) = channel(10000);
 
         let store_copy = store.clone();
         tokio::spawn(async move {

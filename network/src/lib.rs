@@ -59,7 +59,7 @@ impl NetSender {
 
     async fn spawn_worker(address: SocketAddr) -> Sender<Bytes> {
         // Each worker handle a TCP connection with on address.
-        let (tx, mut rx) = channel(1000);
+        let (tx, mut rx) = channel(10000);
         tokio::spawn(async move {
             let stream = match TcpStream::connect(address).await {
                 Ok(stream) => {

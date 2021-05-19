@@ -40,9 +40,9 @@ impl Node {
         store_path: &str,
         parameters: Option<&str>,
     ) -> Result<Self, NodeError> {
-        let (tx_commit, rx_commit) = channel(1000);
-        let (tx_consensus, rx_consensus) = channel(1000);
-        let (tx_consensus_mempool, rx_consensus_mempool) = channel(1000);
+        let (tx_commit, rx_commit) = channel(10000);
+        let (tx_consensus, rx_consensus) = channel(10000);
+        let (tx_consensus_mempool, rx_consensus_mempool) = channel(10000);
 
         // Read the committee and secret key from file.
         let committee = Committee::read(committee_file)?;

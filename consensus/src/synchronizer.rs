@@ -34,7 +34,7 @@ impl Synchronizer {
         core_channel: Sender<ConsensusMessage>,
         sync_retry_delay: u64,
     ) -> Self {
-        let (tx_inner, mut rx_inner): (_, Receiver<Block>) = channel(1000);
+        let (tx_inner, mut rx_inner): (_, Receiver<Block>) = channel(10000);
 
         let store_copy = store.clone();
         tokio::spawn(async move {

@@ -53,8 +53,8 @@ impl Consensus {
             parameters.min_block_delay
         );
 
-        let (tx_network, rx_network) = channel(1000);
-        let (tx_filter, rx_filter) = channel(1000);
+        let (tx_network, rx_network) = channel(10000);
+        let (tx_filter, rx_filter) = channel(10000);
 
         // Make the network sender and receiver.
         let address = committee.address(&name).map(|mut x| {
