@@ -138,27 +138,6 @@ impl Fallback {
         self.store.write(key, value).await;
     }
 
-    // async fn transmit(
-    //     &mut self,
-    //     message: &ConsensusMessage,
-    //     to: Option<PublicKey>,
-    // ) -> ConsensusResult<()> {
-    //     sleep(Duration::from_millis(self.parameters.network_delay)).await;
-    //     let addresses = if let Some(to) = to {
-    //         debug!("Sending {:?} to {}", message, to);
-    //         vec![self.committee.address(&to)?]
-    //     } else {
-    //         debug!("Broadcasting {:?}", message);
-    //         self.committee.broadcast_addresses(&self.name)
-    //     };
-    //     let bytes = bincode::serialize(message).expect("Failed to serialize core message");
-    //     let message = NetMessage(Bytes::from(bytes), addresses);
-    //     if let Err(e) = self.network_channel.send(message).await {
-    //         panic!("Failed to send block through network channel: {}", e);
-    //     }
-    //     Ok(())
-    // }
-
     // -- Start Safety Module --
     // check if qc is nonfallback qc or endorsed fallback qc
     fn valid_qc(&mut self, qc: &QC) -> bool {
@@ -184,7 +163,6 @@ impl Fallback {
                 return None;
             }
             let safety_rule_1 = block.round > self.last_voted_round && block.round == block.qc.round+1;
-            // let safety_rule_2 = block.qc.round >= self.high_qc.round;
             let safety_rule_2 = (block.qc.view > self.high_qc.view) || (block.qc.view == self.high_qc.view && block.qc.round >= self.high_qc.round);
             if !(safety_rule_1 && safety_rule_2) {
                 return None;
@@ -380,7 +358,6 @@ impl Fallback {
                 info!("Timeout right after fallback, number of fallback to execute {}", self.exp_num);
             } else if self.receive_from_leader && !self.is_vaba {
                 self.exp_num = 1;
-                // warn!("Timeout right after fallback, number of fallback to execute {}, last_committed_round {}, last_committed_round_after_fallback {}", self.exp_num, self.last_committed_round, self.last_committed_round_after_fallback);
             }
 
             // Enter fallback
@@ -593,54 +570,44 @@ impl Fallback {
             Some(ancestors) => ancestors,
             None => {
                 debug!("Processing of {} suspended: missing parent", block.digest());
-                // has_ancestors = false;
-                // (Block::genesis(), Block::genesis())
                 return Ok(());
             }
         };
 
-        // if has_ancestors {
-            // Store the block only if we have already processed all its ancestors.
-            self.store_block(block).await;
+        // Store the block only if we have already processed all its ancestors.
+        self.store_block(block).await;
 
-            // The chain should have consecutive round numbers by construction.
-            let mut consecutive_rounds = b0.round + 1 == b1.round;
-            consecutive_rounds &= b1.round + 1 == block.round;
-            ensure!(consecutive_rounds || block.qc == QC::genesis(), ConsensusError::NonConsecutiveRounds{rd1: b0.round, rd2: b1.round, rd3: block.round});
+        // The chain should have consecutive round numbers by construction.
+        let mut consecutive_rounds = b0.round + 1 == b1.round;
+        consecutive_rounds &= b1.round + 1 == block.round;
+        ensure!(consecutive_rounds || block.qc == QC::genesis(), ConsensusError::NonConsecutiveRounds{rd1: b0.round, rd2: b1.round, rd3: block.round});
 
-            if b0.round > self.last_committed_round {
-                // The new commit rule requires blocks of the same view.
-                let same_view = b0.view == b1.view;
-                // For fallback blocks, they need to be proposed by the fallback leader.
-                let endorsed = self.valid_qc(&b1.qc) && self.valid_qc(&block.qc);
-                if same_view && endorsed {
-                    // if !b0.payload.is_empty() {
-                    //     info!("Committed {}", b0);
+        if b0.round > self.last_committed_round {
+            // The new commit rule requires blocks of the same view.
+            let same_view = b0.view == b1.view;
+            // For fallback blocks, they need to be proposed by the fallback leader.
+            let endorsed = self.valid_qc(&b1.qc) && self.valid_qc(&block.qc);
+            if same_view && endorsed {
+                // if !b0.payload.is_empty() {
+                //     info!("Committed {}", b0);
 
-                    //     #[cfg(feature = "benchmark")]
-                    //     for x in &b0.payload {
-                    //         info!("Committed B{}({})", b0.round, base64::encode(x));
-                    //     }
-                    // }
+                //     #[cfg(feature = "benchmark")]
+                //     for x in &b0.payload {
+                //         info!("Committed B{}({})", b0.round, base64::encode(x));
+                //     }
+                // }
 
-                    self.commit_ancestors(&b0).await?;
-                    
-                    self.last_committed_round = b0.round;
-                    debug!("Committed {:?}", b0);
-                    if let Err(e) = self.commit_channel.send(b0.clone()).await {
-                        warn!("Failed to send block through the commit channel: {}", e);
-                    }
+                self.commit_ancestors(&b0).await?;
+                
+                self.last_committed_round = b0.round;
+                debug!("Committed {:?}", b0);
+                if let Err(e) = self.commit_channel.send(b0.clone()).await {
+                    warn!("Failed to send block through the commit channel: {}", e);
                 }
             }
-            
-            // // Cleanup the mempool.
-            // self.mempool_driver.cleanup(&b0, &b1, &block).await;
-        // }
-        
- 
-        // debug!("{:?}", self.print_chain(block).await?);
+        }
 
-        // debug!("block round {}, view {}, fallback {}, self round {}, view {}, fallback {}", block.round, block.view, block.fallback, self.round, self.view, self.fallback);
+        // debug!("{:?}", self.print_chain(block).await?);
 
         if block.fallback == 0 && block.round != self.round {
             return Ok(());
@@ -705,10 +672,6 @@ impl Fallback {
     }
 
     async fn handle_proposal(&mut self, block: &Block) -> ConsensusResult<()> {
-        // if block.view < self.view {
-        //     debug!("Received block {} from previous view {}", block.digest(), block.view);
-        //     return Ok(());
-        // }
         let digest = block.digest();
         // Ensure the block proposer is the right leader for the round.
         ensure!(
@@ -785,6 +748,7 @@ impl Fallback {
     // With async fallback, do not handle TC directly. The reason is that any node needs to receive 2f+1 Timeout to update the high QC.
     // Update: the above is not necessary anymore, since each replica can adopt others' certified fallback block
     // So now replica can enter fallback when receiving TC
+    // Update: receiving 2f+1 timeouts to enter fallback seems to give better performance
     async fn handle_tc(&mut self, _tc: TC) -> ConsensusResult<()> {
         // debug!("Processing {:?}", tc);
         // if tc.seq < self.view || (tc.seq == self.view && self.fallback == 1) {
@@ -876,6 +840,7 @@ impl Fallback {
                 }
             },
             Some(ref random_coin) => {
+                // This part won't be executed
                 random_coin.verify(&self.committee, &self.pk_set)?;
                 let view = random_coin.seq;
                 if view < self.view {
@@ -903,7 +868,7 @@ impl Fallback {
 
                     self.exit_fallback(random_coin).await;
                 }
-            }
+            },
         }
 
         Ok(())
@@ -979,25 +944,6 @@ impl Fallback {
         self.leader_elector.add_random_coin(random_coin.clone());
 
         self.exit_fallback(&random_coin).await;
-
-
-        // // sign and multicast leader's high QC
-        // if let Some(qc) = self.fallback_qcs.get_mut(&random_coin.leader).cloned() {
-        //     self.process_qc(&qc).await;
-        // }
-        // let signed_qc = SignedQC::new(self.high_qc.clone(), Some(random_coin), self.name, self.signature_service.clone()).await;
-        // let message = ConsensusMessage::SignedQC(signed_qc.clone());
-        // self.transmit(&message, None).await?;
-        // self.handle_signed_qc(signed_qc).await?;
-
-        // if let Some(map) = self.fallback_leader_qcs.remove(&self.view) {
-        //     debug!("process fallback leader qcs {:?}", map);
-        //     for signed_qc in map {
-        //         if let Err(e) = self.handle_signed_qc(signed_qc).await {
-        //             warn!("Failed to process pending signed_qc: {}", e);
-        //         }
-        //     }
-        // }
 
         Ok(())
     }

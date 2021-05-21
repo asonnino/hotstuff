@@ -131,7 +131,7 @@ impl Consensus {
                     hotstuff_with_fallback.run().await;
                 });
             },
-            Protocol::TwoChainVABA => {  // Run TwoChainVABA, which is just fallback with timeout=0
+            Protocol::TwoChainVABA => {  // Run TwoChainVABA, which is just fallback with timeout=0, i.e., immediately send timeout after exiting a fallback
                 let mut vaba = Fallback::new(
                     name,
                     committee,
