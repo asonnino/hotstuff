@@ -353,7 +353,7 @@ impl Fallback {
             debug!("Assembled {:?}", tc);
             info!("-------------------------------------------------------- Enter fallback of view {} --------------------------------------------------------", tc.seq);
 
-            if !self.receive_from_leader && self.exp_counter == 1 && !self.is_vaba {
+            if !self.receive_from_leader && self.exp_counter == 1 && !self.is_vaba && self.view > 1 {
                 self.exp_num *= self.parameters.exp;
                 info!("Timeout right after fallback, number of fallback to execute {}", self.exp_num);
             } else if self.receive_from_leader && !self.is_vaba {
