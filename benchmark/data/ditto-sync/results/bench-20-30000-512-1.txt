@@ -1,0 +1,60 @@
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Protocol: 1 
+ DDOS attack: False 
+ Committee size: 20 nodes
+ Input rate: 28,500 tx/s
+ Transaction size: 512 B
+ Faults: 1 nodes
+ Execution time: 293 s
+
+ Consensus timeout delay: 5,000 ms
+ Consensus sync retry delay: 100,000 ms
+ Consensus max payloads size: 1,000 B
+ Consensus min block delay: 100 ms
+ Mempool queue capacity: 100,000 B
+ Mempool max payloads size: 1,000,000 B
+ Mempool min block delay: 100 ms
+
+ + RESULTS:
+ Consensus TPS: 26,306 tx/s
+ Consensus BPS: 13,468,661 B/s
+ Consensus latency: 2,659 ms
+
+ End-to-end TPS: 26,259 tx/s
+ End-to-end BPS: 13,444,818 B/s
+ End-to-end latency: 4,960 ms
+-----------------------------------------
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Protocol: 1 
+ DDOS attack: False 
+ Committee size: 20 nodes
+ Input rate: 28,500 tx/s
+ Transaction size: 512 B
+ Faults: 1 nodes
+ Execution time: 296 s
+
+ Consensus timeout delay: 5,000 ms
+ Consensus sync retry delay: 100,000 ms
+ Consensus max payloads size: 1,000 B
+ Consensus min block delay: 100 ms
+ Mempool queue capacity: 100,000 B
+ Mempool max payloads size: 1,000,000 B
+ Mempool min block delay: 100 ms
+
+ + RESULTS:
+ Consensus TPS: 25,363 tx/s
+ Consensus BPS: 12,985,733 B/s
+ Consensus latency: 2,598 ms
+
+ End-to-end TPS: 25,318 tx/s
+ End-to-end BPS: 12,962,894 B/s
+ End-to-end latency: 4,400 ms
+-----------------------------------------
