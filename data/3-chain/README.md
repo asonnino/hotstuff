@@ -25,11 +25,11 @@ The content of our [settings.json](https://github.com/asonnino/hotstuff/blob/mai
     }
 }
 ```
-When benchmarking the code base with not faulty nodes, we set the following `node_params` in our [fabfile](https://github.com/asonnino/hotstuff/blob/main/benchmark/fabfile.py):
+When benchmarking the code base for 10 and 20 nodes, we set the following `node_params` in our [fabfile](https://github.com/asonnino/hotstuff/blob/main/benchmark/fabfile.py):
 ```python
 node_params = {
     'consensus': {
-        'timeout_delay': 30_000,      # ms
+        'timeout_delay': 5_000,      # ms
         'sync_retry_delay': 100_000,  # ms
         'max_payload_size': 1_000,    # bytes
         'min_block_delay': 100        # ms
@@ -42,4 +42,4 @@ node_params = {
     }
 }
 ```
-We then decrease the consensus timeout delay (`timeout_delay`) to 5 seconds when benchmarking with faults.
+We increase the consensus timeout delay (`timeout_delay`) to 10 seconds when benchmarking the testbed with 50 nodes.
