@@ -17,7 +17,7 @@ The content of our [settings.json](https://github.com/asonnino/hotstuff/blob/mai
     "repo": {
         "name": "hotstuff",
         "url": "https://github.com/asonnino/hotstuff.git",
-        "branch": "main"
+        "branch": "3-chain"
     },
     "instances": {
         "type": "m5d.8xlarge",
