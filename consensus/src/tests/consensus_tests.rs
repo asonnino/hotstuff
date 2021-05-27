@@ -12,12 +12,15 @@ fn spawn_nodes(
     keys: Vec<(PublicKey, SecretKey)>,
     committee: Committee,
     store_path: &str,
-) -> Vec<JoinHandle<()>> {
+) -> Vec<JoinHandle<Block>> {
     keys.into_iter()
         .enumerate()
         .map(|(i, (name, secret))| {
             let committee = committee.clone();
-            let parameters = Parameters::default();
+            let parameters = Parameters {
+                timeout_delay: 100,
+                ..Parameters::default()
+            };
             let store_path = format!("{}_{}", store_path, i);
             let _ = fs::remove_dir_all(&store_path);
             let store = Store::new(&store_path).unwrap();
@@ -48,10 +51,7 @@ fn spawn_nodes(
                 .await
                 .unwrap();
 
-                match rx_commit.recv().await {
-                    Some(block) => assert_eq!(block, Block::genesis()),
-                    _ => assert!(false),
-                }
+                rx_commit.recv().await.unwrap()
             })
         })
         .collect()
@@ -67,21 +67,6 @@ async fn end_to_end() {
     let handles = spawn_nodes(keys(), committee, store_path);
 
     // Ensure all threads terminated correctly.
-    assert!(try_join_all(handles).await.is_ok());
-}
-
-#[tokio::test]
-async fn dead_node() {
-    let mut committee = committee();
-    committee.increment_base_port(6100);
-
-    // Run all nodes but the last.
-    let leader_elector = LeaderElector::new(committee.clone());
-    let dead = leader_elector.get_leader(0);
-    let keys = keys().into_iter().filter(|(x, _)| *x != dead).collect();
-    let store_path = ".db_test_dead_node";
-    let handles = spawn_nodes(keys, committee, store_path);
-
-    // Ensure all threads terminated correctly.
-    assert!(try_join_all(handles).await.is_ok());
+    let blocks = try_join_all(handles).await.unwrap();
+    assert!(blocks.windows(2).all(|w| w[0] == w[1]));
 }

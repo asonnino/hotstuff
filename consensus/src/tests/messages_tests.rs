@@ -19,7 +19,7 @@ fn verify_qc_authority_reuse() {
 
     // Verify the QC.
     match qc.verify(&committee()) {
-        Err(ConsensusError::AuthorityReuse(name)) => assert_eq!(name, vote.0),
+        Err(ConsensusError::AuthorityReuseinQC(name)) => assert_eq!(name, vote.0),
         _ => assert!(false),
     }
 }

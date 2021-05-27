@@ -84,16 +84,15 @@ class LocalBench:
 
             self.node_parameters.print(PathMaker.parameters_file())
 
+            # Do not boot faulty nodes.
+            nodes = nodes - self.faults
+
             # Run the clients (they will wait for the nodes to be ready).
-            addresses = committee.front_addresses()
+            addresses = committee.front
             rate_share = ceil(rate / nodes)
             timeout = self.node_parameters.timeout_delay
             client_logs = [PathMaker.client_log_file(i) for i in range(nodes)]
-            counter = 0
             for addr, log_file in zip(addresses, client_logs):
-                counter += 1
-                if counter > nodes - self.node_parameters.crash:
-                    break
                 cmd = CommandMaker.run_client(
                     addr,
                     self.tx_size,
@@ -105,13 +104,14 @@ class LocalBench:
             if self.node_parameters.protocol == 0:
                 Print.info('Running HotStuff')
             elif self.node_parameters.protocol == 1:
-                Print.info('Running HotStuff with Async Fallback')
+                Print.info('Running Async HotStuff')
             elif self.node_parameters.protocol == 2:
-                Print.info('Running Chained-VABA')
+                Print.info('Running TwoChainVABA')
             else:
                 Print.info('Wrong protocol type!')
+                return
 
-            Print.info(f'Crash {self.node_parameters.crash} nodes')
+            Print.info(f'{self.faults} faults')
             Print.info(f'Timeout {self.node_parameters.timeout_delay} ms, Network delay {self.node_parameters.network_delay} ms')
             Print.info(f'DDOS attack {self.node_parameters.ddos}')
 
@@ -119,11 +119,7 @@ class LocalBench:
             dbs = [PathMaker.db_path(i) for i in range(nodes)]
             node_logs = [PathMaker.node_log_file(i) for i in range(nodes)]
             threshold_key_files = [PathMaker.threshold_key_file(i) for i in range(nodes)]
-            counter = 0
             for key_file, threshold_key_file, db, log_file in zip(key_files, threshold_key_files, dbs, node_logs):
-                counter += 1
-                if counter > nodes - self.node_parameters.crash:
-                    break
                 cmd = CommandMaker.run_node(
                     key_file,
                     threshold_key_file,
@@ -145,7 +141,7 @@ class LocalBench:
 
             # Parse logs and return the parser.
             Print.info('Parsing logs...')
-            return LogParser.process('./logs')
+            return LogParser.process('./logs', self.faults, self.node_parameters.protocol, self.node_parameters.ddos)
 
         except (subprocess.SubprocessError, ParseError) as e:
             self._kill_nodes()

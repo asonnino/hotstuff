@@ -159,7 +159,6 @@ class InstanceManager:
                 self.clients.values(), prefix=f'Creating {size} instances'
             )
             for client in progress:
-                #client = list(self.clients.values())[i % len(self.clients)]
                 client.run_instances(
                     ImageId=self._get_ami(client),
                     InstanceType=self.settings.instance_type,
@@ -217,13 +216,16 @@ class InstanceManager:
         except ClientError as e:
             raise BenchError('Failed to terminate instances', AWSError(e))
 
-    def start_instances(self):
+    def start_instances(self, max):
+        size = 0
         try:
             ids, _ = self._get(['stopping', 'stopped'])
             for region, client in self.clients.items():
                 if ids[region]:
-                    client.start_instances(InstanceIds=ids[region])
-            size = sum(len(x) for x in ids.values())
+                    target = ids[region]
+                    target = target if len(target) < max else target[:max]
+                    size += len(target)
+                    client.start_instances(InstanceIds=target)
             Print.heading(f'Starting {size} instances')
         except ClientError as e:
             raise BenchError('Failed to start instances', AWSError(e))

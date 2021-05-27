@@ -6,6 +6,7 @@ use env_logger::Env;
 use futures::future::join_all;
 use futures::sink::SinkExt as _;
 use log::{info, warn};
+use rand::Rng;
 use std::net::SocketAddr;
 use tokio::net::TcpStream;
 use tokio::time::{interval, sleep, Duration, Instant};
@@ -88,9 +89,9 @@ impl Client {
         const BURST_DURATION: u64 = 1000 / PRECISION;
 
         // The transaction size must be at least 16 bytes to ensure all txs are different.
-        if self.size < 16 {
+        if self.size < 9 {
             return Err(anyhow::Error::msg(
-                "Transaction size must be at least 16 bytes",
+                "Transaction size must be at least 9 bytes",
             ));
         }
 
@@ -101,56 +102,49 @@ impl Client {
 
         // Submit all transactions.
         let burst = self.rate / PRECISION;
+        let mut tx = BytesMut::with_capacity(self.size);
         let mut counter = 0;
+        let mut r = rand::thread_rng().gen();
         let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
         let interval = interval(Duration::from_millis(BURST_DURATION));
         tokio::pin!(interval);
+
+        // NOTE: This log entry is used to compute performance.
         info!("Start sending transactions");
-        loop {
+
+        'main: loop {
             interval.as_mut().tick().await;
             let now = Instant::now();
-            if let Err(e) = self.send_burst(&mut transport, burst, counter).await {
-                warn!("Failed to send transaction: {}", e);
-                break;
+
+            for x in 0..burst {
+                let bytes = if x == counter % burst {
+                    // NOTE: This log entry is used to compute performance.
+                    info!("Sending sample transaction {}", counter);
+
+                    tx.put_u8(0u8); // Sample txs start with 0.
+                    tx.put_u64(counter); // This counter identifies the tx.
+                    tx.resize(self.size, 0u8);
+                    tx.split().freeze()
+                } else {
+                    r += 1;
+
+                    tx.put_u8(1u8); // Standard txs start with 1.
+                    tx.put_u64(r); // Ensures all clients send different txs.
+                    tx.resize(self.size, 0u8);
+                    tx.split().freeze()
+                };
+
+                if let Err(e) = transport.send(bytes).await {
+                    warn!("Failed to send transaction: {}", e);
+                    break 'main;
+                }
             }
             if now.elapsed().as_millis() > BURST_DURATION as u128 {
+                // NOTE: This log entry is used to compute performance.
                 warn!("Transaction rate too high for this client");
-            }
-            if counter % PRECISION == 0 {
-                if let Err(e) = self.send_sample_transaction(&mut transport).await {
-                    warn!("Failed to send transaction: {}", e);
-                    break;
-                }
             }
             counter += 1;
         }
-        Ok(())
-    }
-
-    async fn send_burst(
-        &self,
-        transport: &mut Framed<TcpStream, LengthDelimitedCodec>,
-        load: u64,
-        nonce: u64,
-    ) -> Result<()> {
-        for x in 0..load {
-            let mut tx = BytesMut::with_capacity(self.size);
-            tx.put_u64(nonce);
-            tx.put_u64(x as u64);
-            tx.resize(self.size, 0u8);
-            transport.send(tx.freeze()).await?;
-        }
-        Ok(())
-    }
-
-    async fn send_sample_transaction(
-        &self,
-        transport: &mut Framed<TcpStream, LengthDelimitedCodec>,
-    ) -> Result<()> {
-        info!("Sending sample transaction");
-        let mut tx = BytesMut::with_capacity(self.size);
-        tx.resize(self.size, 5u8);
-        transport.send(tx.freeze()).await?;
         Ok(())
     }
 

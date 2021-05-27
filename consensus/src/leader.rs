@@ -26,7 +26,6 @@ impl RandomLeaderElector {
         self.random_coins.insert(random_coin.seq, random_coin);
     }
 
-    // daniel: round robin for now, need to implement common random coin
     pub fn get_fallback_leader(&self, view: SeqNumber) -> Option<PublicKey> {
         if !self.random_coins.contains_key(&view) {
             return None;

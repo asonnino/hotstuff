@@ -39,7 +39,7 @@ impl Synchronizer {
         network_channel: Sender<NetMessage>,
         sync_retry_delay: u64,
     ) -> Self {
-        let (tx_inner, mut rx_inner): (_, Receiver<SynchronizerMessage>) = channel(1000);
+        let (tx_inner, mut rx_inner): (_, Receiver<SynchronizerMessage>) = channel(10000);
 
         let store_copy = store.clone();
         tokio::spawn(async move {
@@ -107,6 +107,7 @@ impl Synchronizer {
                     Some(result) = waiting.next() => {
                         match result {
                             Ok(Some(block)) => {
+                                debug!("mempool sync loopback block {:?}", block);
                                 let _ = pending.remove(&block.digest());
                                 for x in &block.payload {
                                     let _ = requests.remove(x);
@@ -215,6 +216,7 @@ impl Synchronizer {
 
     pub async fn cleanup(&mut self, round: SeqNumber) {
         let message = SynchronizerMessage::Clean(round);
+        debug!("cleanup round {}", round);
         if let Err(e) = self.inner_channel.send(message).await {
             panic!("Failed to send message to synchronizer core: {}", e);
         }

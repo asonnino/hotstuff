@@ -10,8 +10,8 @@ pub type EpochNumber = u128;
 #[derive(Serialize, Deserialize)]
 pub enum Protocol {
     HotStuff,
-    HotStuffWithAsyncFallback,
-    ChainedVABA,
+    AsyncHotStuff,
+    TwoChainVABA,
     Others,
 }
 
@@ -21,7 +21,7 @@ impl Default for Protocol {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Parameters {
     pub timeout_delay: u64,
     pub sync_retry_delay: u64,
@@ -29,6 +29,7 @@ pub struct Parameters {
     pub max_payload_size: usize,
     pub min_block_delay: u64,
     pub ddos: bool,
+    pub exp: u64,
 }
 
 impl Default for Parameters {
@@ -40,6 +41,7 @@ impl Default for Parameters {
             network_delay: 100,
             max_payload_size: 500,
             ddos: false,
+            exp: 1,
         }
     }
 }
@@ -94,6 +96,11 @@ impl Committee {
         // then (2 N + 3) / 3 = 2f + 1 + (2k + 2)/3 = 2f + 1 + k = N - f
         let total_votes: Stake = self.authorities.values().map(|x| x.stake).sum();
         2 * ((total_votes - 1) / 3) + 1
+    }
+
+    pub fn large_threshold(&self) -> Stake {
+        let total_votes: Stake = self.authorities.values().map(|x| x.stake).sum();
+        total_votes
     }
 
     pub fn random_coin_threshold(&self) -> Stake {

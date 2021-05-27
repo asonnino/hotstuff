@@ -1,3 +1,5 @@
+> **Note to readers:** The 2-chain variant of the HotStuff consensus protocol implemented in this repo is currently under developpement and will soon be published. In the meantime, you may be interested in the [3-chain branch](https://github.com/asonnino/hotstuff/tree/3-chain) that implements the classic HotStuff protocol.
+
 # HotStuff
 
 [![build status](https://img.shields.io/github/workflow/status/asonnino/hotstuff/Build/main?style=flat-square&logo=github)](https://github.com/asonnino/hotstuff/actions)
@@ -15,8 +17,7 @@ $ git clone https://github.com/asonnino/hotstuff.git
 $ cd hotstuff/benchmark
 $ pip install -r requirements.txt
 ```
-You also need to [install tmux](https://linuxize.com/post/getting-started-with-tmux/#installing-tmux), which runs all nodes and clients in the background.
-Finally, run a local benchmark using fabric:
+You also need to install Clang (required by rocksdb) and [tmux](https://linuxize.com/post/getting-started-with-tmux/#installing-tmux) (which runs all nodes and clients in the background). Finally, run a local benchmark using fabric:
 ```
 $ fab local
 ```
@@ -29,6 +30,7 @@ This command may take a long time the first time you run it (compiling rust code
  Committee size: 4 nodes
  Input rate: 1,000 tx/s
  Transaction size: 512 B
+ Faults: 0 nodes
  Execution time: 20 s
 
  Consensus max payloads size: 500 B

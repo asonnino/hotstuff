@@ -129,39 +129,6 @@ impl Block {
         }
         Ok(())
     }
-
-    pub fn verify_vaba(&self, committee: &Committee, pk_set: &PublicKeySet) -> ConsensusResult<()> {
-        // Ensure the authority has voting rights.
-        let voting_rights = committee.stake(&self.author);
-        ensure!(
-            voting_rights > 0,
-            ConsensusError::UnknownAuthority(self.author)
-        );
-
-        ensure!(
-            self.fallback == 1 && (self.height == 1 || self.height == 2 || self.height == 3),
-            ConsensusError::InvalidHeight(self.height)
-        );
-
-        // Check the signature.
-        self.signature.verify(&self.digest(), &self.author)?;
-
-        // Check the embedded QC.
-        if self.qc != QC::genesis() {
-            self.qc.verify_vaba(committee)?;
-        }
-
-        // Check the TC embedded in the block (if any).
-        if let Some(ref tc) = self.tc {
-            tc.verify(committee)?;
-        }
-
-        // Check the coin embedded in the block (if any).
-        if let Some(ref coin) = self.coin {
-            coin.verify(committee, pk_set)?;
-        }
-        Ok(())
-    }
 }
 
 impl Hash for Block {
@@ -251,23 +218,6 @@ impl Vote {
         self.signature.verify(&self.digest(), &self.author)?;
         Ok(())
     }
-
-    pub fn verify_vaba(&self, committee: &Committee) -> ConsensusResult<()> {
-        // Ensure the authority has voting rights.
-        ensure!(
-            committee.stake(&self.author) > 0,
-            ConsensusError::UnknownAuthority(self.author)
-        );
-
-        ensure!(
-            self.fallback == 1 && (self.height == 1 || self.height == 2 || self.height == 3),
-            ConsensusError::InvalidHeight(self.height)
-        );
-
-        // Check the signature.
-        self.signature.verify(&self.digest(), &self.author)?;
-        Ok(())
-    }
 }
 
 impl Hash for Vote {
@@ -289,6 +239,12 @@ impl fmt::Debug for Vote {
     }
 }
 
+impl fmt::Display for Vote {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "Vote{}", self.hash)
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, Default)]
 pub struct QC {
     pub hash: Digest,
@@ -297,6 +253,7 @@ pub struct QC {
     pub height: HeightNumber,
     pub fallback: Bool,
     pub proposer: PublicKey,  // proposer of the block
+    pub acceptor: PublicKey,    // Node that accepts the QC and builds its f-chain extending it
     pub votes: Vec<(PublicKey, Signature)>,
 }
 
@@ -314,7 +271,7 @@ impl QC {
         let mut weight = 0;
         let mut used = HashSet::new();
         for (name, _) in self.votes.iter() {
-            ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
+            ensure!(!used.contains(name), ConsensusError::AuthorityReuseinQC(*name));
             let voting_rights = committee.stake(name);
             ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
             used.insert(*name);
@@ -327,31 +284,6 @@ impl QC {
 
         ensure!(
             (self.fallback == 0 && self.height == 0) || (self.fallback == 1 && (self.height == 1 || self.height == 2)),
-            ConsensusError::InvalidHeight(self.height)
-        );
-
-        // Check the signatures.
-        Signature::verify_batch(&self.digest(), &self.votes).map_err(ConsensusError::from)
-    }
-
-    pub fn verify_vaba(&self, committee: &Committee) -> ConsensusResult<()> {
-        // Ensure the QC has a quorum.
-        let mut weight = 0;
-        let mut used = HashSet::new();
-        for (name, _) in self.votes.iter() {
-            ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
-            let voting_rights = committee.stake(name);
-            ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
-            used.insert(*name);
-            weight += voting_rights;
-        }
-        ensure!(
-            weight >= committee.quorum_threshold(),
-            ConsensusError::QCRequiresQuorum
-        );
-
-        ensure!(
-            self.fallback == 1 && (self.height == 1 || self.height == 2 || self.height == 3),
             ConsensusError::InvalidHeight(self.height)
         );
 
@@ -385,10 +317,10 @@ impl PartialEq for QC {
     }
 }
 
-// daniel: Signed height-2 QC
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SignedQC {
     pub qc: QC,
+    pub random_coin: Option<RandomCoin>,    // the signed QC to trigger leader election contains no random_coin, the signed QC to update leader's high QC contains random coin
     pub author: PublicKey,
     pub signature: Signature,
 }
@@ -396,11 +328,13 @@ pub struct SignedQC {
 impl SignedQC {
     pub async fn new(
         qc: QC,
+        random_coin: Option<RandomCoin>,
         author: PublicKey,
         mut signature_service: SignatureService,
     ) -> Self {
         let signed_qc = Self {
             qc,
+            random_coin,
             author,
             signature: Signature::default(),
         };
@@ -427,23 +361,6 @@ impl SignedQC {
         }
         Ok(())
     }
-
-    pub fn verify_vaba(&self, committee: &Committee) -> ConsensusResult<()> {
-        // Ensure the authority has voting rights.
-        ensure!(
-            committee.stake(&self.author) > 0,
-            ConsensusError::UnknownAuthority(self.author)
-        );
-
-        // Check the signature.
-        self.signature.verify(&self.digest(), &self.author)?;
-
-        // Check the embedded QC.
-        if self.qc != QC::genesis() {
-            self.qc.verify_vaba(committee)?;
-        }
-        Ok(())
-    }
 }
 
 impl Hash for SignedQC {
@@ -456,7 +373,7 @@ impl Hash for SignedQC {
 
 impl fmt::Debug for SignedQC {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "Signed QC(author {}, qc {:?})", self.author, self.qc)
+        write!(f, "Signed QC(author {}, qc {:?}, random coin {:?})", self.author, self.qc, self.random_coin)
     }
 }
 
@@ -525,6 +442,12 @@ impl fmt::Debug for Timeout {
     }
 }
 
+impl fmt::Display for Timeout {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "Timeout{}", self.seq)
+    }
+}
+
 // for VABA or async fallback, seq=view
 // for HotStuff, seq=round
 #[derive(Clone, Serialize, Deserialize)]
@@ -539,7 +462,7 @@ impl TC {
         let mut weight = 0;
         let mut used = HashSet::new();
         for (name, _, _) in self.votes.iter() {
-            ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
+            ensure!(!used.contains(name), ConsensusError::AuthorityReuseinTC(*name));
             let voting_rights = committee.stake(name);
             ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
             used.insert(*name);
@@ -572,14 +495,12 @@ impl fmt::Debug for TC {
     }
 }
 
-// daniel: 
-// TODO: Shared randomness for VABA and async fallback
-//
 #[derive(Clone, Serialize, Deserialize)]
 pub struct RandomnessShare {
     pub seq: SeqNumber, // view
     pub author: PublicKey,
     pub signature_share: SignatureShare,
+    pub high_qc: Option<QC>,    // attach its height-2 qc in the randomness share as an optimization
 }
 
 impl RandomnessShare {
@@ -587,6 +508,7 @@ impl RandomnessShare {
         seq: SeqNumber,
         author: PublicKey,
         mut signature_service: SignatureService,
+        high_qc: Option<QC>,
     ) -> Self {
         let mut hasher = Sha512::new();
         hasher.update(seq.to_le_bytes());
@@ -596,6 +518,7 @@ impl RandomnessShare {
             seq,
             author,
             signature_share,
+            high_qc,
         }
     }
 
@@ -644,7 +567,7 @@ impl RandomCoin {
         let mut used = HashSet::new();
         for share in self.shares.iter() {
             let name = share.author;
-            ensure!(!used.contains(&name), ConsensusError::AuthorityReuse(name));
+            ensure!(!used.contains(&name), ConsensusError::AuthorityReuseinCoin(name));
             let voting_rights = committee.stake(&name);
             ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(name));
             used.insert(name);

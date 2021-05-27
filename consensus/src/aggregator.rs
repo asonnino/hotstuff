@@ -5,6 +5,7 @@ use crate::messages::{Timeout, Vote, QC, TC};
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, Signature};
 use std::collections::{HashMap, HashSet};
+// use std::convert::TryInto;
 
 #[cfg(test)]
 #[path = "tests/aggregator_tests.rs"]
@@ -81,13 +82,11 @@ impl QCMaker {
     /// Try to append a signature to a (partial) quorum.
     pub fn append(&mut self, vote: Vote, committee: &Committee) -> ConsensusResult<Option<QC>> {
         let author = vote.author;
-
         // Ensure it is the first time this authority votes.
         ensure!(
             self.used.insert(author),
-            ConsensusError::AuthorityReuse(author)
+            ConsensusError::AuthorityReuseinQC(author)
         );
-
         self.votes.push((author, vote.signature));
         self.weight += committee.stake(&author);
         if self.weight >= committee.quorum_threshold() {
@@ -99,6 +98,7 @@ impl QCMaker {
                 height: vote.height,
                 fallback: vote.fallback,
                 proposer: vote.proposer,
+                acceptor: vote.proposer,
                 votes: self.votes.clone(),
             }));
         }
@@ -129,17 +129,26 @@ impl TCMaker {
     ) -> ConsensusResult<Option<TC>> {
         let author = timeout.author;
 
-        // Ensure it is the first time this authority votes.
-        ensure!(
-            self.used.insert(author),
-            ConsensusError::AuthorityReuse(author)
-        );
+        if self.used.contains(&author) {
+            return Ok(None);
+        }
+        self.used.insert(author);
+
+        // // Ensure it is the first time this authority votes.
+        // ensure!(
+        //     self.used.insert(author),
+        //     ConsensusError::AuthorityReuseinTC(author)
+        // );
 
         // Add the timeout to the accumulator.
         self.votes
             .push((author, timeout.signature, timeout.high_qc.round));
         self.weight += committee.stake(&author);
-        if self.weight >= committee.quorum_threshold() {
+        let mut threshold = committee.quorum_threshold();
+        if timeout.seq == 0 {
+            threshold = committee.large_threshold();
+        }
+        if self.weight >= threshold {
             self.weight = 0; // Ensures TC is only created once.
             return Ok(Some(TC {
                 seq: timeout.seq,
