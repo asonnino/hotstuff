@@ -39,10 +39,10 @@ class Ploter:
         size = int(search(r'Transaction size: (\d+)', data).group(1))
         return x * 10**6 / size
 
-    def _plot(self, results, x_label, y_label, y_axis, z_axis, type):
+    def _plot(self, x_label, y_label, y_axis, z_axis, type):
         markers = cycle(['o', 'v', 's', 'p', 'D', 'P'])
-        results.sort(key=self._natural_keys, reverse=(type == 'tps'))
-        for result in results:
+        self.results.sort(key=self._natural_keys, reverse=(type == 'tps'))
+        for result in self.results:
             y_values, y_err = y_axis(result)
             x_values = self._variable(result)
             if len(y_values) != len(y_err) or len(y_err) != len(x_values):
@@ -89,18 +89,18 @@ class Ploter:
         assert all(isinstance(x, int) for x in faults)
         assert isinstance(tx_size, int)
 
-        results = []
+        self.results = []
         for f in faults:
             for n in nodes:
                 filename = f'{system}.latency-{n}-any-{tx_size}-{f}-any.txt'
                 with open(filename, 'r') as file:
-                    results += [file.read().replace(',', '')]
+                    self.results += [file.read().replace(',', '')]
 
         self.system = system
         z_axis = self._nodes
         x_label = 'Throughput (tx/s)'
         y_label = ['Latency (ms)']
-        self._plot(results, x_label, y_label, self._latency, z_axis, 'latency')
+        self._plot(x_label, y_label, self._latency, z_axis, 'latency')
 
     def plot_tps(self, system, faults, max_latencies, tx_size):
         assert isinstance(system, str)
@@ -110,18 +110,18 @@ class Ploter:
         assert all(isinstance(x, int) for x in max_latencies)
         assert isinstance(tx_size, int)
 
-        results = []
+        self.results = []
         for f in faults:
             for l in max_latencies:
                 filename = f'{system}.tps-x-any-{tx_size}-{f}-{l}.txt'
                 with open(filename, 'r') as file:
-                    results += [file.read().replace(',', '')]
+                    self.results += [file.read().replace(',', '')]
 
         self.system = system
         z_axis = self._max_latency
         x_label = 'Committee size'
         y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
-        self._plot(results, x_label, y_label, self._tps, z_axis, 'tps')
+        self._plot(x_label, y_label, self._tps, z_axis, 'tps')
 
     def finalize(self, name):
         assert isinstance(name, str)
