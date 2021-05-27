@@ -29,7 +29,7 @@ When benchmarking the code base for 10 and 20 nodes, we set the following `node_
 ```python
 node_params = {
     'consensus': {
-        'timeout_delay': 5_000,      # ms
+        'timeout_delay': 5_000,       # ms
         'sync_retry_delay': 100_000,  # ms
         'max_payload_size': 1_000,    # bytes
         'min_block_delay': 100        # ms
