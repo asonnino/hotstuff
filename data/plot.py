@@ -22,8 +22,8 @@ class Ploter:
     STYLES = cycle(['solid', 'dashed', 'dotted'])
     COLORS = cycle(['tab:green', 'tab:blue', 'tab:orange', 'tab:red'])
 
-    def __init__(self):
-        plt.figure()
+    def __init__(self, width=6.4, height=4.8):
+        plt.figure(figsize=(width, height))
 
     def _natural_keys(self, text):
         def try_cast(text): return int(text) if text.isdigit() else text
@@ -66,8 +66,10 @@ class Ploter:
                 linestyle=style, marker=marker, color=color, capsize=3
             )
 
-        plt.xlabel(x_label)
-        plt.ylabel(y_label[0])
+        plt.xlabel(x_label, fontweight='bold')
+        plt.ylabel(y_label[0], fontweight='bold')
+        plt.xticks(weight = 'bold')
+        plt.yticks(weight = 'bold')
         ax = plt.gca()
         ax.xaxis.set_major_formatter(default_major_formatter)
         if type == 'latency':
@@ -159,10 +161,12 @@ class Ploter:
                 marker=marker, color=color, linestyle=style
             )
 
-    def finalize(self, name):
+    def finalize(self, name, legend_cols):
         assert isinstance(name, str)
 
-        plt.legend(loc='lower center', bbox_to_anchor=(0.5, 1), ncol=4)
+        plt.legend(
+            loc='lower center', bbox_to_anchor=(0.5, 1), ncol=legend_cols
+        )
         plt.xlim(xmin=0)
         plt.ylim(bottom=0)
         plt.grid(True)
