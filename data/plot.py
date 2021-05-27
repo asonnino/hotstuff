@@ -87,13 +87,26 @@ class Ploter:
         x = search(r'Committee size: (\d+)', data).group(1)
         f = search(r'Faults: (\d+)', data).group(1)
         faults = f'({f} faulty)' if f != '0' else ''
-        return f'{self.system}, {x} nodes {faults}'
+        name = self.legend_name(self.system)
+        return f'{name}, {x} nodes {faults}'
 
     def _max_latency(self, data):
         x = search(r'Max latency: (\d+)', data).group(1)
         f = search(r'Faults: (\d+)', data).group(1)
         faults = f'({f} faulty)' if f != '0' else ''
-        return f'{self.system} {faults}, Max latency: {float(x)/1000:,.1f}s'
+        name = self.legend_name(self.system)
+        return f'{name} {faults}, Max latency: {float(x)/1000:,.1f}s'
+
+    @staticmethod
+    def legend_name(system):
+        if 'ditto' in system:
+            return 'Ditto' 
+        elif '3-chain' in system:
+            return 'HotStuff' 
+        elif '2-chain' in system:
+            return 'Jolteon' 
+        else:
+            return system.capitalize()
 
     def plot_latency(self, system, nodes, faults, tx_size):
         assert isinstance(system, str)

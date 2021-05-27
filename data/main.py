@@ -33,10 +33,11 @@ if __name__ == '__main__':
     # Plot 'Leader under DoS' graph.
     ploter = Ploter()
     for i, system in enumerate(['3-chain', '2-chain']):
+        name = Ploter.legend_name(system)
         ploter.plot_free(
             [x + i*1_000 for x in range(0, 60_000, 10_000)], 
             [0] * 6, 
-            [f'{system}, {x} nodes' for x in [10, 20, 30]]
+            [f'{name}, {x} nodes' for x in [10, 20, 30]]
         )
     for system in ['ditto-async', 'vaba']:
         ploter.plot_latency(system, [10, 20, 50], [0], 512)
@@ -51,10 +52,11 @@ if __name__ == '__main__':
     # Plot 'Dead nodes and DoS' graph.
     ploter = Ploter()
     for i, system in enumerate(['3-chain', '2-chain']):
+        name = Ploter.legend_name(system)
         ploter.plot_free(
             [x + i*1_000 for x in range(0, 60_000, 10_000)], 
             [0] * 6, 
-            [f'{system}, {x} nodes' for x in [10, 20, 30]]
+            [f'{name}, {x} nodes' for x in [10, 20, 30]]
         )
     for system in ['ditto-async', 'vaba']:
         ploter.plot_latency(system, [20], [0, 1, 3], 512)
