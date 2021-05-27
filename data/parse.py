@@ -50,9 +50,14 @@ class Result:
         )
 
     @classmethod
-    def from_str(cls, raw):
-        tps = int(search(r'.* End-to-end TPS: (\d+)', raw).group(1))
-        latency = int(search(r'.* End-to-end latency: (\d+)', raw).group(1))
+    def from_str(cls, raw, end_to_end):
+        if end_to_end:
+            tps = int(search(r'.* End-to-end TPS: (\d+)', raw).group(1))
+            latency = int(
+                search(r'.* End-to-end latency: (\d+)', raw).group(1))
+        else:
+            tps = int(search(r'.* Consensus TPS: (\d+)', raw).group(1))
+            latency = int(search(r'.* Consensus latency: (\d+)', raw).group(1))
         return cls(tps, latency)
 
     @classmethod
@@ -68,15 +73,17 @@ class Result:
 
 
 class LogAggregator:
-    def __init__(self, system, files, max_latencies):
+    def __init__(self, system, files, max_latencies, end_to_end=True):
         assert isinstance(system, str)
         assert isinstance(files, list)
         assert all(isinstance(x, str) for x in files)
         assert isinstance(max_latencies, list)
         assert all(isinstance(x, int) for x in max_latencies)
+        assert isinstance(end_to_end, bool)
 
         self.system = system
         self.max_latencies = max_latencies
+        self.end_to_end = end_to_end
 
         data = ''
         for filename in files:
@@ -86,7 +93,9 @@ class LogAggregator:
         records = defaultdict(list)
         for chunk in data.replace(',', '').split('SUMMARY')[1:]:
             if chunk:
-                records[Setup.from_str(chunk)] += [Result.from_str(chunk)]
+                records[Setup.from_str(chunk)] += [
+                    Result.from_str(chunk, end_to_end)
+                ]
 
         self.records = {k: Result.aggregate(v) for k, v in records.items()}
 
@@ -106,9 +115,10 @@ class LogAggregator:
                     f'{data}'
                     '-----------------------------------------\n'
                 )
+                type = graph_type if self.end_to_end else f'commit_{graph_type}'
                 filename = (
                     f'{self.system}.'
-                    f'{graph_type}-'
+                    f'{type}-'
                     f'{setup.nodes}-'
                     f'{setup.rate}-'
                     f'{setup.tx_size}-'

@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from itertools import cycle
 
+
 @ticker.FuncFormatter
 def default_major_formatter(x, pos):
     if x >= 1_000:
@@ -10,8 +11,10 @@ def default_major_formatter(x, pos):
     else:
         return f'{x:.0f}'
 
+
 def sec_major_formatter(x, pos):
     return f'{float(x)/1000:.1f}'
+
 
 class PlotError(Exception):
     pass
@@ -68,8 +71,8 @@ class Ploter:
 
         plt.xlabel(x_label, fontweight='bold')
         plt.ylabel(y_label[0], fontweight='bold')
-        plt.xticks(weight = 'bold')
-        plt.yticks(weight = 'bold')
+        plt.xticks(weight='bold')
+        plt.yticks(weight='bold')
         ax = plt.gca()
         ax.xaxis.set_major_formatter(default_major_formatter)
         if type == 'latency':
@@ -100,15 +103,15 @@ class Ploter:
     @staticmethod
     def legend_name(system):
         if 'ditto' in system:
-            return 'Ditto' 
+            return 'Ditto'
         elif '3-chain' in system:
-            return 'HotStuff' 
+            return 'HotStuff'
         elif '2-chain' in system:
-            return 'Jolteon' 
+            return 'Jolteon'
         else:
             return system.capitalize()
 
-    def plot_latency(self, system, nodes, faults, tx_size):
+    def plot_latency(self, system, nodes, faults, tx_size, graph_type='latency'):
         assert isinstance(system, str)
         assert isinstance(nodes, list)
         assert all(isinstance(x, int) for x in nodes)
@@ -119,7 +122,7 @@ class Ploter:
         self.results = []
         for f in faults:
             for n in nodes:
-                filename = f'{system}.latency-{n}-any-{tx_size}-{f}-any.txt'
+                filename = f'{system}.{graph_type}-{n}-any-{tx_size}-{f}-any.txt'
                 with open(filename, 'r') as file:
                     self.results += [file.read().replace(',', '')]
 
@@ -133,7 +136,7 @@ class Ploter:
             x_label, y_label, self._latency, z_axis, 'latency', marker, color
         )
 
-    def plot_tps(self, system, faults, max_latencies, tx_size):
+    def plot_tps(self, system, faults, max_latencies, tx_size, graph_type='tps'):
         assert isinstance(system, str)
         assert isinstance(faults, list)
         assert all(isinstance(x, int) for x in faults)
@@ -144,7 +147,7 @@ class Ploter:
         self.results = []
         for f in faults:
             for l in max_latencies:
-                filename = f'{system}.tps-x-any-{tx_size}-{f}-{l}.txt'
+                filename = f'{system}.{graph_type}-x-any-{tx_size}-{f}-{l}.txt'
                 with open(filename, 'r') as file:
                     self.results += [file.read().replace(',', '')]
 
@@ -154,7 +157,7 @@ class Ploter:
         y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
         marker = next(self.MARKERS)
         color = next(self.COLORS)
-        self._plot(x_label, y_label, self._tps, z_axis, 'tps', marker, color) 
+        self._plot(x_label, y_label, self._tps, z_axis, 'tps', marker, color)
 
     def plot_free(self, x_values, y_values, labels):
         assert isinstance(x_values, list)
@@ -174,14 +177,14 @@ class Ploter:
                 marker=marker, color=color, linestyle=style
             )
 
-    def finalize(self, name, legend_cols):
+    def finalize(self, name, legend_cols, top_lim=None):
         assert isinstance(name, str)
 
         plt.legend(
             loc='lower center', bbox_to_anchor=(0.5, 1), ncol=legend_cols
         )
         plt.xlim(xmin=0)
-        plt.ylim(bottom=0)
+        plt.ylim(bottom=0, top=top_lim)
         plt.grid(True)
 
         for x in ['pdf', 'png']:

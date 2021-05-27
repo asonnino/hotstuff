@@ -17,6 +17,7 @@ if __name__ == '__main__':
 
         files = glob(join(system, 'results', '*.txt'))
         LogAggregator(system, files, max_latencies).print()
+        LogAggregator(system, files, max_latencies, end_to_end=False).print()
 
     # Plot 'Happy path' graph.
     ploter = Ploter(width=12.8)
@@ -29,6 +30,14 @@ if __name__ == '__main__':
     for system in ['3-chain', '2-chain', 'ditto-sync', 'vaba']:
         ploter.plot_tps(system, [0], max_latencies, 512)
     ploter.finalize('happy-path-tps', legend_cols=2)
+
+    # Plot 'Happy path commit latency' graph.
+    ploter = Ploter()
+    for system in ['3-chain', '2-chain']:
+        ploter.plot_latency(
+            system, [20, 50], [0], 512, graph_type='commit_latency'
+        )
+    ploter.finalize('happy-path-commit', legend_cols=2, top_lim=1_500)
 
     # Plot 'Leader under DoS' graph.
     ploter = Ploter()
