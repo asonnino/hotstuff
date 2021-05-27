@@ -1,14 +1,27 @@
 from re import findall, search, split
 import matplotlib.pyplot as plt
-from matplotlib.ticker import StrMethodFormatter
+import matplotlib.ticker as ticker
 from itertools import cycle
 
+@ticker.FuncFormatter
+def default_major_formatter(x, pos):
+    if x >= 1_000:
+        return f'{x/1000:.0f}k'
+    else:
+        return f'{x:.0f}'
+
+def sec_major_formatter(x, pos):
+    return f'{float(x)/1000:.1f}'
 
 class PlotError(Exception):
     pass
 
 
 class Ploter:
+    MARKERS = cycle(['o', 'v', 's', 'd'])
+    STYLES = cycle(['solid', 'dashed', 'dotted'])
+    COLORS = cycle(['tab:green', 'tab:blue', 'tab:orange', 'tab:red'])
+
     def __init__(self):
         plt.figure()
 
@@ -21,9 +34,9 @@ class Ploter:
         values = [(int(x), int(y)) for x, y in values]
         return list(zip(*values))
 
-    def _latency(self, data, scale=1):
+    def _latency(self, data):
         values = findall(r' Latency: (\d+) \+/- (\d+)', data)
-        values = [(float(x)/scale, float(y)/scale) for x, y in values]
+        values = [(int(x), int(y)) for x, y in values]
         return list(zip(*values))
 
     def _variable(self, data):
@@ -39,8 +52,7 @@ class Ploter:
         size = int(search(r'Transaction size: (\d+)', data).group(1))
         return x * 10**6 / size
 
-    def _plot(self, x_label, y_label, y_axis, z_axis, type):
-        markers = cycle(['o', 'v', 's', 'p', 'D', 'P'])
+    def _plot(self, x_label, y_label, y_axis, z_axis, type, marker, color):
         self.results.sort(key=self._natural_keys, reverse=(type == 'tps'))
         for result in self.results:
             y_values, y_err = y_axis(result)
@@ -48,26 +60,26 @@ class Ploter:
             if len(y_values) != len(y_err) or len(y_err) != len(x_values):
                 raise PlotError('Unequal number of x, y, and y_err values')
 
+            style = next(self.STYLES)
             plt.errorbar(
                 x_values, y_values, yerr=y_err, label=z_axis(result),
-                linestyle='dotted', marker=next(markers), capsize=3
+                linestyle=style, marker=marker, color=color, capsize=3
             )
 
-        plt.legend(loc='lower center', bbox_to_anchor=(0.5, 1), ncol=2)
-        plt.xlim(xmin=0)
-        plt.ylim(bottom=0)
         plt.xlabel(x_label)
         plt.ylabel(y_label[0])
-        plt.grid()
         ax = plt.gca()
-        ax.xaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
-        ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
+        ax.xaxis.set_major_formatter(default_major_formatter)
+        if type == 'latency':
+            ax.yaxis.set_major_formatter(sec_major_formatter)
+        else:
+            ax.yaxis.set_major_formatter(default_major_formatter)
         if len(y_label) > 1:
             secaxy = ax.secondary_yaxis(
                 'right', functions=(self._tps2bps, self._bps2tps)
             )
             secaxy.set_ylabel(y_label[1])
-            secaxy.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
+            secaxy.yaxis.set_major_formatter(default_major_formatter)
 
     def _nodes(self, data):
         x = search(r'Committee size: (\d+)', data).group(1)
@@ -79,7 +91,7 @@ class Ploter:
         x = search(r'Max latency: (\d+)', data).group(1)
         f = search(r'Faults: (\d+)', data).group(1)
         faults = f'({f} faulty)' if f != '0' else ''
-        return f'{self.system} {faults}, Max latency: {float(x) / 1000:,.1f}s'
+        return f'{self.system} {faults}, Max latency: {float(x)/1000:,.1f}s'
 
     def plot_latency(self, system, nodes, faults, tx_size):
         assert isinstance(system, str)
@@ -99,8 +111,12 @@ class Ploter:
         self.system = system
         z_axis = self._nodes
         x_label = 'Throughput (tx/s)'
-        y_label = ['Latency (ms)']
-        self._plot(x_label, y_label, self._latency, z_axis, 'latency')
+        y_label = ['Latency (s)']
+        marker = next(self.MARKERS)
+        color = next(self.COLORS)
+        self._plot(
+            x_label, y_label, self._latency, z_axis, 'latency', marker, color
+        )
 
     def plot_tps(self, system, faults, max_latencies, tx_size):
         assert isinstance(system, str)
@@ -121,10 +137,35 @@ class Ploter:
         z_axis = self._max_latency
         x_label = 'Committee size'
         y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
-        self._plot(x_label, y_label, self._tps, z_axis, 'tps')
+        marker = next(self.MARKERS)
+        color = next(self.COLORS)
+        self._plot(x_label, y_label, self._tps, z_axis, 'tps', marker, color) 
+
+    def plot_free(self, x_values, y_values, labels):
+        assert isinstance(x_values, list)
+        assert all(isinstance(x, int) for x in x_values)
+        assert isinstance(y_values, list)
+        assert all(isinstance(x, int) for x in y_values)
+        assert len(x_values) == len(y_values)
+        assert isinstance(labels, list)
+        assert all(isinstance(x, str) for x in labels)
+
+        marker = next(self.MARKERS)
+        color = next(self.COLORS)
+        for label in labels:
+            style = next(self.STYLES)
+            plt.plot(
+                x_values, y_values, label=label,
+                marker=marker, color=color, linestyle=style
+            )
 
     def finalize(self, name):
         assert isinstance(name, str)
+
+        plt.legend(loc='lower center', bbox_to_anchor=(0.5, 1), ncol=4)
+        plt.xlim(xmin=0)
+        plt.ylim(bottom=0)
+        plt.grid(True)
 
         for x in ['pdf', 'png']:
             plt.savefig(f'{name}.{x}', bbox_inches='tight')
