@@ -35,7 +35,7 @@ if __name__ == '__main__':
     ploter = Ploter()
     for system in ['3-chain', '2-chain']:
         ploter.plot_latency(
-            system, [20, 50], [0], 512, graph_type='commit_latency'
+            system, [10, 20, 50], [0], 512, graph_type='commit_latency'
         )
     ploter.finalize('happy-path-commit', legend_cols=2, top_lim=1_500)
 
@@ -44,9 +44,9 @@ if __name__ == '__main__':
     for i, system in enumerate(['3-chain', '2-chain']):
         name = Ploter.legend_name(system)
         ploter.plot_free(
-            [x + i*1_000 for x in range(0, 60_000, 10_000)], 
-            [0] * 6, 
-            [f'{name}, {x} nodes' for x in [10, 20, 30]]
+            [x + i*1_000 for x in range(0, 50_000, 10_000)], 
+            [0] * 5, 
+            [f'{name}, {x} nodes' for x in [10, 20, 50]]
         )
     for system in ['ditto-async', 'vaba']:
         ploter.plot_latency(system, [10, 20, 50], [0], 512)
@@ -63,9 +63,13 @@ if __name__ == '__main__':
     for i, system in enumerate(['3-chain', '2-chain']):
         name = Ploter.legend_name(system)
         ploter.plot_free(
-            [x + i*1_000 for x in range(0, 60_000, 10_000)], 
-            [0] * 6, 
-            [f'{name}, {x} nodes' for x in [10, 20, 30]]
+            [x + i*1_000 for x in range(0, 50_000, 10_000)], 
+            [0] * 5, 
+            [
+                f'{name}, 20 nodes', 
+                f'{name}, 20 nodes (1 faulty)', 
+                f'{name}, 20 nodes (3 faulty)'
+            ]
         )
     for system in ['ditto-async', 'vaba']:
         ploter.plot_latency(system, [20], [0, 1, 3], 512)
