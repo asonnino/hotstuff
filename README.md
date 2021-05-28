@@ -1,19 +1,19 @@
-> **Note to readers:** The 2-chain variant of the HotStuff consensus protocol implemented in this repo is currently under developpement and will soon be published. In the meantime, you may be interested in the [3-chain branch](https://github.com/asonnino/hotstuff/tree/3-chain) that implements the classic HotStuff protocol.
+> **Note to readers:** The Ditto protocol implemented in this repo is currently under developpement and will soon be published. In the meantime, you may be interested in the [2-chain HotStuff] (https://github.com/asonnino/hotstuff) and [3-chain HotStuff](https://github.com/asonnino/hotstuff/tree/3-chain) that implements the classic HotStuff protocol.
 
 # HotStuff
 
-[![build status](https://img.shields.io/github/workflow/status/asonnino/hotstuff/Build/main?style=flat-square&logo=github)](https://github.com/asonnino/hotstuff/actions)
-[![test status](https://img.shields.io/github/workflow/status/asonnino/hotstuff/Tests/main?style=flat-square&logo=github&label=tests)](https://github.com/asonnino/hotstuff/actions)
+[![build status](https://img.shields.io/github/workflow/status/danielxiangzl/hotstuff/Build/main?style=flat-square&logo=github)](https://github.com/danielxiangzl/hotstuff/actions)
+[![test status](https://img.shields.io/github/workflow/status/danielxiangzl/hotstuff/Tests/main?style=flat-square&logo=github&label=tests)](https://github.com/danielxiangzl/hotstuff/actions)
 [![rustc](https://img.shields.io/badge/rustc-1.48+-blue?style=flat-square&logo=rust)](https://www.rust-lang.org)
 [![license](https://img.shields.io/badge/license-Apache-blue.svg?style=flat-square)](LICENSE)
 
-This repo provides a minimal implementation of the 2-chain variant of the HotStuff consensus protocol. The codebase has been designed to be small, efficient, and easy to benchmark and modify. It has not been designed to run in production but uses real cryptography ([dalek](https://doc.dalek.rs/ed25519_dalek)), networking ([tokio](https://docs.rs/tokio)), and storage ([rocksdb](https://docs.rs/rocksdb)).
+This repo provides a minimal implementation of the Ditto protocol, which is 2-chain HotStuff with asynchronous fallback. The codebase has been designed to be small, efficient, and easy to benchmark and modify. It has not been designed to run in production but uses real cryptography ([dalek](https://doc.dalek.rs/ed25519_dalek)), networking ([tokio](https://docs.rs/tokio)), and storage ([rocksdb](https://docs.rs/rocksdb)).
 
 ## Quick Start
-HotStuff is written in Rust, but all benchmarking scripts are written in Python and run with [Fabric](http://www.fabfile.org/).
+Ditto is written in Rust, but all benchmarking scripts are written in Python and run with [Fabric](http://www.fabfile.org/).
 To deploy and benchmark a testbed of 4 nodes on your local machine, clone the repo and install the python dependencies:
 ```
-$ git clone https://github.com/asonnino/hotstuff.git
+$ git clone https://github.com/danielxiangzl/hotstuff.git
 $ cd hotstuff/benchmark
 $ pip install -r requirements.txt
 ```
