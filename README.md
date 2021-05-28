@@ -1,6 +1,6 @@
-> **Note to readers:** The Ditto protocol implemented in this repo is currently under developpement and will soon be published. In the meantime, you may be interested in the [2-chain HotStuff] (https://github.com/asonnino/hotstuff) and [3-chain HotStuff](https://github.com/asonnino/hotstuff/tree/3-chain) that implements the classic HotStuff protocol.
+> **Note to readers:** The Ditto protocol implemented in this repo is currently under developpement and will soon be published. In the meantime, you may be interested in the [2-chain HotStuff](https://github.com/asonnino/hotstuff) and [3-chain HotStuff](https://github.com/asonnino/hotstuff/tree/3-chain) that implements the classic HotStuff protocol.
 
-# HotStuff
+# Ditto
 
 [![build status](https://img.shields.io/github/workflow/status/danielxiangzl/hotstuff/Build/main?style=flat-square&logo=github)](https://github.com/danielxiangzl/hotstuff/actions)
 [![test status](https://img.shields.io/github/workflow/status/danielxiangzl/hotstuff/Tests/main?style=flat-square&logo=github&label=tests)](https://github.com/danielxiangzl/hotstuff/actions)
