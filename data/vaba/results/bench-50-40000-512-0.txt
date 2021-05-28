@@ -1,0 +1,90 @@
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Protocol: 2 
+ DDOS attack: True 
+ Committee size: 50 nodes
+ Input rate: 40,000 tx/s
+ Transaction size: 512 B
+ Faults: 0 nodes
+ Execution time: 297 s
+
+ Consensus timeout delay: 10,000 ms
+ Consensus sync retry delay: 100,000 ms
+ Consensus max payloads size: 1,000 B
+ Consensus min block delay: 100 ms
+ Mempool queue capacity: 100,000 B
+ Mempool max payloads size: 500,000 B
+ Mempool min block delay: 100 ms
+
+ + RESULTS:
+ Consensus TPS: 24,821 tx/s
+ Consensus BPS: 12,708,143 B/s
+ Consensus latency: 3,216 ms
+
+ End-to-end TPS: 24,813 tx/s
+ End-to-end BPS: 12,704,294 B/s
+ End-to-end latency: 4,251 ms
+-----------------------------------------
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Protocol: 2 
+ DDOS attack: True 
+ Committee size: 50 nodes
+ Input rate: 40,000 tx/s
+ Transaction size: 512 B
+ Faults: 0 nodes
+ Execution time: 289 s
+
+ Consensus timeout delay: 10,000 ms
+ Consensus sync retry delay: 100,000 ms
+ Consensus max payloads size: 1,000 B
+ Consensus min block delay: 100 ms
+ Mempool queue capacity: 100,000 B
+ Mempool max payloads size: 500,000 B
+ Mempool min block delay: 100 ms
+
+ + RESULTS:
+ Consensus TPS: 23,873 tx/s
+ Consensus BPS: 12,222,899 B/s
+ Consensus latency: 3,168 ms
+
+ End-to-end TPS: 23,858 tx/s
+ End-to-end BPS: 12,215,045 B/s
+ End-to-end latency: 4,174 ms
+-----------------------------------------
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Protocol: 2 
+ DDOS attack: True 
+ Committee size: 50 nodes
+ Input rate: 40,000 tx/s
+ Transaction size: 512 B
+ Faults: 0 nodes
+ Execution time: 288 s
+
+ Consensus timeout delay: 10,000 ms
+ Consensus sync retry delay: 100,000 ms
+ Consensus max payloads size: 1,000 B
+ Consensus min block delay: 100 ms
+ Mempool queue capacity: 100,000 B
+ Mempool max payloads size: 500,000 B
+ Mempool min block delay: 100 ms
+
+ + RESULTS:
+ Consensus TPS: 24,985 tx/s
+ Consensus BPS: 12,792,245 B/s
+ Consensus latency: 3,682 ms
+
+ End-to-end TPS: 24,975 tx/s
+ End-to-end BPS: 12,787,009 B/s
+ End-to-end latency: 4,650 ms
+-----------------------------------------
