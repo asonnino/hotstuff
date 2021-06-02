@@ -21,12 +21,12 @@ class PlotError(Exception):
 
 
 class Ploter:
-    MARKERS = cycle(['o', 'v', 's', 'd'])
-    STYLES = cycle(['solid', 'dashed', 'dotted'])
-    COLORS = cycle(['tab:green', 'tab:blue', 'tab:orange', 'tab:red'])
-
     def __init__(self, width=6.4, height=4.8):
         plt.figure(figsize=(width, height))
+
+        self.markers = cycle(['o', 'v', 's', 'd'])
+        self.styles = cycle(['solid', 'dashed', 'dotted'])
+        self.colors = cycle(['tab:red', 'tab:orange', 'tab:blue', 'tab:green'])
 
     def _natural_keys(self, text):
         def try_cast(text): return int(text) if text.isdigit() else text
@@ -63,7 +63,7 @@ class Ploter:
             if len(y_values) != len(y_err) or len(y_err) != len(x_values):
                 raise PlotError('Unequal number of x, y, and y_err values')
 
-            style = next(self.STYLES)
+            style = next(self.styles)
             plt.errorbar(
                 x_values, y_values, yerr=y_err, label=z_axis(result),
                 linestyle=style, marker=marker, color=color, capsize=3
@@ -137,8 +137,8 @@ class Ploter:
         z_axis = self._nodes
         x_label = 'Throughput (tx/s)'
         y_label = ['Latency (s)']
-        marker = next(self.MARKERS)
-        color = next(self.COLORS)
+        marker = next(self.markers)
+        color = next(self.colors)
         self._plot(
             x_label, y_label, self._latency, z_axis, 'latency', marker, color
         )
@@ -162,8 +162,8 @@ class Ploter:
         z_axis = self._max_latency
         x_label = 'Committee size'
         y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
-        marker = next(self.MARKERS)
-        color = next(self.COLORS)
+        marker = next(self.markers)
+        color = next(self.colors)
         self._plot(x_label, y_label, self._tps, z_axis, 'tps', marker, color)
 
     def plot_commit_lantecy(self, system, faults, rates, tx_size, graph_type='commit_latency'):
@@ -185,9 +185,8 @@ class Ploter:
         z_axis = self._input_rate
         x_label = 'Committee size'
         y_label = ['Latency (s)']
-        marker = next(self.MARKERS)
-        color = next(self.COLORS)
-        self.STYLES = cycle(['solid', 'dashed'])
+        marker = next(self.markers)
+        color = next(self.colors)
         self._plot(x_label, y_label, self._latency, z_axis, 'commit_latency', marker, color)
 
     def plot_free(self, x_values, y_values, labels):
@@ -199,10 +198,10 @@ class Ploter:
         assert isinstance(labels, list)
         assert all(isinstance(x, str) for x in labels)
 
-        marker = next(self.MARKERS)
-        color = next(self.COLORS)
+        marker = next(self.markers)
+        color = next(self.colors)
         for label in labels:
-            style = next(self.STYLES)
+            style = next(self.styles)
             plt.plot(
                 x_values, y_values, label=label,
                 marker=marker, color=color, linestyle=style
