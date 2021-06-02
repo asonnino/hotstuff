@@ -100,7 +100,8 @@ class LogAggregator:
         self.records = {k: Result.aggregate(v) for k, v in records.items()}
 
     def print(self):
-        for graph_type, records in [self._print_latency(), self._print_tps()]:
+        results = [self._print_latency(), self._print_tps(), self._print_commit_latency()]
+        for graph_type, records in results:
             for setup, values in records.items():
                 data = '\n'.join(
                     f' Variable value: X={x}\n{y}' for x, y in values
@@ -115,10 +116,9 @@ class LogAggregator:
                     f'{data}'
                     '-----------------------------------------\n'
                 )
-                type = graph_type if self.end_to_end else f'commit_{graph_type}'
                 filename = (
                     f'{self.system}.'
-                    f'{type}-'
+                    f'{graph_type}-'
                     f'{setup.nodes}-'
                     f'{setup.rate}-'
                     f'{setup.tx_size}-'
@@ -165,3 +165,15 @@ class LogAggregator:
 
         [v.sort(key=lambda x: x[0]) for v in organized.values()]
         return 'tps', organized
+
+    def _print_commit_latency(self):
+        records = deepcopy(self.records)
+        organized = defaultdict(list)
+        for setup, result in records.items():
+            setup = deepcopy(setup)
+            nodes = setup.nodes
+            setup.nodes = 'x'
+            organized[setup] += [(nodes, result)]
+
+        [v.sort(key=lambda x: x[0]) for v in organized.values()]
+        return 'commit_latency', organized

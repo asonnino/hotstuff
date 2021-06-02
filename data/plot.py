@@ -75,7 +75,7 @@ class Ploter:
         plt.yticks(weight='bold')
         ax = plt.gca()
         ax.xaxis.set_major_formatter(default_major_formatter)
-        if type == 'latency':
+        if 'latency' in type:
             ax.yaxis.set_major_formatter(sec_major_formatter)
         else:
             ax.yaxis.set_major_formatter(default_major_formatter)
@@ -89,16 +89,23 @@ class Ploter:
     def _nodes(self, data):
         x = search(r'Committee size: (\d+)', data).group(1)
         f = search(r'Faults: (\d+)', data).group(1)
-        faults = f'({f} faulty)' if f != '0' else ''
+        faults = f' ({f} faulty)' if f != '0' else ''
         name = self.legend_name(self.system)
-        return f'{name}, {x} nodes {faults}'
+        return f'{name}, {x} nodes{faults}'
 
     def _max_latency(self, data):
         x = search(r'Max latency: (\d+)', data).group(1)
         f = search(r'Faults: (\d+)', data).group(1)
-        faults = f'({f} faulty)' if f != '0' else ''
+        faults = f' ({f} faulty)' if f != '0' else ''
         name = self.legend_name(self.system)
-        return f'{name} {faults}, Max latency: {float(x)/1000:,.1f}s'
+        return f'{name}{faults}, Max latency: {float(x)/1000:,.1f}s'
+
+    def _input_rate(self, data):
+        x = search(r'Input rate: (\d+)', data).group(1)
+        f = search(r'Faults: (\d+)', data).group(1)
+        faults = f' ({f} faulty)' if f != '0' else ''
+        name = self.legend_name(self.system)
+        return f'{name}{faults}, Input rate: {float(x)/1000:,.0f}k'
 
     @staticmethod
     def legend_name(system):
@@ -158,6 +165,30 @@ class Ploter:
         marker = next(self.MARKERS)
         color = next(self.COLORS)
         self._plot(x_label, y_label, self._tps, z_axis, 'tps', marker, color)
+
+    def plot_commit_lantecy(self, system, faults, rates, tx_size, graph_type='commit_latency'):
+        assert isinstance(system, str)
+        assert isinstance(faults, list)
+        assert all(isinstance(x, int) for x in faults)
+        assert isinstance(rates, list)
+        assert all(isinstance(x, int) for x in rates)
+        assert isinstance(tx_size, int)
+
+        self.results = []
+        for f in faults:
+            for r in rates:
+                filename = f'{system}.{graph_type}-x-{r}-{tx_size}-{f}-any.txt'
+                with open(filename, 'r') as file:
+                    self.results += [file.read().replace(',', '')]
+
+        self.system = system
+        z_axis = self._input_rate
+        x_label = 'Committee size'
+        y_label = ['Latency (s)']
+        marker = next(self.MARKERS)
+        color = next(self.COLORS)
+        self.STYLES = cycle(['solid', 'dashed'])
+        self._plot(x_label, y_label, self._latency, z_axis, 'commit_latency', marker, color)
 
     def plot_free(self, x_values, y_values, labels):
         assert isinstance(x_values, list)
