@@ -4,7 +4,7 @@
 
 [![build status](https://img.shields.io/github/workflow/status/danielxiangzl/hotstuff/Build/main?style=flat-square&logo=github)](https://github.com/danielxiangzl/hotstuff/actions)
 [![test status](https://img.shields.io/github/workflow/status/danielxiangzl/hotstuff/Tests/main?style=flat-square&logo=github&label=tests)](https://github.com/danielxiangzl/hotstuff/actions)
-[![rustc](https://img.shields.io/badge/rustc-1.48+-blue?style=flat-square&logo=rust)](https://www.rust-lang.org)
+[![rustc](https://img.shields.io/badge/rustc-1.50.0+-blue?style=flat-square&logo=rust)](https://www.rust-lang.org)
 [![license](https://img.shields.io/badge/license-Apache-blue.svg?style=flat-square)](LICENSE)
 
 This repo provides a minimal implementation of the Ditto protocol, which is 2-chain HotStuff with asynchronous fallback. The codebase has been designed to be small, efficient, and easy to benchmark and modify. It has not been designed to run in production but uses real cryptography ([dalek](https://doc.dalek.rs/ed25519_dalek)), networking ([tokio](https://docs.rs/tokio)), and storage ([rocksdb](https://docs.rs/rocksdb)).
