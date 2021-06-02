@@ -54,7 +54,8 @@ class Result:
         if end_to_end:
             tps = int(search(r'.* End-to-end TPS: (\d+)', raw).group(1))
             latency = int(
-                search(r'.* End-to-end latency: (\d+)', raw).group(1))
+                search(r'.* End-to-end latency: (\d+)', raw).group(1)
+            )
         else:
             tps = int(search(r'.* Consensus TPS: (\d+)', raw).group(1))
             latency = int(search(r'.* Consensus latency: (\d+)', raw).group(1))
@@ -100,7 +101,11 @@ class LogAggregator:
         self.records = {k: Result.aggregate(v) for k, v in records.items()}
 
     def print(self):
-        results = [self._print_latency(), self._print_tps(), self._print_commit_latency()]
+        if self.end_to_end:
+            results = [self._print_latency(), self._print_tps()]
+        else:
+            results = [self._print_commit_latency()]
+
         for graph_type, records in results:
             for setup, values in records.items():
                 data = '\n'.join(
