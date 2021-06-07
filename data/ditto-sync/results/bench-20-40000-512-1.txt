@@ -39,39 +39,6 @@
  Input rate: 38,000 tx/s
  Transaction size: 512 B
  Faults: 1 nodes
-<<<<<<< HEAD
- Execution time: 291 s
-
- Consensus timeout delay: 5,000 ms
- Consensus sync retry delay: 100,000 ms
- Consensus max payloads size: 1,000 B
- Consensus min block delay: 100 ms
- Mempool queue capacity: 100,000 B
- Mempool max payloads size: 500,000 B
- Mempool min block delay: 100 ms
-
- + RESULTS:
- Consensus TPS: 36,550 tx/s
- Consensus BPS: 18,713,583 B/s
- Consensus latency: 8,820 ms
-
- End-to-end TPS: 36,491 tx/s
- End-to-end BPS: 18,683,396 B/s
- End-to-end latency: 11,006 ms
------------------------------------------
-
------------------------------------------
- SUMMARY:
------------------------------------------
- + CONFIG:
- Protocol: 1 
- DDOS attack: False 
- Committee size: 20 nodes
- Input rate: 38,000 tx/s
- Transaction size: 512 B
- Faults: 1 nodes
-=======
->>>>>>> 2b04fa908b974e6f0fc09efc152ac3cdb8e671db
  Execution time: 294 s
 
  Consensus timeout delay: 5,000 ms
