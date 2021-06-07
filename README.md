@@ -1,11 +1,11 @@
 # HotStuff with Async Fallback
 
-[![build status](https://img.shields.io/github/workflow/status/asonnino/hotstuff/Build/main?style=flat-square&logo=github)](https://github.com/asonnino/hotstuff/actions)
-[![test status](https://img.shields.io/github/workflow/status/asonnino/hotstuff/Tests/main?style=flat-square&logo=github&label=tests)](https://github.com/asonnino/hotstuff/actions)
-[![rustc](https://img.shields.io/badge/rustc-1.48+-blue?style=flat-square&logo=rust)](https://www.rust-lang.org)
+[![build status](https://img.shields.io/github/workflow/status/danielxiangzl/hotstuff/Build/main?style=flat-square&logo=github)](https://github.com/danielxiangzl/hotstuff/actions)
+[![test status](https://img.shields.io/github/workflow/status/danielxiangzl/hotstuff/Tests/main?style=flat-square&logo=github&label=tests)](https://github.com/danielxiangzl/hotstuff/actions)
+[![rustc](https://img.shields.io/badge/rustc-1.50.0+-blue?style=flat-square&logo=rust)](https://www.rust-lang.org)
 [![license](https://img.shields.io/badge/license-Apache-blue.svg?style=flat-square)](LICENSE)
 
-The code in this branch is a prototype of HotStuff with an asynchronous fallback. It suplements the paper [2-Chain HotStuff with Asynchronous Fallback]() and there are no plans to maintain this branch. All data points used to produce the graphs of the paper are available in the folder [hotstuff/data](https://github.com/asonnino/hotstuff/tree/async/data).
+The code in this branch is a prototype of HotStuff with an asynchronous fallback. It supplements the paper [2-Chain HotStuff with Asynchronous Fallback]() and there are no plans to maintain this branch. All data points used to produce the graphs of the paper are available in the folder [hotstuff/data](https://github.com/asonnino/hotstuff/tree/async/data).
 
 ## License
 This software is licensed as [Apache 2.0](LICENSE).

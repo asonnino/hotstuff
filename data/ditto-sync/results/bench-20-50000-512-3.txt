@@ -58,3 +58,36 @@
  End-to-end BPS: 11,200,726 B/s
  End-to-end latency: 17,717 ms
 -----------------------------------------
+<<<<<<< HEAD
+=======
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Protocol: 1 
+ DDOS attack: False 
+ Committee size: 20 nodes
+ Input rate: 42,500 tx/s
+ Transaction size: 512 B
+ Faults: 3 nodes
+ Execution time: 291 s
+
+ Consensus timeout delay: 5,000 ms
+ Consensus sync retry delay: 100,000 ms
+ Consensus max payloads size: 1,000 B
+ Consensus min block delay: 100 ms
+ Mempool queue capacity: 100,000 B
+ Mempool max payloads size: 500,000 B
+ Mempool min block delay: 100 ms
+
+ + RESULTS:
+ Consensus TPS: 17,621 tx/s
+ Consensus BPS: 9,022,118 B/s
+ Consensus latency: 9,836 ms
+
+ End-to-end TPS: 17,614 tx/s
+ End-to-end BPS: 9,018,585 B/s
+ End-to-end latency: 12,365 ms
+-----------------------------------------
+>>>>>>> 2b04fa908b974e6f0fc09efc152ac3cdb8e671db

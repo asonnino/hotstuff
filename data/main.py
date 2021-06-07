@@ -21,7 +21,7 @@ if __name__ == '__main__':
 
     # Plot 'Happy path' graph.
     ploter = Ploter(width=12.8)
-    for system in ['3-chain', '2-chain', 'vaba', 'ditto-sync']:
+    for system in ['3-chain', '2-chain', 'ditto-sync', 'vaba']:
         ploter.plot_latency(system, [10, 20, 50], [0], 512)
     ploter.finalize('happy-path', legend_cols=4)
 
@@ -36,17 +36,17 @@ if __name__ == '__main__':
     for i, system in enumerate(['3-chain', '2-chain']):
         name = Ploter.legend_name(system)
         ploter.plot_free(
-            [i*700], 
+            [i*500], 
             [0], 
             [f'{name}, {x} nodes' for x in [10, 20, 50]]
         )
-    for system in ['vaba', 'ditto-async']:
+    for system in ['ditto-async', 'vaba']:
         ploter.plot_latency(system, [10, 20, 50], [0], 512)
     ploter.finalize('leader-under-dos', legend_cols=2)
 
     # Plot 'Dead nodes' graph.
     ploter = Ploter(width=12.8)
-    for system in ['3-chain', '2-chain', 'vaba', 'ditto-sync']:
+    for system in ['3-chain', '2-chain', 'ditto-sync', 'vaba']:
         ploter.plot_latency(system, [20], [0, 1, 3], 512)
     ploter.finalize('dead-nodes', legend_cols=4)
 
@@ -55,7 +55,7 @@ if __name__ == '__main__':
     for i, system in enumerate(['3-chain', '2-chain']):
         name = Ploter.legend_name(system)
         ploter.plot_free(
-            [i*700], 
+            [i*500], 
             [0], 
             [
                 f'{name}, 20 nodes', 

@@ -39,6 +39,7 @@
  Input rate: 38,000 tx/s
  Transaction size: 512 B
  Faults: 1 nodes
+<<<<<<< HEAD
  Execution time: 291 s
 
  Consensus timeout delay: 5,000 ms
@@ -69,6 +70,8 @@
  Input rate: 38,000 tx/s
  Transaction size: 512 B
  Faults: 1 nodes
+=======
+>>>>>>> 2b04fa908b974e6f0fc09efc152ac3cdb8e671db
  Execution time: 294 s
 
  Consensus timeout delay: 5,000 ms
