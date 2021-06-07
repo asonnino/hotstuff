@@ -27,7 +27,7 @@ if __name__ == '__main__':
 
     # Plot 'Happy path TPS' graph.
     ploter = Ploter()
-    for system in ['3-chain', '2-chain', 'vaba', 'ditto-sync']:
+    for system in ['3-chain', '2-chain', 'ditto-sync', 'vaba']:
         ploter.plot_tps(system, [0], max_latencies, 512)
     ploter.finalize('happy-path-tps', legend_cols=2)
 
@@ -69,7 +69,7 @@ if __name__ == '__main__':
 
     # Plot 'Happy path commit latency' graph.
     ploter = Ploter()
-    ploter.colors = cycle(['tab:red', 'tab:orange'])
+    ploter.colors = cycle(['tab:red', 'tab:blue'])
     ploter.styles = cycle(['solid', 'dashed'])
     for system in ['3-chain', '2-chain']:
         ploter.plot_commit_lantecy(
