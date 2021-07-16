@@ -41,15 +41,6 @@ pub enum ConsensusMempoolMessage {
     Cleanup(Round),
 }
 
-/// The messages sent by the mempool to the consensus.
-#[derive(Debug, Serialize, Deserialize)]
-pub enum MempoolConsensusMessage {
-    /// The mempool notifies the consensus that it sealed a new batch.
-    OurBatch(Digest),
-    /// The mempool notifies it received a batch's digest from another authority.
-    OthersBatch(Digest),
-}
-
 pub struct Mempool {
     /// The public key of this authority.
     name: PublicKey,
@@ -60,7 +51,7 @@ pub struct Mempool {
     /// The persistent storage.
     store: Store,
     /// Send messages to consensus.
-    tx_consensus: Sender<MempoolConsensusMessage>,
+    tx_consensus: Sender<Digest>,
 }
 
 impl Mempool {
@@ -70,8 +61,11 @@ impl Mempool {
         parameters: Parameters,
         store: Store,
         rx_consensus: Receiver<ConsensusMempoolMessage>,
-        tx_consensus: Sender<MempoolConsensusMessage>,
+        tx_consensus: Sender<Digest>,
     ) {
+        // NOTE: This log entry is used to compute performance.
+        parameters.log();
+
         // Define a mempool instance.
         let mempool = Self {
             name,
@@ -154,7 +148,6 @@ impl Mempool {
             self.store.clone(),
             /* rx_batch */ rx_processor,
             /* tx_digest */ self.tx_consensus.clone(),
-            /* own_batch */ true,
         );
 
         info!("Mempool listening to client transactions on {}", address);
@@ -193,7 +186,6 @@ impl Mempool {
             self.store.clone(),
             /* rx_batch */ rx_processor,
             /* tx_digest */ self.tx_consensus.clone(),
-            /* own_batch */ false,
         );
 
         info!("Mempool listening to mempool messages on {}", address);

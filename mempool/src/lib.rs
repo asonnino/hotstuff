@@ -10,4 +10,4 @@ mod synchronizer;
 #[path = "tests/common.rs"]
 mod common;
 
-pub use crate::mempool::{ConsensusMempoolMessage, Mempool, MempoolConsensusMessage, Round};
+pub use crate::mempool::{ConsensusMempoolMessage, Mempool};

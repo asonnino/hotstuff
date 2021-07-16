@@ -15,12 +15,7 @@ async fn hash_and_store() {
     let mut store = Store::new(path).unwrap();
 
     // Spawn a new `Processor` instance.
-    Processor::spawn(
-        store.clone(),
-        rx_batch,
-        tx_digest,
-        /* own_batch */ true,
-    );
+    Processor::spawn(store.clone(), rx_batch, tx_digest);
 
     // Send a batch to the `Processor`.
     let message = MempoolMessage::Batch(batch());
@@ -33,10 +28,8 @@ async fn hash_and_store() {
             .try_into()
             .unwrap(),
     );
-    match rx_digest.recv().await.unwrap() {
-        MempoolConsensusMessage::OurBatch(x) => assert_eq!(digest.clone(), x),
-        _ => panic!("Unexpected enum variant"),
-    }
+    let received = rx_digest.recv().await.unwrap();
+    assert_eq!(digest.clone(), received);
 
     // Ensure the `Processor` correctly stored the batch.
     let stored_batch = store.read(digest.to_vec()).await.unwrap();

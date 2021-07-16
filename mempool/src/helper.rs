@@ -48,7 +48,7 @@ impl Helper {
             let address = match self.committee.mempool_address(&origin) {
                 Some(x) => x,
                 None => {
-                    warn!("Batch request from unexpected authority: {}", origin);
+                    warn!("Received batch request from unknown authority: {}", origin);
                     continue;
                 }
             };

@@ -1,4 +1,3 @@
-use crate::mempool::MempoolConsensusMessage;
 use crypto::Digest;
 use ed25519_dalek::Digest as _;
 use ed25519_dalek::Sha512;
@@ -23,9 +22,7 @@ impl Processor {
         // Input channel to receive batches.
         mut rx_batch: Receiver<SerializedBatchMessage>,
         // Output channel to send out batches' digests.
-        tx_digest: Sender<MempoolConsensusMessage>,
-        // Whether we are processing our own batches or the batches of other nodes.
-        own_digest: bool,
+        tx_digest: Sender<Digest>,
     ) {
         tokio::spawn(async move {
             while let Some(batch) = rx_batch.recv().await {
@@ -35,15 +32,7 @@ impl Processor {
                 // Store the batch.
                 store.write(digest.to_vec(), batch).await;
 
-                // Deliver the batch's digest.
-                let message = match own_digest {
-                    true => MempoolConsensusMessage::OurBatch(digest),
-                    false => MempoolConsensusMessage::OthersBatch(digest),
-                };
-                tx_digest
-                    .send(message)
-                    .await
-                    .expect("Failed to send digest");
+                tx_digest.send(digest).await.expect("Failed to send digest");
             }
         });
     }

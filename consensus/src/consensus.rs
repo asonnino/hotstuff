@@ -2,12 +2,11 @@ use crate::config::{Committee, Parameters};
 use crate::core::{ConsensusMessage, Core};
 use crate::error::ConsensusResult;
 use crate::leader::LeaderElector;
-use crate::mempool::{ConsensusMempoolMessage, MempoolDriver};
+use crate::mempool::{MempoolDriver};
 use crate::messages::Block;
 use crate::synchronizer::Synchronizer;
 use crypto::{PublicKey, SignatureService};
 use log::info;
-use network::{NetReceiver, NetSender};
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
@@ -15,8 +14,15 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 #[path = "tests/consensus_tests.rs"]
 pub mod consensus_tests;
 
+/// The default channel capacity for each channel of the mempool.
+pub const CHANNEL_CAPACITY: usize = 1_000;
+
+/// The consensus round number.
+pub type Round = u64;
+
 pub struct Consensus;
 
+/*
 impl Consensus {
     #[allow(clippy::too_many_arguments)]
     pub async fn run(
@@ -48,7 +54,7 @@ impl Consensus {
             parameters.min_block_delay
         );
 
-        let (tx_network, rx_network) = channel(1000);
+        let (tx_network, rx_network) = channel(1_000);
 
         // Make the network sender and receiver.
         let address = committee.address(&name).map(|mut x| {
@@ -103,3 +109,4 @@ impl Consensus {
         Ok(())
     }
 }
+*/

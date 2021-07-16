@@ -41,8 +41,6 @@ async fn handle_clients_transactions() {
     network.send(address, Bytes::from(transaction())).await;
 
     // Ensure the consensus got the batch digest.
-    match rx_mempool_to_consensus.recv().await.unwrap() {
-        MempoolConsensusMessage::OurBatch(x) => assert_eq!(batch_digest(), x),
-        _ => panic!("Unexpected enum variant"),
-    }
+    let received = rx_mempool_to_consensus.recv().await.unwrap();
+    assert_eq!(batch_digest(), received);
 }
