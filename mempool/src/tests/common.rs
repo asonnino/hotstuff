@@ -1,72 +1,100 @@
-use crate::config::Committee;
-use crate::messages::Payload;
-use consensus::{Block, QC};
-use crypto::Hash as _;
-use crypto::{generate_keypair, PublicKey, SecretKey, Signature};
+use crate::batch_maker::{Batch, Transaction};
+use crate::config::{Authority, Committee};
+use crate::mempool::MempoolMessage;
+use bytes::Bytes;
+use crypto::{generate_keypair, Digest, PublicKey, SecretKey};
+use ed25519_dalek::Digest as _;
+use ed25519_dalek::Sha512;
+use futures::sink::SinkExt as _;
+use futures::stream::StreamExt as _;
 use rand::rngs::StdRng;
 use rand::SeedableRng as _;
+use std::convert::TryInto as _;
+use std::net::SocketAddr;
+use tokio::net::TcpListener;
+use tokio::task::JoinHandle;
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
-// Fixture.
+// Fixture
 pub fn keys() -> Vec<(PublicKey, SecretKey)> {
     let mut rng = StdRng::from_seed([0; 32]);
     (0..4).map(|_| generate_keypair(&mut rng)).collect()
 }
 
-// Fixture.
+// Fixture
 pub fn committee() -> Committee {
-    Committee::new(
-        keys()
-            .into_iter()
+    Committee {
+        authorities: keys()
+            .iter()
             .enumerate()
-            .map(|(i, (name, _))| {
-                let front = format!("127.0.0.1:{}", i).parse().unwrap();
-                let mempool = format!("127.0.0.1:{}", i + keys().len()).parse().unwrap();
-                (name, front, mempool)
+            .map(|(i, (id, _))| {
+                (
+                    *id,
+                    Authority {
+                        stake: 1,
+                        transactions_address: format!("127.0.0.1:{}", 100 + i).parse().unwrap(),
+                        mempool_address: format!("127.0.0.1:{}", 200 + i).parse().unwrap(),
+                    },
+                )
             })
             .collect(),
-        /* epoch */ 1,
+        epoch: 100,
+    }
+}
+
+// Fixture.
+pub fn committee_with_base_port(base_port: u16) -> Committee {
+    let mut committee = committee();
+    for authority in committee.authorities.values_mut() {
+        let port = authority.transactions_address.port();
+        authority.transactions_address.set_port(base_port + port);
+
+        let port = authority.mempool_address.port();
+        authority.mempool_address.set_port(base_port + port);
+    }
+    committee
+}
+
+// Fixture
+pub fn transaction() -> Transaction {
+    vec![0; 100]
+}
+
+// Fixture
+pub fn batch() -> Batch {
+    vec![transaction(), transaction()]
+}
+
+// Fixture
+pub fn serialized_batch() -> Vec<u8> {
+    let message = MempoolMessage::Batch(batch());
+    bincode::serialize(&message).unwrap()
+}
+
+// Fixture
+pub fn batch_digest() -> Digest {
+    Digest(
+        Sha512::digest(&serialized_batch()).as_slice()[..32]
+            .try_into()
+            .unwrap(),
     )
 }
 
-impl Committee {
-    pub fn increment_base_port(&mut self, base_port: u16) {
-        for authority in self.authorities.values_mut() {
-            let port = authority.front_address.port();
-            authority.front_address.set_port(base_port + port);
+// Fixture
+pub fn listener(address: SocketAddr, expected: Option<Bytes>) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let listener = TcpListener::bind(&address).await.unwrap();
+        let (socket, _) = listener.accept().await.unwrap();
+        let transport = Framed::new(socket, LengthDelimitedCodec::new());
+        let (mut writer, mut reader) = transport.split();
+        match reader.next().await {
+            Some(Ok(received)) => {
+                writer.send(Bytes::from("Ack")).await.unwrap();
+                if let Some(expected) = expected {
+                    assert_eq!(received.freeze(), expected);
+                }
+            }
+            _ => panic!("Failed to receive network message"),
         }
-        for authority in self.authorities.values_mut() {
-            let port = authority.mempool_address.port();
-            authority.mempool_address.set_port(base_port + port);
-        }
-    }
-}
-
-// Fixture.
-pub fn payload() -> Payload {
-    let (author, secret) = keys().pop().unwrap();
-    let payload = Payload {
-        transactions: vec![vec![1u8]],
-        author,
-        signature: Signature::default(),
-    };
-    let signature = Signature::new(&payload.digest(), &secret);
-    Payload {
-        signature,
-        ..payload
-    }
-}
-
-// Fixture.
-pub fn block() -> Block {
-    let (author, secret) = keys().pop().unwrap();
-    let block = Block {
-        qc: QC::genesis(),
-        tc: None,
-        author,
-        round: 1,
-        payload: Vec::new(),
-        signature: Signature::default(),
-    };
-    let signature = Signature::new(&block.digest(), &secret);
-    Block { signature, ..block }
+    })
 }

@@ -72,11 +72,10 @@ impl Committee {
         2 * total_votes / 3 + 1
     }
 
-    pub fn address(&self, name: &PublicKey) -> ConsensusResult<SocketAddr> {
+    pub fn address(&self, name: &PublicKey) -> Option<SocketAddr> {
         self.authorities
             .get(name)
             .map(|x| x.address)
-            .ok_or_else(|| ConsensusError::NotInCommittee(*name))
     }
 
     pub fn broadcast_addresses(&self, myself: &PublicKey) -> Vec<SocketAddr> {

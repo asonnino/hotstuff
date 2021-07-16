@@ -1,5 +1,5 @@
 use crate::config::Committee;
-use crate::core::RoundNumber;
+use crate::consensus::Round;
 use crate::error::{ConsensusError, ConsensusResult};
 use crypto::{Digest, Hash, PublicKey, Signature, SignatureService};
 use ed25519_dalek::Digest as _;
@@ -18,7 +18,7 @@ pub struct Block {
     pub qc: QC,
     pub tc: Option<TC>,
     pub author: PublicKey,
-    pub round: RoundNumber,
+    pub round: Round,
     pub payload: Vec<Digest>,
     pub signature: Signature,
 }
@@ -28,7 +28,7 @@ impl Block {
         qc: QC,
         tc: Option<TC>,
         author: PublicKey,
-        round: RoundNumber,
+        round: Round,
         payload: Vec<Digest>,
         mut signature_service: SignatureService,
     ) -> Self {
@@ -112,7 +112,7 @@ impl fmt::Display for Block {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Vote {
     pub hash: Digest,
-    pub round: RoundNumber,
+    pub round: Round,
     pub author: PublicKey,
     pub signature: Signature,
 }
@@ -164,7 +164,7 @@ impl fmt::Debug for Vote {
 #[derive(Clone, Serialize, Deserialize, Default)]
 pub struct QC {
     pub hash: Digest,
-    pub round: RoundNumber,
+    pub round: Round,
     pub votes: Vec<(PublicKey, Signature)>,
 }
 
@@ -222,7 +222,7 @@ impl PartialEq for QC {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Timeout {
     pub high_qc: QC,
-    pub round: RoundNumber,
+    pub round: Round,
     pub author: PublicKey,
     pub signature: Signature,
 }
@@ -230,7 +230,7 @@ pub struct Timeout {
 impl Timeout {
     pub async fn new(
         high_qc: QC,
-        round: RoundNumber,
+        round: Round,
         author: PublicKey,
         mut signature_service: SignatureService,
     ) -> Self {
@@ -282,8 +282,8 @@ impl fmt::Debug for Timeout {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TC {
-    pub round: RoundNumber,
-    pub votes: Vec<(PublicKey, Signature, RoundNumber)>,
+    pub round: Round,
+    pub votes: Vec<(PublicKey, Signature, Round)>,
 }
 
 impl TC {
@@ -314,7 +314,7 @@ impl TC {
         Ok(())
     }
 
-    pub fn high_qc_rounds(&self) -> Vec<RoundNumber> {
+    pub fn high_qc_rounds(&self) -> Vec<Round> {
         self.votes.iter().map(|(_, _, r)| r).cloned().collect()
     }
 }

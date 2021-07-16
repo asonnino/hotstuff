@@ -1,3 +1,4 @@
+// Copyright(C) Facebook, Inc. and its affiliates.
 use ed25519_dalek as dalek;
 use ed25519_dalek::ed25519;
 use ed25519_dalek::Signer as _;
@@ -16,7 +17,8 @@ pub mod crypto_tests;
 
 pub type CryptoError = ed25519::Error;
 
-#[derive(Hash, PartialEq, Default, Eq, Clone, Deserialize, Serialize)]
+/// Represents a hash digest (32 bytes).
+#[derive(Hash, PartialEq, Default, Eq, Clone, Deserialize, Serialize, Ord, PartialOrd)]
 pub struct Digest(pub [u8; 32]);
 
 impl Digest {
@@ -54,19 +56,21 @@ impl TryFrom<&[u8]> for Digest {
     }
 }
 
+/// This trait is implemented by all messages that can be hashed.
 pub trait Hash {
     fn digest(&self) -> Digest;
 }
 
+/// Represents a public key (in bytes).
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Default)]
 pub struct PublicKey(pub [u8; 32]);
 
 impl PublicKey {
-    pub fn to_base64(&self) -> String {
+    pub fn encode_base64(&self) -> String {
         base64::encode(&self.0[..])
     }
 
-    pub fn from_base64(s: &str) -> Result<Self, base64::DecodeError> {
+    pub fn decode_base64(s: &str) -> Result<Self, base64::DecodeError> {
         let bytes = base64::decode(s)?;
         let array = bytes[..32]
             .try_into()
@@ -77,13 +81,13 @@ impl PublicKey {
 
 impl fmt::Debug for PublicKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{}", self.to_base64())
+        write!(f, "{}", self.encode_base64())
     }
 }
 
 impl fmt::Display for PublicKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{}", self.to_base64().get(0..16).unwrap())
+        write!(f, "{}", self.encode_base64().get(0..16).unwrap())
     }
 }
 
@@ -92,7 +96,7 @@ impl Serialize for PublicKey {
     where
         S: ser::Serializer,
     {
-        serializer.serialize_str(&self.to_base64())
+        serializer.serialize_str(&self.encode_base64())
     }
 }
 
@@ -102,19 +106,26 @@ impl<'de> Deserialize<'de> for PublicKey {
         D: de::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        let value = Self::from_base64(&s).map_err(|e| de::Error::custom(e.to_string()))?;
+        let value = Self::decode_base64(&s).map_err(|e| de::Error::custom(e.to_string()))?;
         Ok(value)
     }
 }
 
+impl AsRef<[u8]> for PublicKey {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+/// Represents a secret key (in bytes).
 pub struct SecretKey([u8; 64]);
 
 impl SecretKey {
-    pub fn to_base64(&self) -> String {
+    pub fn encode_base64(&self) -> String {
         base64::encode(&self.0[..])
     }
 
-    pub fn from_base64(s: &str) -> Result<Self, base64::DecodeError> {
+    pub fn decode_base64(s: &str) -> Result<Self, base64::DecodeError> {
         let bytes = base64::decode(s)?;
         let array = bytes[..64]
             .try_into()
@@ -128,7 +139,7 @@ impl Serialize for SecretKey {
     where
         S: ser::Serializer,
     {
-        serializer.serialize_str(&self.to_base64())
+        serializer.serialize_str(&self.encode_base64())
     }
 }
 
@@ -138,7 +149,7 @@ impl<'de> Deserialize<'de> for SecretKey {
         D: de::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        let value = Self::from_base64(&s).map_err(|e| de::Error::custom(e.to_string()))?;
+        let value = Self::decode_base64(&s).map_err(|e| de::Error::custom(e.to_string()))?;
         Ok(value)
     }
 }
@@ -163,6 +174,7 @@ where
     (public, secret)
 }
 
+/// Represents an ed25519 signature.
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct Signature {
     part1: [u8; 32],
@@ -207,6 +219,8 @@ impl Signature {
     }
 }
 
+/// This service holds the node's private key. It takes digests as input and returns a signature
+/// over the digest (through a oneshot channel).
 #[derive(Clone)]
 pub struct SignatureService {
     channel: Sender<(Digest, oneshot::Sender<Signature>)>,

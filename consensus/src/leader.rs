@@ -1,5 +1,5 @@
 use crate::config::Committee;
-use crate::core::RoundNumber;
+use crate::consensus::Round;
 use crypto::PublicKey;
 
 pub type LeaderElector = RRLeaderElector;
@@ -13,7 +13,7 @@ impl RRLeaderElector {
         Self { committee }
     }
 
-    pub fn get_leader(&self, round: RoundNumber) -> PublicKey {
+    pub fn get_leader(&self, round: Round) -> PublicKey {
         let mut keys: Vec<_> = self.committee.authorities.keys().cloned().collect();
         keys.sort();
         keys[round as usize % self.committee.size()]

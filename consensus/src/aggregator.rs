@@ -1,5 +1,5 @@
 use crate::config::{Committee, Stake};
-use crate::core::RoundNumber;
+use crate::consensus::Round;
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::messages::{Timeout, Vote, QC, TC};
 use crypto::Hash as _;
@@ -12,8 +12,8 @@ pub mod aggregator_tests;
 
 pub struct Aggregator {
     committee: Committee,
-    votes_aggregators: HashMap<RoundNumber, HashMap<Digest, Box<QCMaker>>>,
-    timeouts_aggregators: HashMap<RoundNumber, Box<TCMaker>>,
+    votes_aggregators: HashMap<Round, HashMap<Digest, Box<QCMaker>>>,
+    timeouts_aggregators: HashMap<Round, Box<TCMaker>>,
 }
 
 impl Aggregator {
@@ -49,7 +49,7 @@ impl Aggregator {
             .append(timeout, &self.committee)
     }
 
-    pub fn cleanup(&mut self, round: &RoundNumber) {
+    pub fn cleanup(&mut self, round: &Round) {
         self.votes_aggregators.retain(|k, _| k >= round);
         self.timeouts_aggregators.retain(|k, _| k >= round);
     }
@@ -96,7 +96,7 @@ impl QCMaker {
 
 struct TCMaker {
     weight: Stake,
-    votes: Vec<(PublicKey, Signature, RoundNumber)>,
+    votes: Vec<(PublicKey, Signature, Round)>,
     used: HashSet<PublicKey>,
 }
 
