@@ -1,90 +1,48 @@
 use super::*;
-use crate::common::{block, committee, keys, payload};
-use crate::config::Parameters;
-use bytes::Bytes;
-use consensus::{Block, PayloadStatus};
-use crypto::Hash as _;
-use futures::future::try_join_all;
-use futures::sink::SinkExt as _;
+use crate::common::{batch_digest, committee_with_base_port, keys, listener, transaction};
+use network::SimpleSender;
 use std::fs;
-use std::time::Duration;
-use tokio::net::TcpStream;
-use tokio::sync::oneshot;
-use tokio::time::sleep;
-use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 #[tokio::test]
-async fn end_to_end() {
-    let mut committee = committee();
-    committee.increment_base_port(5000);
+async fn handle_clients_transactions() {
+    let (name, _) = keys().pop().unwrap();
+    let committee = committee_with_base_port(11_000);
+    let parameters = Parameters {
+        batch_size: 200, // Two transactions.
+        ..Parameters::default()
+    };
 
-    // Run all mempools.
-    let mempool_handles: Vec<_> = keys()
-        .into_iter()
-        .enumerate()
-        .map(|(i, (name, secret))| {
-            let committee = committee.clone();
-            let parameters = Parameters {
-                queue_capacity: 1,
-                sync_retry_delay: 10_000,
-                max_payload_size: 1,
-                min_block_delay: 0,
-            };
-            let signature_service = SignatureService::new(secret);
-            let store_path = format!(".db_test_end_to_end_{}", i);
-            let _ = fs::remove_dir_all(&store_path);
-            let store = Store::new(&store_path).unwrap();
-            let (tx_consensus, _rx_consensus) = channel(1);
-            let (tx_consensus_mempool, rx_consensus_mempool) = channel(1);
+    // Create a new test store.
+    let path = ".db_test_handle_clients_transactions";
+    let _ = fs::remove_dir_all(path);
+    let store = Store::new(path).unwrap();
 
-            tokio::spawn(async move {
-                Mempool::run(
-                    name,
-                    committee,
-                    parameters,
-                    store,
-                    signature_service,
-                    tx_consensus,
-                    rx_consensus_mempool,
-                )
-                .unwrap();
-                sleep(Duration::from_millis(100)).await;
+    // Spawn a `Mempool` instance.
+    let (_tx_consensus_to_mempool, rx_consensus_to_mempool) = channel(1);
+    let (tx_mempool_to_consensus, mut rx_mempool_to_consensus) = channel(1);
+    Mempool::spawn(
+        name,
+        committee.clone(),
+        parameters,
+        store,
+        rx_consensus_to_mempool,
+        tx_mempool_to_consensus,
+    );
 
-                let payload = vec![payload().digest()];
-                let block = Block { payload, ..block() };
-                let (sender, receiver) = oneshot::channel();
-                let message = ConsensusMempoolMessage::Verify(Box::new(block), sender);
-                tx_consensus_mempool.send(message).await.unwrap();
-                match receiver.await {
-                    Ok(PayloadStatus::Accept) => assert!(true),
-                    _ => assert!(false),
-                }
-            })
-        })
-        .collect();
+    // Spawn enough mempools' listeners to acknowledge our batches.
+    for (_, address) in committee.broadcast_addresses(&name) {
+        let _ = listener(address, /* expected */ None);
+    }
 
-    // Wait for the mempools to boot.
-    sleep(Duration::from_millis(50)).await;
+    // Send enough transactions to create a batch.
+    let mut network = SimpleSender::new();
+    let address = committee.transactions_address(&name).unwrap();
+    network.send(address, Bytes::from(transaction())).await;
+    network.send(address, Bytes::from(transaction())).await;
 
-    // Send a payload to all mempools.
-    let client_handles: Vec<_> = keys()
-        .into_iter()
-        .map(|(name, _)| {
-            let address = committee.clone().front_address(&name).unwrap();
-            tokio::spawn(async move {
-                let stream = TcpStream::connect(address).await.unwrap();
-                let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
-                let transaction = vec![1u8];
-                let bytes = Bytes::from(transaction.to_vec());
-                transport.send(bytes.clone()).await.unwrap();
-                transport.send(bytes.clone()).await.unwrap();
-            })
-        })
-        .collect();
-
-    // Ensure all transactions are sent.
-    assert!(try_join_all(client_handles).await.is_ok());
-
-    // Ensure all threads terminated correctly.
-    assert!(try_join_all(mempool_handles).await.is_ok());
+    // Ensure the consensus got the batch digest.
+    match rx_mempool_to_consensus.recv().await.unwrap() {
+        MempoolConsensusMessage::OurBatch(x) => assert_eq!(batch_digest(), x),
+        _ => panic!("Unexpected enum variant"),
+    }
 }
