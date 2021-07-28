@@ -1,5 +1,5 @@
 use super::*;
-use crate::common::{committee, keys, MockMempool};
+use crate::common::{committee_with_base_port, keys};
 use crate::config::Parameters;
 use crypto::SecretKey;
 use futures::future::try_join_all;
@@ -24,24 +24,29 @@ fn spawn_nodes(
             let _ = fs::remove_dir_all(&store_path);
             let store = Store::new(&store_path).unwrap();
             let signature_service = SignatureService::new(secret);
-            let (tx_consensus, rx_consensus) = channel(10);
-            let (tx_consensus_mempool, rx_consensus_mempool) = channel(1);
-            MockMempool::run(rx_consensus_mempool);
+            let (tx_consensus_to_mempool, mut rx_consensus_to_mempool) = channel(10);
+            let (_tx_mempool_to_consensus, rx_mempool_to_consensus) = channel(1);
             let (tx_commit, mut rx_commit) = channel(1);
+
+            // Sink the mempool channel.
             tokio::spawn(async move {
-                Consensus::run(
+                loop {
+                    rx_consensus_to_mempool.recv().await;
+                }
+            });
+
+            // Spawn the consensus engine.
+            tokio::spawn(async move {
+                Consensus::spawn(
                     name,
                     committee,
                     parameters,
-                    store,
                     signature_service,
-                    tx_consensus,
-                    rx_consensus,
-                    tx_consensus_mempool,
+                    store,
+                    rx_mempool_to_consensus,
+                    tx_consensus_to_mempool,
                     tx_commit,
-                )
-                .await
-                .unwrap();
+                );
 
                 rx_commit.recv().await.unwrap()
             })
@@ -51,8 +56,7 @@ fn spawn_nodes(
 
 #[tokio::test]
 async fn end_to_end() {
-    let mut committee = committee();
-    committee.increment_base_port(6000);
+    let committee = committee_with_base_port(15_000);
 
     // Run all nodes.
     let store_path = ".db_test_end_to_end";

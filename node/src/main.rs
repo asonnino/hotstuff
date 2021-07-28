@@ -102,8 +102,8 @@ fn deploy_testbed(nodes: usize) -> Result<Vec<JoinHandle<()>>, Box<dyn std::erro
             .map(|(i, key)| {
                 let name = key.name;
                 let stake = 1;
-                let front = format!("127.0.0.1:{}", 15_000 + i).parse().unwrap();
-                let mempool = format!("127.0.0.1:{}", 15_100 + i).parse().unwrap();
+                let front = format!("127.0.0.1:{}", 25_000 + i).parse().unwrap();
+                let mempool = format!("127.0.0.1:{}", 25_100 + i).parse().unwrap();
                 (name, stake, front, mempool)
             })
             .collect(),
@@ -115,7 +115,7 @@ fn deploy_testbed(nodes: usize) -> Result<Vec<JoinHandle<()>>, Box<dyn std::erro
             .map(|(i, key)| {
                 let name = key.name;
                 let stake = 1;
-                let addresses = format!("127.0.0.1:{}", 15_200 + i).parse().unwrap();
+                let addresses = format!("127.0.0.1:{}", 25_200 + i).parse().unwrap();
                 (name, stake, addresses)
             })
             .collect(),
