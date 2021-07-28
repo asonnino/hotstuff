@@ -64,7 +64,7 @@ impl Proposer {
             #[cfg(feature = "benchmark")]
             for x in &block.payload {
                 // NOTE: This log entry is used to compute performance.
-                info!("Created B{}({})", block.round, base64::encode(x));
+                info!("Created {} -> {:?}", block, x);
             }
         }
         debug!("Created {:?}", block);

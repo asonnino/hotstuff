@@ -88,18 +88,18 @@ class LogParser:
         if search(r'panic', log) is not None:
             raise ParseError('Client(s) panicked')
 
-        tmp = findall(r'\[(.*Z) .* Created B\d+\(([^ ]+)\)', log)
+        tmp = findall(r'\[(.*Z) .* Created B\d+ -> ([^ ]+=)', log)
         tmp = [(d, self._to_posix(t)) for t, d in tmp]
         proposals = self._merge_results([tmp])
 
-        tmp = findall(r'\[(.*Z) .* Committed B\d+\(([^ ]+)\)', log)
+        tmp = findall(r'\[(.*Z) .* Committed B\d+ -> ([^ ]+=)', log)
         tmp = [(d, self._to_posix(t)) for t, d in tmp]
         commits = self._merge_results([tmp])
 
-        tmp = findall(r'Payload ([^ ]+) contains (\d+) B', log)
+        tmp = findall(r'Batch ([^ ]+) contains (\d+) B', log)
         sizes = {d: int(s) for d, s in tmp}
 
-        tmp = findall(r'Payload ([^ ]+) contains sample tx (\d+)', log)
+        tmp = findall(r'Batch ([^ ]+) contains sample tx (\d+)', log)
         samples = {int(s): d for d, s in tmp}
 
         tmp = findall(r'.* WARN .* Timeout', log)
@@ -112,7 +112,7 @@ class LogParser:
                 ),
                 'sync_retry_delay': int(
                     search(
-                        r'consensus .* Sync retry delay .* (\d+)', log
+                        r'consensus.* Sync retry delay .* (\d+)', log
                     ).group(1)
                 ),
             },
@@ -121,13 +121,13 @@ class LogParser:
                     search(r'Garbage collection .* (\d+)', log).group(1)
                 ),
                 'sync_retry_delay': int(
-                    search(r'mempool .* Sync retry delay .* (\d+)', log).group(1)
+                    search(r'mempool.* Sync retry delay .* (\d+)', log).group(1)
                 ),
                 'sync_retry_nodes': int(
                     search(r'Sync retry nodes .* (\d+)', log).group(1)
                 ),
                 'batch_size': int(
-                    search(r'batch size .* (\d+)', log).group(1)
+                    search(r'Batch size .* (\d+)', log).group(1)
                 ),
                 'max_batch_delay': int(
                     search(r'Max batch delay .* (\d+)', log).group(1)
@@ -184,11 +184,11 @@ class LogParser:
 
         consensus_timeout_delay = self.configs[0]['consensus']['timeout_delay']
         consensus_sync_retry_delay = self.configs[0]['consensus']['sync_retry_delay']
-        mempool_queue_capacity = self.configs[0]['mempool']['gc_depth']
+        mempool_gc_depth = self.configs[0]['mempool']['gc_depth']
         mempool_sync_retry_delay = self.configs[0]['mempool']['sync_retry_delay']
-        mempool_sync_retry_delay = self.configs[0]['mempool']['sync_retry_nodes']
-        mempool_max_payload_size = self.configs[0]['mempool']['batch_size']
-        mempool_min_block_delay = self.configs[0]['mempool']['max_batch_delay']
+        mempool_sync_retry_nodes = self.configs[0]['mempool']['sync_retry_nodes']
+        mempool_batch_size = self.configs[0]['mempool']['batch_size']
+        mempool_max_batch_delay = self.configs[0]['mempool']['max_batch_delay']
 
         return (
             '\n'
@@ -204,12 +204,11 @@ class LogParser:
             '\n'
             f' Consensus timeout delay: {consensus_timeout_delay:,} ms\n'
             f' Consensus sync retry delay: {consensus_sync_retry_delay:,} ms\n'
-            f' Consensus max payloads size: {consensus_max_payload_size:,} B\n'
-            f' Consensus min block delay: {consensus_min_block_delay:,} ms\n'
-            f' Mempool queue capacity: {mempool_queue_capacity:,} B\n'
+            f' Mempool GC depth: {mempool_gc_depth:,} rounds\n'
             f' Mempool sync retry delay: {mempool_sync_retry_delay:,} ms\n'
-            f' Mempool max payloads size: {mempool_max_payload_size:,} B\n'
-            f' Mempool min block delay: {mempool_min_block_delay:,} ms\n'
+            f' Mempool sync retry nodes: {mempool_sync_retry_nodes:,} nodes\n'
+            f' Mempool batch size: {mempool_batch_size:,} B\n'
+            f' Mempool max batch delay: {mempool_max_batch_delay:,} ms\n'
             '\n'
             ' + RESULTS:\n'
             f' Consensus TPS: {round(consensus_tps):,} tx/s\n'
