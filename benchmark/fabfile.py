@@ -22,14 +22,13 @@ def local(ctx):
         'consensus': {
             'timeout_delay': 1_000,
             'sync_retry_delay': 10_000,
-            'max_payload_size': 500,
-            'min_block_delay': 0
         },
         'mempool': {
-            'queue_capacity': 10_000,
-            'sync_retry_delay': 100_000,
-            'max_payload_size': 15_000,
-            'min_block_delay': 0
+            'gc_depth': 50,
+            'sync_retry_delay': 5_000,
+            'sync_retry_nodes': 3,
+            'batch_size': 15_000,
+            'max_batch_delay': 10
         }
     }
     try:
@@ -107,15 +106,14 @@ def remote(ctx):
     node_params = {
         'consensus': {
             'timeout_delay': 5_000,
-            'sync_retry_delay': 100_000,
-            'max_payload_size': 1_000,
-            'min_block_delay': 100
+            'sync_retry_delay': 10_000,
         },
         'mempool': {
-            'queue_capacity': 100_000,
-            'sync_retry_delay': 100_000,
-            'max_payload_size': 500_000,
-            'min_block_delay': 100
+            'gc_depth': 50,
+            'sync_retry_delay': 5_000,
+            'sync_retry_nodes': 3,
+            'batch_size': 500_000,
+            'max_batch_delay': 100
         }
     }
     try:

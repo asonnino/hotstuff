@@ -108,34 +108,29 @@ class LogParser:
         configs = {
             'consensus': {
                 'timeout_delay': int(
-                    search(r'Consensus timeout delay .* (\d+)', log).group(1)
+                    search(r'Timeout delay .* (\d+)', log).group(1)
                 ),
                 'sync_retry_delay': int(
                     search(
-                        r'Consensus synchronizer retry delay .* (\d+)', log
+                        r'consensus .* Sync retry delay .* (\d+)', log
                     ).group(1)
-                ),
-                'max_payload_size': int(
-                    search(r'Consensus max payload size .* (\d+)', log).group(1)
-                ),
-                'min_block_delay': int(
-                    search(r'Consensus min block delay .* (\d+)', log).group(1)
                 ),
             },
             'mempool': {
-                'queue_capacity': int(
-                    search(r'Mempool queue capacity set to (\d+)', log).group(1)
+                'gc_depth': int(
+                    search(r'Garbage collection .* (\d+)', log).group(1)
                 ),
                 'sync_retry_delay': int(
-                    search(
-                        r'Mempool synchronizer retry delay .* (\d+)', log
-                    ).group(1)
+                    search(r'mempool .* Sync retry delay .* (\d+)', log).group(1)
                 ),
-                'max_payload_size': int(
-                    search(r'Mempool max payload size .* (\d+)', log).group(1)
+                'sync_retry_nodes': int(
+                    search(r'Sync retry nodes .* (\d+)', log).group(1)
                 ),
-                'min_block_delay': int(
-                    search(r'Mempool min block delay .* (\d+)', log).group(1)
+                'batch_size': int(
+                    search(r'batch size .* (\d+)', log).group(1)
+                ),
+                'max_batch_delay': int(
+                    search(r'Max batch delay .* (\d+)', log).group(1)
                 ),
             }
         }
@@ -189,12 +184,11 @@ class LogParser:
 
         consensus_timeout_delay = self.configs[0]['consensus']['timeout_delay']
         consensus_sync_retry_delay = self.configs[0]['consensus']['sync_retry_delay']
-        consensus_max_payload_size = self.configs[0]['consensus']['max_payload_size']
-        consensus_min_block_delay = self.configs[0]['consensus']['min_block_delay']
-        mempool_queue_capacity = self.configs[0]['mempool']['queue_capacity']
+        mempool_queue_capacity = self.configs[0]['mempool']['gc_depth']
         mempool_sync_retry_delay = self.configs[0]['mempool']['sync_retry_delay']
-        mempool_max_payload_size = self.configs[0]['mempool']['max_payload_size']
-        mempool_min_block_delay = self.configs[0]['mempool']['min_block_delay']
+        mempool_sync_retry_delay = self.configs[0]['mempool']['sync_retry_nodes']
+        mempool_max_payload_size = self.configs[0]['mempool']['batch_size']
+        mempool_min_block_delay = self.configs[0]['mempool']['max_batch_delay']
 
         return (
             '\n'
