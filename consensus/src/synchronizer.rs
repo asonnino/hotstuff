@@ -1,7 +1,6 @@
 use crate::config::Committee;
-use crate::consensus::CHANNEL_CAPACITY;
+use crate::consensus::{ConsensusMessage, CHANNEL_CAPACITY};
 use crate::error::ConsensusResult;
-use crate::core::ConsensusMessage;
 use crate::messages::{Block, QC};
 use bytes::Bytes;
 use crypto::Hash as _;
@@ -28,11 +27,11 @@ pub struct Synchronizer {
 }
 
 impl Synchronizer {
-    pub async fn new(
+    pub fn new(
         name: PublicKey,
         committee: Committee,
         store: Store,
-        tx_core: Sender<Block>,
+        tx_loopback: Sender<Block>,
         sync_retry_delay: u64,
     ) -> Self {
         let mut network = SimpleSender::new();
@@ -76,7 +75,7 @@ impl Synchronizer {
                         Ok(block) => {
                             let _ = pending.remove(&block.digest());
                             let _ = requests.remove(&block.parent());
-                            if let Err(e) = tx_core.send(block).await {
+                            if let Err(e) = tx_loopback.send(block).await {
                                 panic!("Failed to send message through core channel: {}", e);
                             }
                         },

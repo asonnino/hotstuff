@@ -1,5 +1,5 @@
 use crate::batch_maker::{Batch, Transaction};
-use crate::config::{Authority, Committee};
+use crate::config::Committee;
 use crate::mempool::MempoolMessage;
 use bytes::Bytes;
 use crypto::{generate_keypair, Digest, PublicKey, SecretKey};
@@ -23,23 +23,19 @@ pub fn keys() -> Vec<(PublicKey, SecretKey)> {
 
 // Fixture
 pub fn committee() -> Committee {
-    Committee {
-        authorities: keys()
-            .iter()
+    Committee::new(
+        keys()
+            .into_iter()
             .enumerate()
-            .map(|(i, (id, _))| {
-                (
-                    *id,
-                    Authority {
-                        stake: 1,
-                        transactions_address: format!("127.0.0.1:{}", 100 + i).parse().unwrap(),
-                        mempool_address: format!("127.0.0.1:{}", 200 + i).parse().unwrap(),
-                    },
-                )
+            .map(|(i, (name, _))| {
+                let stake = 1;
+                let front = format!("127.0.0.1:{}", 100 + i).parse().unwrap();
+                let mempool = format!("127.0.0.1:{}", 100 + i).parse().unwrap();
+                (name, stake, front, mempool)
             })
             .collect(),
-        epoch: 100,
-    }
+        /*  epoch */ 100,
+    )
 }
 
 // Fixture.

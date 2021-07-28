@@ -1,49 +1,39 @@
 use crate::aggregator::Aggregator;
-use crate::config::{Committee, Parameters};
-use crate::consensus::Round;
+use crate::config::Committee;
+use crate::consensus::{ConsensusMessage, Round};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
 use crate::mempool::MempoolDriver;
 use crate::messages::{Block, Timeout, Vote, QC, TC};
+use crate::proposer::ProposerMessage;
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use crypto::Hash as _;
-use crypto::{Digest, PublicKey, SignatureService};
+use crypto::{PublicKey, SignatureService};
 use log::{debug, error, info, warn};
 use network::SimpleSender;
-use serde::{Deserialize, Serialize};
 use std::cmp::max;
 use std::collections::VecDeque;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::time::{sleep, Duration};
 
 #[cfg(test)]
 #[path = "tests/core_tests.rs"]
 pub mod core_tests;
 
-#[derive(Serialize, Deserialize, Debug)]
-pub enum ConsensusMessage {
-    Propose(Block),
-    Vote(Vote),
-    Timeout(Timeout),
-    TC(TC),
-    SyncRequest(Digest, PublicKey),
-}
-
 pub struct Core {
     name: PublicKey,
     committee: Committee,
-    parameters: Parameters,
     store: Store,
     signature_service: SignatureService,
     leader_elector: LeaderElector,
     mempool_driver: MempoolDriver,
     synchronizer: Synchronizer,
-    rx_core: Receiver<ConsensusMessage>,
+    rx_message: Receiver<ConsensusMessage>,
     rx_loopback: Receiver<Block>,
+    tx_proposer: Sender<ProposerMessage>,
     tx_commit: Sender<Block>,
     round: Round,
     last_voted_round: Round,
@@ -56,41 +46,44 @@ pub struct Core {
 
 impl Core {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub fn spawn(
         name: PublicKey,
         committee: Committee,
-        parameters: Parameters,
         signature_service: SignatureService,
         store: Store,
         leader_elector: LeaderElector,
         mempool_driver: MempoolDriver,
         synchronizer: Synchronizer,
-        rx_core: Receiver<ConsensusMessage>,
+        timeout_delay: u64,
+        rx_message: Receiver<ConsensusMessage>,
         rx_loopback: Receiver<Block>,
+        tx_proposer: Sender<ProposerMessage>,
         tx_commit: Sender<Block>,
-    ) -> Self {
-        let aggregator = Aggregator::new(committee.clone());
-        let timer = Timer::new(parameters.timeout_delay);
-        Self {
-            name,
-            committee,
-            parameters,
-            signature_service,
-            store,
-            leader_elector,
-            mempool_driver,
-            synchronizer,
-            rx_core,
-            rx_loopback,
-            tx_commit,
-            round: 1,
-            last_voted_round: 0,
-            last_committed_round: 0,
-            high_qc: QC::genesis(),
-            timer,
-            aggregator,
-            network: SimpleSender::new(),
-        }
+    ) {
+        tokio::spawn(async move {
+            Self {
+                name,
+                committee: committee.clone(),
+                signature_service,
+                store,
+                leader_elector,
+                mempool_driver,
+                synchronizer,
+                rx_message,
+                rx_loopback,
+                tx_proposer,
+                tx_commit,
+                round: 1,
+                last_voted_round: 0,
+                last_committed_round: 0,
+                high_qc: QC::genesis(),
+                timer: Timer::new(timeout_delay),
+                aggregator: Aggregator::new(committee),
+                network: SimpleSender::new(),
+            }
+            .run()
+            .await
+        });
     }
 
     async fn store_block(&mut self, block: &Block) {
@@ -221,7 +214,7 @@ impl Core {
 
             // Make a new block if we are the next leader.
             if self.name == self.leader_elector.get_leader(self.round) {
-                self.generate_proposal(None).await?;
+                self.generate_proposal(None).await;
             }
         }
         Ok(())
@@ -257,7 +250,7 @@ impl Core {
 
             // Make a new block if we are the next leader.
             if self.name == self.leader_elector.get_leader(self.round) {
-                self.generate_proposal(Some(tc)).await?;
+                self.generate_proposal(Some(tc)).await;
             }
         }
         Ok(())
@@ -278,48 +271,11 @@ impl Core {
     }
 
     #[async_recursion]
-    async fn generate_proposal(&mut self, tc: Option<TC>) -> ConsensusResult<()> {
-        // Make a new block.
-        let payload = self
-            .mempool_driver
-            .get(self.parameters.max_payload_size)
-            .await;
-
-        let block = Block::new(
-            self.high_qc.clone(),
-            tc,
-            self.name,
-            self.round,
-            payload,
-            self.signature_service.clone(),
-        )
-        .await;
-        if !block.payload.is_empty() {
-            info!("Created {}", block);
-
-            #[cfg(feature = "benchmark")]
-            for x in &block.payload {
-                // NOTE: This log entry is used to compute performance.
-                info!("Created B{}({})", block.round, base64::encode(x));
-            }
-        }
-        debug!("Created {:?}", block);
-
-        // Broadcast our new block.
-        debug!("Broadcasting {:?}", block);
-        let addresses = self.committee.broadcast_addresses(&self.name);
-        let message = bincode::serialize(&ConsensusMessage::Propose(block.clone()))
-            .expect("Failed to serialize block");
-        self.network
-            .broadcast(addresses, Bytes::from(message))
-            .await;
-
-        // Process our new block.
-        self.process_block(&block).await?;
-
-        // Wait for the minimum block delay.
-        sleep(Duration::from_millis(self.parameters.min_block_delay)).await;
-        Ok(())
+    async fn generate_proposal(&mut self, tc: Option<TC>) {
+        self.tx_proposer
+            .send(ProposerMessage(self.round, self.high_qc.clone(), tc))
+            .await
+            .expect("Failed to send message to proposer");
     }
 
     async fn process_qc(&mut self, qc: &QC) {
@@ -350,11 +306,9 @@ impl Core {
         // Check if we can commit the head of the 2-chain.
         // Note that we commit blocks only if we have all its ancestors.
         if b0.round + 1 == b1.round {
-            self.commit(b0.clone()).await?;
+            self.mempool_driver.cleanup(b0.round).await;
+            self.commit(b0).await?;
         }
-
-        // Cleanup the mempool.
-        self.mempool_driver.cleanup(&b0, &b1, &block).await;
 
         // Ensure the block's round is as expected.
         // This check is important: it prevents bad leaders from producing blocks
@@ -418,31 +372,10 @@ impl Core {
         self.process_block(block).await
     }
 
-    async fn handle_sync_request(
-        &mut self,
-        digest: Digest,
-        sender: PublicKey,
-    ) -> ConsensusResult<()> {
-        let address = match self.committee.address(&sender) {
-            Some(x) => x,
-            None => {
-                warn!("Received sync request from unknown authority: {}", sender);
-                return Ok(());
-            }
-        };
-        if let Some(bytes) = self.store.read(digest.to_vec()).await? {
-            let block = bincode::deserialize(&bytes)?;
-            let message = bincode::serialize(&ConsensusMessage::Propose(block))
-                .expect("Failed to serialize vote");
-            self.network.send(address, Bytes::from(message)).await;
-        }
-        Ok(())
-    }
-
     async fn handle_tc(&mut self, tc: TC) -> ConsensusResult<()> {
         self.advance_round(tc.round).await;
         if self.name == self.leader_elector.get_leader(self.round) {
-            self.generate_proposal(Some(tc)).await?;
+            self.generate_proposal(Some(tc)).await;
         }
         Ok(())
     }
@@ -452,21 +385,19 @@ impl Core {
         // Also, schedule a timer in case we don't hear from the leader.
         self.timer.reset();
         if self.name == self.leader_elector.get_leader(self.round) {
-            self.generate_proposal(None)
-                .await
-                .expect("Failed to send the first block");
+            self.generate_proposal(None).await;
         }
 
         // This is the main loop: it processes incoming blocks and votes,
         // and receive timeout notifications from our Timeout Manager.
         loop {
             let result = tokio::select! {
-                Some(message) = self.rx_core.recv() => match message {
+                Some(message) = self.rx_message.recv() => match message {
                     ConsensusMessage::Propose(block) => self.handle_proposal(&block).await,
                     ConsensusMessage::Vote(vote) => self.handle_vote(&vote).await,
                     ConsensusMessage::Timeout(timeout) => self.handle_timeout(&timeout).await,
                     ConsensusMessage::TC(tc) => self.handle_tc(tc).await,
-                    ConsensusMessage::SyncRequest(digest, sender) => self.handle_sync_request(digest, sender).await
+                    _ => panic!("Unexpected protocol message")
                 },
                 Some(block) = self.rx_loopback.recv() => self.process_block(&block).await,
                 () = &mut self.timer => self.local_timeout_round().await,

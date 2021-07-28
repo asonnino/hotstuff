@@ -1,10 +1,10 @@
 use crypto::PublicKey;
 use log::info;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Parameters {
     /// The depth of the garbage collection (Denominated in number of rounds).
     pub gc_depth: u64,
@@ -47,23 +47,40 @@ impl Parameters {
 pub type EpochNumber = u128;
 pub type Stake = u32;
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Authority {
+    /// The voting power of this authority.
+    pub stake: Stake,
     /// Address to receive client transactions.
     pub transactions_address: SocketAddr,
     /// Address to receive messages from other nodes.
     pub mempool_address: SocketAddr,
-    /// The voting power of this authority.
-    pub stake: Stake,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Committee {
     pub authorities: HashMap<PublicKey, Authority>,
     pub epoch: EpochNumber,
 }
 
 impl Committee {
+    pub fn new(info: Vec<(PublicKey, Stake, SocketAddr, SocketAddr)>, epoch: EpochNumber) -> Self {
+        Self {
+            authorities: info
+                .into_iter()
+                .map(|(name, stake, transactions_address, mempool_address)| {
+                    let authority = Authority {
+                        stake,
+                        transactions_address,
+                        mempool_address,
+                    };
+                    (name, authority)
+                })
+                .collect(),
+            epoch,
+        }
+    }
+
     /// Return the stake of a specific authority.
     pub fn stake(&self, name: &PublicKey) -> Stake {
         self.authorities.get(&name).map_or_else(|| 0, |x| x.stake)

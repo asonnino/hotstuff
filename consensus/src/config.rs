@@ -1,5 +1,5 @@
-use crate::error::{ConsensusError, ConsensusResult};
 use crypto::PublicKey;
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -18,7 +18,7 @@ pub struct Parameters {
 impl Default for Parameters {
     fn default() -> Self {
         Self {
-            timeout_delay: 5000,
+            timeout_delay: 5_000,
             sync_retry_delay: 10_000,
             max_payload_size: 500,
             min_block_delay: 100,
@@ -26,9 +26,18 @@ impl Default for Parameters {
     }
 }
 
+impl Parameters {
+    pub fn log(&self) {
+        // NOTE: These log entries are used to compute performance.
+        info!("Timeout delay set to {} rounds", self.timeout_delay);
+        info!("Sync retry delay set to {} ms", self.sync_retry_delay);
+        info!("Max payload size set to {} B", self.max_payload_size);
+        info!("Min block delay set to {} ms", self.min_block_delay);
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Authority {
-    pub name: PublicKey,
     pub stake: Stake,
     pub address: SocketAddr,
 }
@@ -45,11 +54,7 @@ impl Committee {
             authorities: info
                 .into_iter()
                 .map(|(name, stake, address)| {
-                    let authority = Authority {
-                        name,
-                        stake,
-                        address,
-                    };
+                    let authority = Authority { stake, address };
                     (name, authority)
                 })
                 .collect(),
@@ -73,16 +78,14 @@ impl Committee {
     }
 
     pub fn address(&self, name: &PublicKey) -> Option<SocketAddr> {
-        self.authorities
-            .get(name)
-            .map(|x| x.address)
+        self.authorities.get(name).map(|x| x.address)
     }
 
     pub fn broadcast_addresses(&self, myself: &PublicKey) -> Vec<SocketAddr> {
         self.authorities
-            .values()
-            .filter(|x| x.name != *myself)
-            .map(|x| x.address)
+            .iter()
+            .filter(|(name, _)| name != &myself)
+            .map(|(_, x)| x.address)
             .collect()
     }
 }

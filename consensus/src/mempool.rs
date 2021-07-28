@@ -2,56 +2,39 @@ use crate::consensus::{Round, CHANNEL_CAPACITY};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::messages::Block;
 use crypto::Digest;
+use crypto::Hash as _;
 use futures::future::try_join_all;
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
 use log::error;
 use mempool::ConsensusMempoolMessage;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio::sync::oneshot;
-use crypto::Hash as _;
 
 pub struct MempoolDriver {
     store: Store,
     tx_mempool: Sender<ConsensusMempoolMessage>,
-    tx_payload_buffer: Sender<PayloadBufferMessage>,
     tx_payload_waiter: Sender<PayloadWaiterMessage>,
 }
 
 impl MempoolDriver {
     pub fn new(
         store: Store,
-        rx_mempool: Receiver<Digest>,
         tx_mempool: Sender<ConsensusMempoolMessage>,
-        tx_consensus: Sender<Block>,
+        tx_loopback: Sender<Block>,
     ) -> Self {
-        let (tx_payload_buffer, rx_payload_buffer) = channel(CHANNEL_CAPACITY);
         let (tx_payload_waiter, rx_payload_waiter) = channel(CHANNEL_CAPACITY);
 
-        // Spawn the payload buffer.
-        PayloadBuffer::spawn(rx_mempool, rx_payload_buffer);
-
         // Spawn the payload waiter.
-        PayloadWaiter::spawn(store.clone(), rx_payload_waiter, tx_consensus);
+        PayloadWaiter::spawn(store.clone(), rx_payload_waiter, tx_loopback);
 
         // Returns the mempool driver.
         Self {
             store,
             tx_mempool,
-            tx_payload_buffer,
             tx_payload_waiter,
         }
-    }
-
-    pub async fn get(&mut self, max_size: usize) -> Vec<Digest> {
-        let (sender, receiver) = oneshot::channel();
-        self.tx_payload_buffer
-            .send((max_size, sender))
-            .await
-            .expect("Failed to request payload");
-        receiver.await.expect("Failed to receive payload")
     }
 
     pub async fn verify(&mut self, block: Block) -> ConsensusResult<bool> {
@@ -80,46 +63,18 @@ impl MempoolDriver {
         Ok(false)
     }
 
-    pub async fn cleanup(&mut self, b0: &Block, b1: &Block, block:&Block) {
-
-        // TODO: remove digests from queue.
-
-        let round = b0.round;
+    pub async fn cleanup(&mut self, round: Round) {
+        // Cleanup the mempool.
         self.tx_mempool
             .send(ConsensusMempoolMessage::Cleanup(round))
             .await
             .expect("Failed to send cleanup message");
+
+        // Cleanup the payload waiter.
         self.tx_payload_waiter
             .send(PayloadWaiterMessage::Cleanup(round))
             .await
             .expect("Failed to send cleanup message");
-    }
-}
-
-type PayloadBufferMessage = (/* max size */ usize, oneshot::Sender<Vec<Digest>>);
-
-struct PayloadBuffer;
-
-impl PayloadBuffer {
-    pub fn spawn(mut rx_mempool: Receiver<Digest>, mut rx_messages: Receiver<PayloadBufferMessage>) {
-        tokio::spawn(async move {
-            let mut queue = HashSet::new();
-            loop {
-                tokio::select! {
-                    Some(digest) = rx_mempool.recv() => {
-                        queue.insert(digest);
-                    },
-                    Some((max, sender)) = rx_messages.recv() => {
-                        let digest_len = Digest::default().size();
-                        let digests = queue.iter().take(max / digest_len).cloned().collect();
-                        for x in &digests {
-                            queue.remove(x);
-                        }
-                        let _ = sender.send(digests);
-                    }
-                }
-            }
-        });
     }
 }
 
@@ -132,20 +87,20 @@ enum PayloadWaiterMessage {
 struct PayloadWaiter {
     store: Store,
     rx_message: Receiver<PayloadWaiterMessage>,
-    tx_consensus: Sender<Block>,
+    tx_loopback: Sender<Block>,
 }
 
 impl PayloadWaiter {
     pub fn spawn(
         store: Store,
         rx_message: Receiver<PayloadWaiterMessage>,
-        tx_consensus: Sender<Block>,
+        tx_loopback: Sender<Block>,
     ) {
         tokio::spawn(async move {
             Self {
                 store,
                 rx_message,
-                tx_consensus,
+                tx_loopback,
             }
             .run()
             .await;
@@ -203,7 +158,7 @@ impl PayloadWaiter {
                     match result {
                         Ok(Some(block)) => {
                             let _ = pending.remove(&block.digest());
-                            self.tx_consensus.send(block).await.expect("Failed to send consensus message");
+                            self.tx_loopback.send(block).await.expect("Failed to send consensus message");
                         },
                         Ok(None) => (),
                         Err(e) => error!("{}", e)
