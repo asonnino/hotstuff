@@ -5,6 +5,7 @@ use bytes::Bytes;
 use crypto::{Digest, PublicKey, SignatureService};
 use log::{debug, info};
 use network::SimpleSender;
+use std::collections::HashSet;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 #[derive(Debug)]
@@ -21,7 +22,7 @@ pub struct Proposer {
     rx_mempool: Receiver<Digest>,
     rx_message: Receiver<ProposerMessage>,
     tx_loopback: Sender<Block>,
-    buffer: Vec<Digest>,
+    buffer: HashSet<Digest>,
     network: SimpleSender,
 }
 
@@ -44,7 +45,7 @@ impl Proposer {
                 rx_mempool,
                 rx_message,
                 tx_loopback,
-                buffer: Vec::new(),
+                buffer: HashSet::new(),
                 network: SimpleSender::new(),
             }
             .run()
@@ -55,12 +56,14 @@ impl Proposer {
     async fn make_block(&mut self, round: Round, qc: QC, tc: Option<TC>) {
         // Gather the payload.
         let digest_len = Digest::default().size();
-        let mut payload = Vec::new();
-        while payload.len() <= self.max_payload_size / digest_len {
-            match self.buffer.pop() {
-                Some(x) => payload.push(x),
-                None => break,
-            }
+        let payload = self
+            .buffer
+            .iter()
+            .take(self.max_payload_size / digest_len)
+            .cloned()
+            .collect();
+        for x in &payload {
+            self.buffer.remove(x);
         }
 
         // Generate a new block.
@@ -105,11 +108,15 @@ impl Proposer {
         loop {
             tokio::select! {
                 Some(digest) = self.rx_mempool.recv() => {
-                    self.buffer.push(digest);
+                    self.buffer.insert(digest);
                 },
                 Some(message) = self.rx_message.recv() => match message {
                     ProposerMessage::Make(round, qc, tc) => self.make_block(round, qc, tc).await,
-                    ProposerMessage::Cleanup(digests) => self.buffer.retain(|x| !digests.contains(&x))
+                    ProposerMessage::Cleanup(digests) => {
+                        for x in &digests {
+                            self.buffer.remove(x);
+                        }
+                    }
                 }
             }
         }

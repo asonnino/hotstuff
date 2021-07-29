@@ -99,7 +99,7 @@ def remote(ctx):
     bench_params = {
         'faults': 0,
         'nodes': [10],
-        'rate': [10_000],
+        'rate': [70_000, 10_000],
         'tx_size': 512,
         'duration': 300,
         'runs': 2,
@@ -115,7 +115,7 @@ def remote(ctx):
             'sync_retry_delay': 10_000,
             'sync_retry_nodes': 3,
             'batch_size': 500_000,
-            'max_batch_delay': 100
+            'max_batch_delay': 200
         }
     }
     try:
