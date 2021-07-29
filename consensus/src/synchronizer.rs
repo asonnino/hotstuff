@@ -90,7 +90,11 @@ impl Synchronizer {
                                 .as_millis();
                             if timestamp + (sync_retry_delay as u128) < now {
                                 debug!("Requesting sync for block {} (retry)", digest);
-                                let addresses = committee.broadcast_addresses(&name);
+                                let addresses = committee
+                                    .broadcast_addresses(&name)
+                                    .into_iter()
+                                    .map(|(_, x)| x)
+                                    .collect();
                                 let message = ConsensusMessage::SyncRequest(digest.clone(), name);
                                 let message = bincode::serialize(&message)
                                     .expect("Failed to serialize sync request");

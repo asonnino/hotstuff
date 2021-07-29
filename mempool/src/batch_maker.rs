@@ -152,7 +152,5 @@ impl BatchMaker {
             })
             .await
             .expect("Failed to deliver batch");
-
-        //sleep(Duration::from_millis(100)).await;
     }
 }

@@ -1,10 +1,12 @@
-use crate::config::Committee;
+use crate::config::{Committee, Stake};
 use crate::consensus::{ConsensusMessage, Round};
 use crate::messages::{Block, QC, TC};
 use bytes::Bytes;
 use crypto::{Digest, PublicKey, SignatureService};
+use futures::stream::futures_unordered::FuturesUnordered;
+use futures::stream::StreamExt as _;
 use log::{debug, info};
-use network::SimpleSender;
+use network::{CancelHandler, ReliableSender};
 use std::collections::HashSet;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::{sleep, Duration};
@@ -24,7 +26,7 @@ pub struct Proposer {
     rx_message: Receiver<ProposerMessage>,
     tx_loopback: Sender<Block>,
     buffer: HashSet<Digest>,
-    network: SimpleSender,
+    network: ReliableSender,
 }
 
 impl Proposer {
@@ -47,11 +49,17 @@ impl Proposer {
                 rx_message,
                 tx_loopback,
                 buffer: HashSet::new(),
-                network: SimpleSender::new(),
+                network: ReliableSender::new(),
             }
             .run()
             .await;
         });
+    }
+
+    /// Helper function. It waits for a future to complete and then delivers a value.
+    async fn waiter(wait_for: CancelHandler, deliver: Stake) -> Stake {
+        let _ = wait_for.await;
+        deliver
     }
 
     async fn make_block(&mut self, round: Round, qc: QC, tc: Option<TC>) {
@@ -75,7 +83,7 @@ impl Proposer {
             tc,
             self.name,
             round,
-            self.buffer.drain().collect(),
+            /* payload */ self.buffer.drain().collect(),
             self.signature_service.clone(),
         )
         .await;
@@ -93,10 +101,16 @@ impl Proposer {
 
         // Broadcast our new block.
         debug!("Broadcasting {:?}", block);
-        let addresses = self.committee.broadcast_addresses(&self.name);
+        let (names, addresses): (Vec<_>, _) = self
+            .committee
+            .broadcast_addresses(&self.name)
+            .iter()
+            .cloned()
+            .unzip();
         let message = bincode::serialize(&ConsensusMessage::Propose(block.clone()))
             .expect("Failed to serialize block");
-        self.network
+        let handles = self
+            .network
             .broadcast(addresses, Bytes::from(message))
             .await;
 
@@ -105,6 +119,24 @@ impl Proposer {
             .send(block)
             .await
             .expect("Failed to send block");
+
+        // ATTEMPT
+        let mut wait_for_quorum: FuturesUnordered<_> = names
+            .into_iter()
+            .zip(handles.into_iter())
+            .map(|(name, handler)| {
+                let stake = self.committee.stake(&name);
+                Self::waiter(handler, stake)
+            })
+            .collect();
+
+        let mut total_stake = self.committee.stake(&self.name);
+        while let Some(stake) = wait_for_quorum.next().await {
+            total_stake += stake;
+            if total_stake >= self.committee.quorum_threshold() {
+                break;
+            }
+        }
     }
 
     async fn run(&mut self) {
@@ -116,7 +148,7 @@ impl Proposer {
                 Some(message) = self.rx_message.recv() => match message {
                     ProposerMessage::Make(round, qc, tc) => {
                         self.make_block(round, qc, tc).await;
-                        sleep(Duration::from_millis(100)).await;
+                        //sleep(Duration::from_millis(100)).await;
                     },
                     ProposerMessage::Cleanup(digests) => {
                         for x in &digests {

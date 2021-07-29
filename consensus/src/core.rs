@@ -184,7 +184,12 @@ impl Core {
 
         // Broadcast the timeout message.
         debug!("Broadcasting {:?}", timeout);
-        let addresses = self.committee.broadcast_addresses(&self.name);
+        let addresses = self
+            .committee
+            .broadcast_addresses(&self.name)
+            .into_iter()
+            .map(|(_, x)| x)
+            .collect();
         let message = bincode::serialize(&ConsensusMessage::Timeout(timeout.clone()))
             .expect("Failed to serialize timeout message");
         self.network
@@ -241,7 +246,12 @@ impl Core {
 
             // Broadcast the TC.
             debug!("Broadcasting {:?}", tc);
-            let addresses = self.committee.broadcast_addresses(&self.name);
+            let addresses = self
+                .committee
+                .broadcast_addresses(&self.name)
+                .into_iter()
+                .map(|(_, x)| x)
+                .collect();
             let message = bincode::serialize(&ConsensusMessage::TC(tc.clone()))
                 .expect("Failed to serialize timeout certificate");
             self.network
