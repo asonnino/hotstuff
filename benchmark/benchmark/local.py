@@ -1,6 +1,6 @@
 import subprocess
 from math import ceil
-from os.path import basename, join, splitext
+from os.path import basename, splitext
 from time import sleep
 
 from benchmark.commands import CommandMaker

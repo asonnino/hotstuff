@@ -4,8 +4,8 @@ from benchmark.local import LocalBench
 from benchmark.logs import ParseError, LogParser
 from benchmark.utils import Print
 from benchmark.plot import Ploter, PlotError
-from aws.instance import InstanceManager
-from aws.remote import Bench, BenchError
+from benchmark.instance import InstanceManager
+from benchmark.remote import Bench, BenchError
 
 
 @task
