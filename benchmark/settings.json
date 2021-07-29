@@ -1,8 +1,8 @@
 {
-    "testbed": "hotstuff",
+    "testbed": "alberto-hotstuff",
     "key": {
         "name": "aws",
-        "path": "/absolute/key/path"
+        "path": "/Users/asonnino/.ssh/aws"
     },
     "ports": {
         "consensus": 8000,
@@ -12,7 +12,7 @@
     "repo": {
         "name": "hotstuff",
         "url": "https://github.com/asonnino/hotstuff.git",
-        "branch": "main"
+        "branch": "quorum-broadcast"
     },
     "instances": {
         "type": "m5d.8xlarge",

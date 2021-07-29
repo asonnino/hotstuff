@@ -113,6 +113,7 @@ impl Consensus {
             name,
             committee.clone(),
             signature_service,
+            parameters.max_payload_size,
             rx_mempool,
             /* rx_message */ rx_proposer,
             tx_loopback,

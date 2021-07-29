@@ -8,12 +8,16 @@ use network::SimpleSender;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 #[derive(Debug)]
-pub struct ProposerMessage(pub Round, pub QC, pub Option<TC>);
+pub enum ProposerMessage {
+    Make(Round, QC, Option<TC>),
+    Cleanup(Vec<Digest>),
+}
 
 pub struct Proposer {
     name: PublicKey,
     committee: Committee,
     signature_service: SignatureService,
+    max_payload_size: usize,
     rx_mempool: Receiver<Digest>,
     rx_message: Receiver<ProposerMessage>,
     tx_loopback: Sender<Block>,
@@ -26,6 +30,7 @@ impl Proposer {
         name: PublicKey,
         committee: Committee,
         signature_service: SignatureService,
+        max_payload_size: usize,
         rx_mempool: Receiver<Digest>,
         rx_message: Receiver<ProposerMessage>,
         tx_loopback: Sender<Block>,
@@ -35,6 +40,7 @@ impl Proposer {
                 name,
                 committee,
                 signature_service,
+                max_payload_size,
                 rx_mempool,
                 rx_message,
                 tx_loopback,
@@ -47,13 +53,23 @@ impl Proposer {
     }
 
     async fn make_block(&mut self, round: Round, qc: QC, tc: Option<TC>) {
+        // Gather the payload.
+        let digest_len = Digest::default().size();
+        let mut payload = Vec::new();
+        while payload.len() <= self.max_payload_size / digest_len {
+            match self.buffer.pop() {
+                Some(x) => payload.push(x),
+                None => break,
+            }
+        }
+
         // Generate a new block.
         let block = Block::new(
             qc,
             tc,
             self.name,
             round,
-            /* payload */ self.buffer.drain(..).collect(),
+            payload,
             self.signature_service.clone(),
         )
         .await;
@@ -91,8 +107,9 @@ impl Proposer {
                 Some(digest) = self.rx_mempool.recv() => {
                     self.buffer.push(digest);
                 },
-                Some(ProposerMessage(round, qc, tc)) = self.rx_message.recv() => {
-                    self.make_block(round, qc, tc).await;
+                Some(message) = self.rx_message.recv() => match message {
+                    ProposerMessage::Make(round, qc, tc) => self.make_block(round, qc, tc).await,
+                    ProposerMessage::Cleanup(digests) => self.buffer.retain(|x| !digests.contains(&x))
                 }
             }
         }

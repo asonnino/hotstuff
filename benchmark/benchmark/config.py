@@ -19,15 +19,15 @@ class Key:
 
 
 class Committee:
-    def __init__(self, names, consensus_addr, front_addr, mempool_addr):
-        inputs = [names, consensus_addr, front_addr, mempool_addr]
+    def __init__(self, names, consensus_addr, transactions_addr, mempool_addr):
+        inputs = [names, consensus_addr, transactions_addr, mempool_addr]
         assert all(isinstance(x, list) for x in inputs)
         assert all(isinstance(x, str) for y in inputs for x in y)
         assert len({len(x) for x in inputs}) == 1
 
         self.names = names
         self.consensus = consensus_addr
-        self.front = front_addr
+        self.front = transactions_addr
         self.mempool = mempool_addr
 
         self.json = {
@@ -71,9 +71,11 @@ class Committee:
 
         names = [x['name'] for x in consensus_authorities]
         consensus_addr = [x['address'] for x in consensus_authorities]
-        front_addr = [x['front_address'] for x in mempool_authorities]
+        transactions_addr = [
+            x['transactions_address'] for x in mempool_authorities
+        ]
         mempool_addr = [x['mempool_address'] for x in mempool_authorities]
-        return cls(names, consensus_addr, front_addr, mempool_addr)
+        return cls(names, consensus_addr, transactions_addr, mempool_addr)
 
 
 class LocalCommittee(Committee):
@@ -94,6 +96,7 @@ class NodeParameters:
         try:
             inputs += [json['consensus']['timeout_delay']]
             inputs += [json['consensus']['sync_retry_delay']]
+            inputs += [json['consensus']['max_payload_size']]
             inputs += [json['mempool']['gc_depth']]
             inputs += [json['mempool']['sync_retry_delay']]
             inputs += [json['mempool']['sync_retry_nodes']]

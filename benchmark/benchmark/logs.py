@@ -115,6 +115,9 @@ class LogParser:
                         r'consensus.* Sync retry delay .* (\d+)', log
                     ).group(1)
                 ),
+                'max_payload_size': int(
+                    search(r'Max payload size .* (\d+)', log).group(1)
+                ),
             },
             'mempool': {
                 'gc_depth': int(
@@ -184,6 +187,7 @@ class LogParser:
 
         consensus_timeout_delay = self.configs[0]['consensus']['timeout_delay']
         consensus_sync_retry_delay = self.configs[0]['consensus']['sync_retry_delay']
+        consensus_max_payload_size = self.configs[0]['consensus']['max_payload_size']
         mempool_gc_depth = self.configs[0]['mempool']['gc_depth']
         mempool_sync_retry_delay = self.configs[0]['mempool']['sync_retry_delay']
         mempool_sync_retry_nodes = self.configs[0]['mempool']['sync_retry_nodes']
@@ -204,6 +208,7 @@ class LogParser:
             '\n'
             f' Consensus timeout delay: {consensus_timeout_delay:,} ms\n'
             f' Consensus sync retry delay: {consensus_sync_retry_delay:,} ms\n'
+            f' Consensus max payload size: {consensus_max_payload_size:,} B\n'
             f' Mempool GC depth: {mempool_gc_depth:,} rounds\n'
             f' Mempool sync retry delay: {mempool_sync_retry_delay:,} ms\n'
             f' Mempool sync retry nodes: {mempool_sync_retry_nodes:,} nodes\n'

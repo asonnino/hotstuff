@@ -273,7 +273,21 @@ impl Core {
     #[async_recursion]
     async fn generate_proposal(&mut self, tc: Option<TC>) {
         self.tx_proposer
-            .send(ProposerMessage(self.round, self.high_qc.clone(), tc))
+            .send(ProposerMessage::Make(self.round, self.high_qc.clone(), tc))
+            .await
+            .expect("Failed to send message to proposer");
+    }
+
+    async fn cleanup_proposer(&mut self, b0: &Block, b1: &Block, block: &Block) {
+        let digests = b0
+            .payload
+            .iter()
+            .cloned()
+            .chain(b1.payload.iter().cloned())
+            .chain(block.payload.iter().cloned())
+            .collect();
+        self.tx_proposer
+            .send(ProposerMessage::Cleanup(digests))
             .await
             .expect("Failed to send message to proposer");
     }
@@ -307,6 +321,7 @@ impl Core {
         // Note that we commit blocks only if we have all its ancestors.
         if b0.round + 1 == b1.round {
             self.mempool_driver.cleanup(b0.round).await;
+            self.cleanup_proposer(&b0, &b1, &block).await;
             self.commit(b0).await?;
         }
 
