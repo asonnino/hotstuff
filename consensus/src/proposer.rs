@@ -7,6 +7,7 @@ use log::{debug, info};
 use network::SimpleSender;
 use std::collections::HashSet;
 use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::time::{sleep, Duration};
 
 #[derive(Debug)]
 pub enum ProposerMessage {
@@ -111,7 +112,10 @@ impl Proposer {
                     self.buffer.insert(digest);
                 },
                 Some(message) = self.rx_message.recv() => match message {
-                    ProposerMessage::Make(round, qc, tc) => self.make_block(round, qc, tc).await,
+                    ProposerMessage::Make(round, qc, tc) => {
+                        self.make_block(round, qc, tc).await;
+                        sleep(Duration::from_millis(100)).await;
+                    },
                     ProposerMessage::Cleanup(digests) => {
                         for x in &digests {
                             self.buffer.remove(x);

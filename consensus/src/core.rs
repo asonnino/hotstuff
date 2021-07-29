@@ -321,7 +321,7 @@ impl Core {
         // Note that we commit blocks only if we have all its ancestors.
         if b0.round + 1 == b1.round {
             self.mempool_driver.cleanup(b0.round).await;
-            self.cleanup_proposer(&b0, &b1, &block).await;
+            //self.cleanup_proposer(&b0, &b1, &block).await;
             self.commit(b0).await?;
         }
 
