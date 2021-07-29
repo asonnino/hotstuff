@@ -10,6 +10,7 @@ use crate::synchronizer::Synchronizer;
 use async_trait::async_trait;
 use bytes::Bytes;
 use crypto::{Digest, PublicKey, SignatureService};
+use futures::SinkExt as _;
 use log::info;
 use mempool::ConsensusMempoolMessage;
 use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
@@ -133,11 +134,10 @@ struct ConsensusReceiverHandler {
 
 #[async_trait]
 impl MessageHandler for ConsensusReceiverHandler {
-    async fn dispatch(
-        &self,
-        _writer: &mut Writer,
-        serialized: Bytes,
-    ) -> Result<(), Box<dyn Error>> {
+    async fn dispatch(&self, writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
+        // Reply with an ACK.
+        let _ = writer.send(Bytes::from("Ack")).await;
+
         // Deserialize and parse the message.
         match bincode::deserialize(&serialized).map_err(ConsensusError::SerializationError)? {
             ConsensusMessage::SyncRequest(missing, origin) => self
