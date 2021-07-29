@@ -9,7 +9,6 @@ use log::{debug, info};
 use network::{CancelHandler, ReliableSender};
 use std::collections::HashSet;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::time::{sleep, Duration};
 
 #[derive(Debug)]
 pub enum ProposerMessage {
@@ -21,7 +20,6 @@ pub struct Proposer {
     name: PublicKey,
     committee: Committee,
     signature_service: SignatureService,
-    max_payload_size: usize,
     rx_mempool: Receiver<Digest>,
     rx_message: Receiver<ProposerMessage>,
     tx_loopback: Sender<Block>,
@@ -34,7 +32,6 @@ impl Proposer {
         name: PublicKey,
         committee: Committee,
         signature_service: SignatureService,
-        max_payload_size: usize,
         rx_mempool: Receiver<Digest>,
         rx_message: Receiver<ProposerMessage>,
         tx_loopback: Sender<Block>,
@@ -44,7 +41,6 @@ impl Proposer {
                 name,
                 committee,
                 signature_service,
-                max_payload_size,
                 rx_mempool,
                 rx_message,
                 tx_loopback,
@@ -63,20 +59,6 @@ impl Proposer {
     }
 
     async fn make_block(&mut self, round: Round, qc: QC, tc: Option<TC>) {
-        // Gather the payload.
-        /*
-        let digest_len = Digest::default().size();
-        let payload = self
-            .buffer
-            .iter()
-            .take(self.max_payload_size / digest_len)
-            .cloned()
-            .collect();
-        for x in &payload {
-            self.buffer.remove(x);
-        }
-        */
-
         // Generate a new block.
         let block = Block::new(
             qc,
@@ -120,7 +102,7 @@ impl Proposer {
             .await
             .expect("Failed to send block");
 
-        // ATTEMPT
+        // Control system: Wait for 2f+1 nodes to acknowledge our block before continuing.
         let mut wait_for_quorum: FuturesUnordered<_> = names
             .into_iter()
             .zip(handles.into_iter())
@@ -146,10 +128,7 @@ impl Proposer {
                     self.buffer.insert(digest);
                 },
                 Some(message) = self.rx_message.recv() => match message {
-                    ProposerMessage::Make(round, qc, tc) => {
-                        self.make_block(round, qc, tc).await;
-                        //sleep(Duration::from_millis(100)).await;
-                    },
+                    ProposerMessage::Make(round, qc, tc) => self.make_block(round, qc, tc).await,
                     ProposerMessage::Cleanup(digests) => {
                         for x in &digests {
                             self.buffer.remove(x);

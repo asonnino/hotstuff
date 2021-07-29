@@ -22,7 +22,6 @@ def local(ctx):
         'consensus': {
             'timeout_delay': 1_000,
             'sync_retry_delay': 10_000,
-            'max_payload_size': 1_000,
         },
         'mempool': {
             'gc_depth': 50,
@@ -108,7 +107,6 @@ def remote(ctx):
         'consensus': {
             'timeout_delay': 5_000,
             'sync_retry_delay': 10_000,
-            'max_payload_size': 1_000,
         },
         'mempool': {
             'gc_depth': 50,

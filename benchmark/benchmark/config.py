@@ -96,7 +96,6 @@ class NodeParameters:
         try:
             inputs += [json['consensus']['timeout_delay']]
             inputs += [json['consensus']['sync_retry_delay']]
-            inputs += [json['consensus']['max_payload_size']]
             inputs += [json['mempool']['gc_depth']]
             inputs += [json['mempool']['sync_retry_delay']]
             inputs += [json['mempool']['sync_retry_nodes']]

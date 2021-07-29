@@ -11,7 +11,6 @@ pub type EpochNumber = u128;
 pub struct Parameters {
     pub timeout_delay: u64,
     pub sync_retry_delay: u64,
-    pub max_payload_size: usize,
 }
 
 impl Default for Parameters {
@@ -19,7 +18,6 @@ impl Default for Parameters {
         Self {
             timeout_delay: 5_000,
             sync_retry_delay: 10_000,
-            max_payload_size: 1_000,
         }
     }
 }
@@ -29,7 +27,6 @@ impl Parameters {
         // NOTE: These log entries are used to compute performance.
         info!("Timeout delay set to {} rounds", self.timeout_delay);
         info!("Sync retry delay set to {} ms", self.sync_retry_delay);
-        info!("Max payload size set to {} ms", self.max_payload_size);
     }
 }
 

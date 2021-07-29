@@ -114,7 +114,6 @@ impl Consensus {
             name,
             committee.clone(),
             signature_service,
-            parameters.max_payload_size,
             rx_mempool,
             /* rx_message */ rx_proposer,
             tx_loopback,
@@ -135,9 +134,6 @@ struct ConsensusReceiverHandler {
 #[async_trait]
 impl MessageHandler for ConsensusReceiverHandler {
     async fn dispatch(&self, writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
-        // Reply with an ACK.
-        let _ = writer.send(Bytes::from("Ack")).await;
-
         // Deserialize and parse the message.
         match bincode::deserialize(&serialized).map_err(ConsensusError::SerializationError)? {
             ConsensusMessage::SyncRequest(missing, origin) => self
@@ -145,9 +141,19 @@ impl MessageHandler for ConsensusReceiverHandler {
                 .send((missing, origin))
                 .await
                 .expect("Failed to send consensus message"),
-            request => self
+            message @ ConsensusMessage::Propose(..) => {
+                // Reply with an ACK.
+                let _ = writer.send(Bytes::from("Ack")).await;
+
+                // Pass the message to the consensus core.
+                self.tx_consensus
+                    .send(message)
+                    .await
+                    .expect("Failed to consensus message")
+            }
+            message => self
                 .tx_consensus
-                .send(request)
+                .send(message)
                 .await
                 .expect("Failed to consensus message"),
         }
