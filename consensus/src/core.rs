@@ -317,13 +317,11 @@ impl Core {
         // Store the block only if we have already processed all its ancestors.
         self.store_block(block).await;
 
-        // Optimistically clean up the proposer.
-        self.cleanup_proposer(&b0, &b1, &block).await;
-
         // Check if we can commit the head of the 2-chain.
         // Note that we commit blocks only if we have all its ancestors.
         if b0.round + 1 == b1.round {
             self.mempool_driver.cleanup(b0.round).await;
+            self.cleanup_proposer(&b0, &b1, &block).await;
             self.commit(b0).await?;
         }
 
