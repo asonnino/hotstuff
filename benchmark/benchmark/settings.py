@@ -6,12 +6,15 @@ class SettingsError(Exception):
 
 
 class Settings:
-    def __init__(self, key_name, key_path, consensus_port, mempool_port, front_port, repo_name,
-                 repo_url, branch, instance_type, aws_regions):
-        regions = aws_regions if isinstance(
-            aws_regions, list) else [aws_regions]
+    def __init__(self, testbed, key_name, key_path, consensus_port, mempool_port,
+                 front_port, repo_name, repo_url, branch, instance_type, aws_regions):
+        if isinstance(aws_regions, list):
+            regions = aws_regions
+        else:
+            [aws_regions]
+
         inputs_str = [
-            key_name, key_path, repo_name, repo_url, branch, instance_type
+            testbed, key_name, key_path, repo_name, repo_url, branch, instance_type
         ]
         inputs_str += regions
         inputs_int = [consensus_port, mempool_port, front_port]
@@ -20,6 +23,8 @@ class Settings:
         ok &= len(regions) > 0
         if not ok:
             raise SettingsError('Invalid settings types')
+
+        self.testbed = testbed
 
         self.key_name = key_name
         self.key_path = key_path
@@ -42,6 +47,7 @@ class Settings:
                 data = load(f)
 
             return cls(
+                data['testbed'],
                 data['key']['name'],
                 data['key']['path'],
                 data['ports']['consensus'],

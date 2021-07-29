@@ -1,4 +1,5 @@
 {
+    "testbed": "hotstuff",
     "key": {
         "name": "aws",
         "path": "/absolute/key/path"
