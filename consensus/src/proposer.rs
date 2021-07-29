@@ -56,6 +56,7 @@ impl Proposer {
 
     async fn make_block(&mut self, round: Round, qc: QC, tc: Option<TC>) {
         // Gather the payload.
+        /*
         let digest_len = Digest::default().size();
         let payload = self
             .buffer
@@ -66,6 +67,7 @@ impl Proposer {
         for x in &payload {
             self.buffer.remove(x);
         }
+        */
 
         // Generate a new block.
         let block = Block::new(
@@ -73,7 +75,7 @@ impl Proposer {
             tc,
             self.name,
             round,
-            payload,
+            self.buffer.drain().collect(),
             self.signature_service.clone(),
         )
         .await;
