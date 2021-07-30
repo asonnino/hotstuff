@@ -19,10 +19,10 @@ class Setup:
 
     def __str__(self):
         return (
+            f' Faults: {self.faults} nodes\n'
             f' Committee size: {self.nodes} nodes\n'
             f' Input rate: {self.rate} tx/s\n'
             f' Transaction size: {self.tx_size} B\n'
-            f' Faults: {self.faults} nodes\n'
             f' Max latency: {self.max_latency} ms\n'
         )
 
@@ -115,10 +115,10 @@ class LogAggregator:
                 )
                 filename = PathMaker.agg_file(
                     name,
+                    setup.faults,
                     setup.nodes, 
                     setup.rate, 
                     setup.tx_size, 
-                    setup.faults,
                     max_latency=setup.max_latency
                 )
                 with open(filename, 'w') as f:

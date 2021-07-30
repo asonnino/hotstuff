@@ -148,14 +148,14 @@ class Ploter:
         for f in params.faults:
             for n in params.nodes:
                 robustness_files += glob(
-                    PathMaker.agg_file('robustness', n, 'x', tx_size, f, 'any')
+                    PathMaker.agg_file('robustness', f, n, 'x', tx_size, 'any')
                 )
                 latency_files += glob(
-                    PathMaker.agg_file('latency', n, 'any', tx_size, f, 'any')
+                    PathMaker.agg_file('latency', f, n, 'any', tx_size, 'any')
                 )
             for l in params.max_latency:
                 tps_files += glob(
-                    PathMaker.agg_file('tps', 'x', 'any', tx_size, f, l)
+                    PathMaker.agg_file('tps', f, 'x', 'any', tx_size, l)
                 )
 
         # Make the plots.
