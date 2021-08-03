@@ -98,10 +98,10 @@ def remote(ctx):
     bench_params = {
         'faults': 0,
         'nodes': [10],
-        'rate': [100_000],
+        'rate': [80_000],
         'tx_size': 512,
         'duration': 300,
-        'runs': 1,
+        'runs': 2,
     }
     node_params = {
         'consensus': {

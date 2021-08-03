@@ -125,7 +125,7 @@ impl Proposer {
         loop {
             tokio::select! {
                 Some(digest) = self.rx_mempool.recv() => {
-                    if self.buffer.len() < 50 {
+                    if self.buffer.len() < 63 {
                         self.buffer.insert(digest);
                     }
                 },
