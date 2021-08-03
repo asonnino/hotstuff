@@ -59,13 +59,24 @@ impl Proposer {
     }
 
     async fn make_block(&mut self, round: Round, qc: QC, tc: Option<TC>) {
+        let mut payload = Vec::new();
+        for x in &self.buffer {
+            payload.push(x.clone());
+            if payload.len() >= 32 {
+                break;
+            }
+        }
+        for x in &payload {
+            self.buffer.remove(x);
+        }
+
         // Generate a new block.
         let block = Block::new(
             qc,
             tc,
             self.name,
             round,
-            /* payload */ self.buffer.drain().collect(),
+            /* payload */ payload, // self.buffer.drain().collect(),
             self.signature_service.clone(),
         )
         .await;
