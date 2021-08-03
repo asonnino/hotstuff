@@ -125,9 +125,9 @@ impl Proposer {
         loop {
             tokio::select! {
                 Some(digest) = self.rx_mempool.recv() => {
-                    if self.buffer.len() < 155 {
+                    //if self.buffer.len() < 155 {
                         self.buffer.insert(digest);
-                    }
+                    //}
                 },
                 Some(message) = self.rx_message.recv() => match message {
                     ProposerMessage::Make(round, qc, tc) => self.make_block(round, qc, tc).await,
