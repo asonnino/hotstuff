@@ -62,7 +62,7 @@ impl Proposer {
         let mut payload = Vec::new();
         for x in &self.buffer {
             payload.push(x.clone());
-            if payload.len() >= 32 {
+            if payload.len() >= 100 {
                 break;
             }
         }
