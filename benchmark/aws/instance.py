@@ -18,6 +18,7 @@ class AWSError(Exception):
 class InstanceManager:
     INSTANCE_NAME = 'hotstuff-node'
     SECURITY_GROUP_NAME = 'hotstuff'
+    VPC_NAME = 'hotstuff'
 
     def __init__(self, settings):
         assert isinstance(settings, Settings)
@@ -66,69 +67,83 @@ class InstanceManager:
             if sum(len(x) for x in ids.values()) == 0:
                 break
 
-    def _create_security_group(self, client):
-        client.create_security_group(
+    def _create_vpc(self, region, index):
+        ec2 = boto3.resource('ec2', region_name=region)
+
+        vpc = ec2.create_vpc(CidrBlock='192.168.0.0/16')
+        vpc.create_tags(
+            Tags=[{
+                'Key': 'Name',
+                'Value': f'{self.VPC_NAME}-{region}-{index}'
+            }]
+        )
+        vpc.wait_until_available()
+
+        ig = ec2.create_internet_gateway()
+        vpc.attach_internet_gateway(InternetGatewayId=ig.id)
+
+        subnet = ec2.create_subnet(CidrBlock='192.168.1.0/24', VpcId=vpc.id)
+
+        route_table = vpc.create_route_table()
+        route_table.create_route(
+            DestinationCidrBlock='0.0.0.0/0', GatewayId=ig.id
+        )
+        route_table.associate_with_subnet(SubnetId=subnet.id)
+
+        sec_group = ec2.create_security_group(
+            GroupName=f'{self.SECURITY_GROUP_NAME}-{vpc.id}',
             Description='HotStuff node',
-            GroupName=self.SECURITY_GROUP_NAME,
+            VpcId=vpc.id
+        )
+        sec_group.authorize_ingress(
+            CidrIp='0.0.0.0/0',
+            IpProtocol='TCP',
+            FromPort=22,
+            ToPort=22
+        )
+        sec_group.authorize_ingress(
+            CidrIp='0.0.0.0/0',
+            IpProtocol='TCP',
+            FromPort=self.settings.consensus_port,
+            ToPort=self.settings.consensus_port
+        )
+        sec_group.authorize_ingress(
+            CidrIp='0.0.0.0/0',
+            IpProtocol='TCP',
+            FromPort=self.settings.mempool_port,
+            ToPort=self.settings.mempool_port
+        )
+        sec_group.authorize_ingress(
+            CidrIp='0.0.0.0/0',
+            IpProtocol='TCP',
+            FromPort=self.settings.front_port,
+            ToPort=self.settings.front_port
         )
 
-        client.authorize_security_group_ingress(
-            GroupName=self.SECURITY_GROUP_NAME,
-            IpPermissions=[
-                {
-                    'IpProtocol': 'tcp',
-                    'FromPort': 22,
-                    'ToPort': 22,
-                    'IpRanges': [{
-                        'CidrIp': '0.0.0.0/0',
-                        'Description': 'Debug SSH access',
-                    }],
-                    'Ipv6Ranges': [{
-                        'CidrIpv6': '::/0',
-                        'Description': 'Debug SSH access',
-                    }],
-                },
-                {
-                    'IpProtocol': 'tcp',
-                    'FromPort': self.settings.consensus_port,
-                    'ToPort': self.settings.consensus_port,
-                    'IpRanges': [{
-                        'CidrIp': '0.0.0.0/0',
-                        'Description': 'Consensus port',
-                    }],
-                    'Ipv6Ranges': [{
-                        'CidrIpv6': '::/0',
-                        'Description': 'Consensus port',
-                    }],
-                },
-                {
-                    'IpProtocol': 'tcp',
-                    'FromPort': self.settings.mempool_port,
-                    'ToPort': self.settings.mempool_port,
-                    'IpRanges': [{
-                        'CidrIp': '0.0.0.0/0',
-                        'Description': 'Mempool port',
-                    }],
-                    'Ipv6Ranges': [{
-                        'CidrIpv6': '::/0',
-                        'Description': 'Mempool port',
-                    }],
-                },
-                {
-                    'IpProtocol': 'tcp',
-                    'FromPort': self.settings.front_port,
-                    'ToPort': self.settings.front_port,
-                    'IpRanges': [{
-                        'CidrIp': '0.0.0.0/0',
-                        'Description': 'Front end to accept clients transactions',
-                    }],
-                    'Ipv6Ranges': [{
-                        'CidrIpv6': '::/0',
-                        'Description': 'Front end to accept clients transactions',
-                    }],
-                },
-            ]
-        )
+        return subnet.id, sec_group.id
+
+    def _get_vpc_info(self, client):
+        vpc_ids = []
+        for x in client.describe_vpcs()['Vpcs']:
+            if 'Tags' in x and self.VPC_NAME in str(x['Tags']):
+                vpc_ids += [x['VpcId']]
+
+        subnet_ids = {}
+        for x in client.describe_subnets()['Subnets']:
+            if x['VpcId'] in vpc_ids:
+                subnet_ids[x['VpcId']] = x['SubnetId']
+
+        sec_group_ids = {}
+        for x in client.describe_security_groups()['SecurityGroups']:
+            if x['VpcId'] in vpc_ids:
+                sec_group_ids[x['VpcId']] = x['GroupId']
+
+        info = {}
+        for vpc_id, subnet_id in subnet_ids.items():
+            assert vpc_id in sec_group_ids
+            info[subnet_id] = sec_group_ids[vpc_id]
+
+        return info
 
     def _get_ami(self, client):
         # The AMI changes with regions.
@@ -143,46 +158,63 @@ class InstanceManager:
     def create_instances(self, instances):
         assert isinstance(instances, int) and instances > 0
 
-        # Create the security group in every region.
-        for client in self.clients.values():
-            try:
-                self._create_security_group(client)
-            except ClientError as e:
-                error = AWSError(e)
-                if error.code != 'InvalidGroup.Duplicate':
-                    raise BenchError('Failed to create security group', error)
-
+        # Ensure there are no other testbeds.
         try:
-            # Create all instances.
+            ids, _ = self._get(['pending', 'running', 'stopping', 'stopped'])
+        except ClientError as e:
+            raise BenchError('Failed to get AWS account state', AWSError(e))
+
+        if len(ids) != 0:
+            Print.warn('Destroy the current testbed before creating a new one')
+            return
+
+        # Create all instances.
+        try:
             size = instances * len(self.clients)
             progress = progress_bar(
-                self.clients.values(), prefix=f'Creating {size} instances'
+                self.clients.items(), prefix=f'Creating {size} instances'
             )
-            for client in progress:
-                client.run_instances(
-                    ImageId=self._get_ami(client),
-                    InstanceType=self.settings.instance_type,
-                    KeyName=self.settings.key_name,
-                    MaxCount=instances,
-                    MinCount=instances,
-                    SecurityGroups=[self.SECURITY_GROUP_NAME],
-                    TagSpecifications=[{
-                        'ResourceType': 'instance',
-                        'Tags': [{
-                            'Key': 'Name',
-                            'Value': self.INSTANCE_NAME
-                        }]
-                    }],
-                    EbsOptimized=True,
-                    BlockDeviceMappings=[{
-                        'DeviceName': '/dev/sda1',
-                        'Ebs': {
-                            'VolumeType': 'gp2',
-                            'VolumeSize': 200,
-                            'DeleteOnTermination': True
-                        }
-                    }],
-                )
+            for region, client in progress:
+                info = self._get_vpc_info(client)
+
+                # Create missing VPCs and Subnets.
+                if len(info) < instances:
+                    for i in range(len(info), instances):
+                        subnet_id, sec_group_id = self._create_vpc(region, i)
+                        info[subnet_id] = sec_group_id
+
+                # Run the instances.
+                for subnet_id, sec_group_id in info.items():
+                    client.run_instances(
+                        ImageId=self._get_ami(client),
+                        InstanceType=self.settings.instance_type,
+                        KeyName=self.settings.key_name,
+                        MaxCount=1,
+                        MinCount=1,
+                        # SecurityGroups=[self.SECURITY_GROUP_NAME],
+                        TagSpecifications=[{
+                            'ResourceType': 'instance',
+                            'Tags': [{
+                                'Key': 'Name',
+                                'Value': self.INSTANCE_NAME
+                            }]
+                        }],
+                        EbsOptimized=True,
+                        BlockDeviceMappings=[{
+                            'DeviceName': '/dev/sda1',
+                            'Ebs': {
+                                'VolumeType': 'gp2',
+                                'VolumeSize': 200,
+                                'DeleteOnTermination': True
+                            }
+                        }],
+                        NetworkInterfaces=[{
+                            'SubnetId': subnet_id,
+                            'AssociatePublicIpAddress': True,
+                            'DeviceIndex': 0,
+                            'Groups': [sec_group_id],
+                        }],
+                    )
 
             # Wait for the instances to boot.
             Print.info('Waiting for all instances to boot...')
@@ -207,11 +239,6 @@ class InstanceManager:
             # Wait for all instances to properly shut down.
             Print.info('Waiting for all instances to shut down...')
             self._wait(['shutting-down'])
-            for client in self.clients.values():
-                client.delete_security_group(
-                    GroupName=self.SECURITY_GROUP_NAME
-                )
-
             Print.heading(f'Testbed of {size} instances destroyed')
         except ClientError as e:
             raise BenchError('Failed to terminate instances', AWSError(e))
