@@ -102,7 +102,7 @@ def remote(ctx):
         'rate': [10_000],
         'tx_size': 512,
         'faults': 0,
-        'duration': 20,
+        'duration': 60,
         'runs': 1,
         'crash_pattern': [(1,3),(8,2)],
     }
