@@ -50,6 +50,14 @@ class CommandMaker:
         return 'tmux kill-server'
 
     @staticmethod
+    def list_nodes():
+        return 'tmux list-sessions'
+
+    @staticmethod
+    def kill_node(id):
+        return 'tmux kill-session -t node-'+str(id)
+
+    @staticmethod
     def alias_binaries(origin):
         assert isinstance(origin, str)
         node, client = join(origin, 'node'), join(origin, 'client')

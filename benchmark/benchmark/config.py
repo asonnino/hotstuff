@@ -104,7 +104,7 @@ class NodeParameters:
         if not all(isinstance(x, int) for x in inputs):
             raise ConfigError('Invalid parameters type')
 
-        self.timeout_delay = json['consensus']['timeout_delay'] 
+        self.timeout_delay = json['consensus']['timeout_delay']
         self.json = json
 
     def print(self, filename):
@@ -116,12 +116,12 @@ class NodeParameters:
 class BenchParameters:
     def __init__(self, json):
         try:
-            nodes = json['nodes'] 
+            nodes = json['nodes']
             nodes = nodes if isinstance(nodes, list) else [nodes]
             if not nodes or any(x <= 0 for x in nodes):
                 raise ConfigError('Missing or invalid number of nodes')
 
-            rate = json['rate'] 
+            rate = json['rate']
             rate = rate if isinstance(rate, list) else [rate]
             if not rate:
                 raise ConfigError('Missing input rate')
@@ -132,6 +132,15 @@ class BenchParameters:
             self.faults = int(json['faults'])
             self.duration = int(json['duration'])
             self.runs = int(json['runs']) if 'runs' in json else 1
+            crash_pattern = json['crash_pattern']
+            # k is node id, v is time to crash
+            self.crash_pattern = [(k,v) for k, v in crash_pattern]
+            self.crash_pattern.sort(key=lambda tup: tup[1])
+            illegal_keys = [k for (k,v) in self.crash_pattern if k not in range(self.nodes[0])]
+            illegal_values = [v for (k,v) in self.crash_pattern if v<0 or v>self.duration]
+            if len(illegal_keys)>0 or len(illegal_values)>0:
+                raise ConfigError('Invalid crash pattern')
+
         except KeyError as e:
             raise ConfigError(f'Malformed bench parameters: missing key {e}')
 
@@ -145,7 +154,7 @@ class BenchParameters:
 class PlotParameters:
     def __init__(self, json):
         try:
-            nodes = json['nodes'] 
+            nodes = json['nodes']
             nodes = nodes if isinstance(nodes, list) else [nodes]
             if not nodes:
                 raise ConfigError('Missing number of nodes')
@@ -153,11 +162,11 @@ class PlotParameters:
 
             self.tx_size = int(json['tx_size'])
 
-            faults = json['faults'] 
+            faults = json['faults']
             faults = faults if isinstance(faults, list) else [faults]
             self.faults = [int(x) for x in faults] if faults else [0]
 
-            max_lat = json['max_latency'] 
+            max_lat = json['max_latency']
             max_lat = max_lat if isinstance(max_lat, list) else [max_lat]
             if not max_lat:
                 raise ConfigError('Missing max latency')
@@ -168,4 +177,3 @@ class PlotParameters:
 
         except ValueError:
             raise ConfigError('Invalid parameters type')
-

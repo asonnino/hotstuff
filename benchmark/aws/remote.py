@@ -183,6 +183,19 @@ class Bench:
         # Kill any potentially unfinished run and delete logs.
         self.kill(hosts=hosts, delete_logs=True)
 
+       # Extract crash pattern: change to differences form
+        delays = []
+        max_crash_time=0
+        crash_pattern = bench_parameters.crash_pattern
+        if len(crash_pattern)>0:
+            max_crash_time = crash_pattern[-1][1]
+            first_crash = crash_pattern.pop(0)
+            delays.append(first_crash)
+            last_t = first_crash[1]
+            for i, t in crash_pattern:
+                 delays.append((i,t-last_t))
+                 last_t=t
+
         # Run the clients (they will wait for the nodes to be ready).
         # Filter all faulty nodes from the client addresses (or they will wait
         # for the faulty nodes to be online).
@@ -222,8 +235,13 @@ class Bench:
 
         # Wait for all transactions to be processed.
         duration = bench_parameters.duration
+        # Follow crash pattern:
+        for i, t in delays:
+            sleep(t)
+            self.kill(hosts=[hosts[i]], delete_logs=False)
         for _ in progress_bar(range(20), prefix=f'Running benchmark ({duration} sec):'):
-            sleep(ceil(duration / 20))
+            # reduce time already slept while crashing nodes
+            sleep(ceil((duration-max_crash_time) / 20))
         self.kill(hosts=hosts, delete_logs=False)
 
     def _logs(self, hosts, faults):

@@ -17,6 +17,7 @@ def local(ctx):
         'tx_size': 512,
         'faults': 0,
         'duration': 20,
+        'crash_pattern': [(1,1),(2,4),(3,7)]
     }
     node_params = {
         'consensus': {
@@ -97,23 +98,24 @@ def install(ctx):
 def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
-        'nodes': [10, 20],
-        'rate': [10_000, 50_000],
+        'nodes': [10],
+        'rate': [10_000],
         'tx_size': 512,
         'faults': 0,
-        'duration': 300,
+        'duration': 60,
         'runs': 1,
+        'crash_pattern': [(1,3),(8,2)],
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 30_000,
-            'sync_retry_delay': 100_000,
+            'timeout_delay': 5_000,
+            'sync_retry_delay': 10_000,
             'max_payload_size': 1_000,
             'min_block_delay': 100
         },
         'mempool': {
             'queue_capacity': 100_000,
-            'sync_retry_delay': 100_000,
+            'sync_retry_delay': 10_000,
             'max_payload_size': 500_000,
             'min_block_delay': 100
         }
@@ -131,6 +133,7 @@ def plot(ctx):
         'nodes': [10, 20],
         'tx_size': 512,
         'faults': [0],
+        'crash_pattern': [],
         'max_latency': [2_000, 5_000]
     }
     try:
