@@ -4,6 +4,7 @@ use crate::error::{ConsensusError, ConsensusResult};
 use crate::messages::{Block, Vote, QC};
 use crypto::Hash as _;
 use crypto::PublicKey;
+use log::{debug, log_enabled};
 use std::collections::HashSet;
 use store::Store;
 
@@ -19,12 +20,22 @@ pub struct ReputationLeaderElector {
 impl ReputationLeaderElector {
     pub fn new(committee: Committee, store: Store) -> Self {
         let last_authors_size = committee.validity_threshold() as usize;
-        Self {
+        let module = Self {
             committee,
             store,
             window_size: 1,
             last_authors_size,
+        };
+        if log_enabled!(log::Level::Debug) {
+            for r in 0..module.committee.size() {
+                debug!(
+                    "RR author of round {}: {}",
+                    r,
+                    module.round_robin(r as RoundNumber)
+                );
+            }
         }
+        module
     }
 
     fn round_robin(&self, round: RoundNumber) -> PublicKey {
@@ -38,11 +49,13 @@ impl ReputationLeaderElector {
         // and QC rounds are consecutive.
         if qc.round + 1 == round {
             if let Some(leader) = qc.next_leader {
+                debug!("The reputation leader is {}", leader);
                 return leader;
             }
         }
 
         // Otherwise, fall back to round robin.
+        debug!("Reputation leader defaulting to RR");
         self.round_robin(round)
     }
 
@@ -90,22 +103,32 @@ impl ReputationLeaderElector {
     }
 
     pub fn check_block(&self, block: &Block, parent: &Block) -> ConsensusResult<()> {
+        debug!("Checking the leader of {}", block);
         let next_leader = match parent.round + 1 == block.round {
-            true => self.next_leader(&parent.qc, parent.round),
-            false => self.round_robin(block.round),
+            true => {
+                debug!("The leader of {} is reputation based", block);
+                self.next_leader(&parent.qc, parent.round)
+            }
+            false => {
+                debug!("The leader of {} is RR based", block);
+                self.round_robin(block.round)
+            }
         };
         ensure!(
             block.author == next_leader,
             ConsensusError::WrongLeader {
                 digest: block.digest(),
-                leader: block.author,
+                got: block.author,
+                expected: next_leader,
                 round: block.round
             }
         );
+        debug!("{} has the correct leader", block);
         Ok(())
     }
 
     pub fn check_vote(&self, vote: &Vote, name: PublicKey) -> ConsensusResult<()> {
+        debug!("Checking the recipient of {:?}", vote);
         ensure!(
             name == self.next_leader(&vote.parent_qc, vote.round),
             ConsensusError::UnexpectedVote {
@@ -113,6 +136,7 @@ impl ReputationLeaderElector {
                 round: vote.round
             }
         );
+        debug!("{:?} has the correct leader", vote);
         Ok(())
     }
 }

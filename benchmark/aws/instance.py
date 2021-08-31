@@ -16,7 +16,7 @@ class AWSError(Exception):
 
 
 class InstanceManager:
-    INSTANCE_NAME = 'hotstuff-node'
+    INSTANCE_NAME = 'alberto-hotstuff'
     SECURITY_GROUP_NAME = 'hotstuff'
 
     def __init__(self, settings):

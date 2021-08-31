@@ -460,7 +460,7 @@ impl Core {
         // Upon booting, generate the very first block (if we are the leader).
         // Also, schedule a timer in case we don't hear from the leader.
         self.timer.reset();
-        if self.name == self.leader_elector.next_leader(&self.high_qc, self.round) {
+        if self.name == self.leader_elector.next_leader(&self.high_qc, 0) {
             self.generate_proposal(None)
                 .await
                 .expect("Failed to send the first block");

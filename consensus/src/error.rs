@@ -53,10 +53,11 @@ pub enum ConsensusError {
     #[error("Malformed block {0}")]
     MalformedBlock(Digest),
 
-    #[error("Received block {digest} from unexpected leader {leader} at round {round}")]
+    #[error("Received block {digest} from unexpected leader {got} (expected: {expected}) at round {round}")]
     WrongLeader {
         digest: Digest,
-        leader: PublicKey,
+        got: PublicKey,
+        expected: PublicKey,
         round: RoundNumber,
     },
 

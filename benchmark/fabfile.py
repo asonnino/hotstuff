@@ -17,7 +17,7 @@ def local(ctx):
         'tx_size': 512,
         'faults': 0,
         'duration': 20,
-        'crash_pattern': [(1, 1), (2, 4), (3, 7)]
+        'crash_pattern': []
     }
     node_params = {
         'consensus': {
@@ -34,7 +34,7 @@ def local(ctx):
         }
     }
     try:
-        ret = LocalBench(bench_params, node_params).run(debug=False).result()
+        ret = LocalBench(bench_params, node_params).run(debug=True).result()
         print(ret)
     except BenchError as e:
         Print.error(e)
