@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import StrMethodFormatter
 from glob import glob
 import json
+from itertools import cycle
 
 from benchmark.utils import PathMaker
 from benchmark.config import PlotParameters
@@ -55,6 +56,7 @@ class Ploter:
 
     def _plot(self, x_label, y_label, y_axis, z_axis, type):
         plt.figure()
+        markers = cycle(['o', 'v', 's', 'p', 'D', 'P'])
         self.results.sort(key=self._natural_keys, reverse=(type == 'tps'))
         for result in self.results:
             y_values, y_err = y_axis(result)
@@ -63,17 +65,16 @@ class Ploter:
                 raise PlotError('Unequal number of x, y, and y_err values')
 
             plt.errorbar(
-                x_values, y_values, yerr=y_err,  # uplims=True, lolims=True,
-                marker='o', label=z_axis(result), linestyle='dotted'
+                x_values, y_values, yerr=y_err, label=z_axis(result),
+                linestyle='dotted', marker=next(markers), capsize=3
             )
-            # if type == 'latency':
-            #    plt.yscale('log')
 
         plt.legend(loc='lower center', bbox_to_anchor=(0.5, 1), ncol=2)
         plt.xlim(xmin=0)
         plt.ylim(bottom=0)
         plt.xlabel(x_label)
         plt.ylabel(y_label[0])
+        plt.grid()
         ax = plt.gca()
         ax.xaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
         ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
@@ -137,11 +138,12 @@ class Ploter:
         times = tps_interval.keys()
         commits = tps_interval.values()
         plt.figure()
-        plt.plot(times,commits)
+        plt.plot(times, commits)
         plt.xlabel('Time (seconds)')
         plt.ylabel('Throughput (tx/s)')
         for x in ['pdf', 'png']:
-            plt.savefig(PathMaker.plot_file('performance_under_faults',x), bbox_inches='tight')
+            plt.savefig(PathMaker.plot_file(
+                'performance_under_faults', x), bbox_inches='tight')
 
     @classmethod
     def plot(cls, params_dict):
@@ -160,14 +162,14 @@ class Ploter:
         for f in params.faults:
             for n in params.nodes:
                 robustness_files += glob(
-                    PathMaker.agg_file(n, 'x', tx_size, f, 'any')
+                    PathMaker.agg_file('robustness', n, 'x', tx_size, f, 'any')
                 )
                 latency_files += glob(
-                    PathMaker.agg_file(n, 'any', tx_size, f, 'any')
+                    PathMaker.agg_file('latency', n, 'any', tx_size, f, 'any')
                 )
             for l in params.max_latency:
                 tps_files += glob(
-                    PathMaker.agg_file('x', 'any', tx_size, f, l)
+                    PathMaker.agg_file('tps', 'x', 'any', tx_size, f, l)
                 )
 
         # Make the plots.

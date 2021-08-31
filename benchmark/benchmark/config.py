@@ -52,10 +52,6 @@ class Committee:
         with open(filename, 'w') as f:
             dump(self.json, f, indent=4, sort_keys=True)
 
-    def front_addresses(self):
-        authorities = self.json['mempool']['authorities']
-        return [x['front_address'] for x in authorities.values()]
-
     def size(self):
         return len(self.json['consensus']['authorities'])
 
@@ -118,7 +114,7 @@ class BenchParameters:
         try:
             nodes = json['nodes']
             nodes = nodes if isinstance(nodes, list) else [nodes]
-            if not nodes or any(x <= 0 for x in nodes):
+            if not nodes or any(x <= 1 for x in nodes):
                 raise ConfigError('Missing or invalid number of nodes')
 
             rate = json['rate']

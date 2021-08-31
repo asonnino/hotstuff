@@ -27,9 +27,14 @@ impl Mempool {
         consensus_channel: Sender<ConsensusMessage>,
         consensus_mempool_channel: Receiver<ConsensusMempoolMessage>,
     ) -> MempoolResult<()> {
+        // NOTE: The following log entries are used to compute performance.
         info!(
             "Mempool queue capacity set to {} payloads",
             parameters.queue_capacity
+        );
+        info!(
+            "Mempool synchronizer retry delay set to {} ms",
+            parameters.sync_retry_delay
         );
         info!(
             "Mempool max payload size set to {} B",

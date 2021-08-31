@@ -30,6 +30,7 @@ impl Consensus {
         tx_consensus_mempool: Sender<ConsensusMempoolMessage>,
         tx_commit: Sender<Block>,
     ) -> ConsensusResult<()> {
+        // NOTE: The following log entries are used to compute performance.
         info!(
             "Consensus timeout delay set to {} ms",
             parameters.timeout_delay

@@ -30,7 +30,7 @@ impl ReputationLeaderElector {
     fn round_robin(&self, round: RoundNumber) -> PublicKey {
         let mut keys: Vec<_> = self.committee.authorities.keys().cloned().collect();
         keys.sort();
-        keys[(round / 2) as usize % self.committee.size()]
+        keys[round as usize % self.committee.size()]
     }
 
     pub fn next_leader(&self, qc: &QC, round: RoundNumber) -> PublicKey {

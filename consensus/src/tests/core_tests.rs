@@ -153,7 +153,7 @@ async fn generate_proposal() {
 #[tokio::test]
 async fn commit_block() {
     // Get enough distinct leaders to form a quorum.
-    let leaders = vec![leader_keys(1), leader_keys(2), leader_keys(4)];
+    let leaders = vec![leader_keys(1), leader_keys(2), leader_keys(3)];
     let chain = chain(leaders);
 
     // Run a core instance.
@@ -162,6 +162,7 @@ async fn commit_block() {
     let (tx_core, _rx_network, mut rx_commit) = core(public_key, secret_key, store_path).await;
 
     // Send a the blocks to the core.
+    let committed = chain[0].clone();
     for block in chain {
         let message = ConsensusMessage::Propose(block);
         tx_core.send(message).await.unwrap();
@@ -169,7 +170,7 @@ async fn commit_block() {
 
     // Ensure the core commits the head.
     match rx_commit.recv().await {
-        Some(b) => assert_eq!(b, Block::genesis()),
+        Some(b) => assert_eq!(b, committed),
         _ => assert!(false),
     }
 }

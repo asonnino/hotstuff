@@ -17,7 +17,7 @@ def local(ctx):
         'tx_size': 512,
         'faults': 0,
         'duration': 20,
-        'crash_pattern': [(1,1),(2,4),(3,7)]
+        'crash_pattern': [(1, 1), (2, 4), (3, 7)]
     }
     node_params = {
         'consensus': {
@@ -59,10 +59,10 @@ def destroy(ctx):
 
 
 @task
-def start(ctx):
-    ''' Start all machines '''
+def start(ctx, max=2):
+    ''' Start at most `max` machines per data center '''
     try:
-        InstanceManager.make().start_instances()
+        InstanceManager.make().start_instances(max)
     except BenchError as e:
         Print.error(e)
 
@@ -87,7 +87,7 @@ def info(ctx):
 
 @task
 def install(ctx):
-    ''' Install HotStuff on all machines '''
+    ''' Install the codebase on all machines '''
     try:
         Bench(ctx).install()
     except BenchError as e:
@@ -104,7 +104,7 @@ def remote(ctx):
         'faults': 0,
         'duration': 60,
         'runs': 1,
-        'crash_pattern': [(1,3),(8,2)],
+        'crash_pattern': [(1, 3), (8, 2)],
     }
     node_params = {
         'consensus': {

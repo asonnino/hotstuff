@@ -13,6 +13,7 @@ use log::{debug, error, info, warn};
 use network::NetMessage;
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
+use std::collections::VecDeque;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::{sleep, Duration};
@@ -47,6 +48,7 @@ pub struct Core {
     commit_channel: Sender<Block>,
     round: RoundNumber,
     last_voted_round: RoundNumber,
+    last_committed_round: RoundNumber,
     high_qc: QC,
     timer: Timer,
     aggregator: Aggregator,
@@ -83,6 +85,7 @@ impl Core {
             core_channel,
             round: 1,
             last_voted_round: 0,
+            last_committed_round: 0,
             high_qc: QC::genesis(),
             timer,
             aggregator,
@@ -130,6 +133,48 @@ impl Core {
             )
             .await,
         ))
+    }
+
+    async fn commit(&mut self, block: Block) -> ConsensusResult<()> {
+        if self.last_committed_round >= block.round {
+            return Ok(());
+        }
+
+        let mut to_commit = VecDeque::new();
+        to_commit.push_back(block.clone());
+
+        // Ensure we commit the entire chain. This is needed after view-change.
+        let mut parent = block.clone();
+        while self.last_committed_round + 1 < parent.round {
+            let ancestor = self
+                .synchronizer
+                .get_parent_block(&parent)
+                .await?
+                .expect("We should have all the ancestors by now");
+            to_commit.push_front(ancestor.clone());
+            parent = ancestor;
+        }
+
+        // Save the last committed block.
+        self.last_committed_round = block.round;
+
+        // Send all the newly committed blocks to the node's application layer.
+        while let Some(block) = to_commit.pop_back() {
+            if !block.payload.is_empty() {
+                info!("Committed {}", block);
+
+                #[cfg(feature = "benchmark")]
+                for x in &block.payload {
+                    // NOTE: This log entry is used to compute performance.
+                    info!("Committed B{}({})", block.round, base64::encode(x));
+                }
+            }
+            debug!("Committed {:?}", block);
+            if let Err(e) = self.commit_channel.send(block).await {
+                warn!("Failed to send block through the commit channel: {}", e);
+            }
+        }
+        Ok(())
     }
 
     #[async_recursion]
@@ -295,7 +340,7 @@ impl Core {
         // Let's see if we have the last three ancestors of the block, that is:
         //      b0 <- |qc0; b1| <- |qc1; block|
         // If we don't, the synchronizer asks for them to other nodes. It will
-        // then ensure we process all three ancestors in the correct order, and
+        // then ensure we process both ancestors in the correct order, and
         // finally make us resume processing this block.
         let (b0, b1) = match self.synchronizer.get_ancestors(block).await? {
             Some(ancestors) => ancestors,
@@ -314,19 +359,7 @@ impl Core {
         // Check if we can commit the head of the 2-chain.
         // Note that we commit blocks only if we have all its ancestors.
         if b0.round + 1 == b1.round {
-            if !b0.payload.is_empty() {
-                info!("Committed {}", b0);
-
-                #[cfg(feature = "benchmark")]
-                for x in &b0.payload {
-                    // NOTE: This log entry is used to compute performance.
-                    info!("Committed B{}({})", b0.round, base64::encode(x));
-                }
-            }
-            debug!("Committed {:?}", b0);
-            if let Err(e) = self.commit_channel.send(b0.clone()).await {
-                warn!("Failed to send block through the commit channel: {}", e);
-            }
+            self.commit(b0.clone()).await?;
         }
 
         // Optimistically cleanup the mempool. This may result in some transactions
