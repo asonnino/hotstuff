@@ -1,7 +1,7 @@
 # HotStuff with Async Fallback
 
-[![build status](https://img.shields.io/github/workflow/status/danielxiangzl/hotstuff/Build/main?style=flat-square&logo=github)](https://github.com/danielxiangzl/hotstuff/actions)
-[![test status](https://img.shields.io/github/workflow/status/danielxiangzl/hotstuff/Tests/main?style=flat-square&logo=github&label=tests)](https://github.com/danielxiangzl/hotstuff/actions)
+[![build status](https://img.shields.io/github/workflow/status/danielxiangzl/hotstuff/Build/asyncasync?style=flat-square&logo=github)](https://github.com/danielxiangzl/hotstuff/actions)
+[![test status](https://img.shields.io/github/workflow/status/danielxiangzl/hotstuff/Tests/async?style=flat-square&logo=github&label=tests)](https://github.com/danielxiangzl/hotstuff/actions)
 [![rustc](https://img.shields.io/badge/rustc-1.50.0+-blue?style=flat-square&logo=rust)](https://www.rust-lang.org)
 [![license](https://img.shields.io/badge/license-Apache-blue.svg?style=flat-square)](LICENSE)
 
