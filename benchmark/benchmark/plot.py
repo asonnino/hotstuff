@@ -176,4 +176,4 @@ class Ploter:
         cls.plot_robustness(robustness_files)
         cls.plot_latency(latency_files)
         cls.plot_tps(tps_files)
-        cls.plot_tps_interval('tps_intervals.log')
+        # cls.plot_tps_interval('tps_intervals.log')

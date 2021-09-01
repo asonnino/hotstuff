@@ -185,16 +185,16 @@ class Bench:
 
        # Extract crash pattern: change to differences form
         delays = []
-        max_crash_time=0
+        max_crash_time = 0
         crash_pattern = bench_parameters.crash_pattern
-        if len(crash_pattern)>0:
+        if len(crash_pattern) > 0:
             max_crash_time = crash_pattern[-1][1]
             first_crash = crash_pattern.pop(0)
             delays.append(first_crash)
             last_t = first_crash[1]
             for i, t in crash_pattern:
-                 delays.append((i,t-last_t))
-                 last_t=t
+                delays.append((i, t-last_t))
+                last_t = t
 
         # Run the clients (they will wait for the nodes to be ready).
         # Filter all faulty nodes from the client addresses (or they will wait
