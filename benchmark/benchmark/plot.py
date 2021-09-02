@@ -69,7 +69,7 @@ class Ploter:
                 linestyle='dotted', marker=next(markers), capsize=3
             )
 
-        plt.legend(loc='lower center', bbox_to_anchor=(0.5, 1), ncol=2)
+        plt.legend(loc='lower center', bbox_to_anchor=(0.5, 1), ncol=3)
         plt.xlim(xmin=0)
         plt.ylim(bottom=0)
         plt.xlabel(x_label)
