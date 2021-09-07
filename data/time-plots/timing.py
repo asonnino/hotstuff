@@ -140,6 +140,10 @@ class Ploter:
         styles = cycle(['dashed', 'dotted'])
         colors = cycle(['tab:orange', 'tab:blue', 'tab:green'])
 
+        plt.axvline(x=60, color='k', linewidth=1)
+        plt.axvline(x=120, color='k', linewidth=1)
+        plt.axvline(x=180, color='k', linewidth=1)
+
         for scheme in [(round_robin, 'Round-Robin'), (reputation, 'Leader Reputation')]:
             x, name = scheme
             style = next(styles)
