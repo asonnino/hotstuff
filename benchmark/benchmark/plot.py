@@ -133,19 +133,6 @@ class Ploter:
         ploter._plot(x_label, y_label, ploter._tps, z_axis, 'tps')
 
     @classmethod
-    def plot_tps_interval(cls, file):
-        tps_interval = json.load(open(PathMaker.logs_path()+'/'+file))
-        times = tps_interval.keys()
-        commits = tps_interval.values()
-        plt.figure()
-        plt.plot(times, commits)
-        plt.xlabel('Time (seconds)')
-        plt.ylabel('Throughput (tx/s)')
-        for x in ['pdf', 'png']:
-            plt.savefig(PathMaker.plot_file(
-                'performance_under_faults', x), bbox_inches='tight')
-
-    @classmethod
     def plot(cls, params_dict):
         try:
             params = PlotParameters(params_dict)
@@ -176,4 +163,3 @@ class Ploter:
         cls.plot_robustness(robustness_files)
         cls.plot_latency(latency_files)
         cls.plot_tps(tps_files)
-        # cls.plot_tps_interval('tps_intervals.log')

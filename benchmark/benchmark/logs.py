@@ -4,10 +4,9 @@ from multiprocessing import Pool
 from os.path import join
 from re import findall, search
 from statistics import mean
-import json
 
 from benchmark.utils import Print
-from benchmark.utils import PathMaker
+
 
 class ParseError(Exception):
     pass
@@ -156,20 +155,6 @@ class LogParser:
         bps = bytes / duration
         tps = bps / self.size[0]
         return tps, bps, duration
-
-    def _consensus_throughput_intervals(self,interval_len):
-        start, end = min(self.proposals.values()), max(self.commits.values())
-        tps_per_time = {}
-        i=0
-        for t in range(int(start), int(end), interval_len):
-            relevant_blocks = {k:v for k, v in self.commits.items() if v>=t and v < t+interval_len}
-            relevant_blocks_size = {k:s for k, s in self.sizes.items() if k in relevant_blocks}
-            bytes=sum(relevant_blocks_size.values())
-            bps = bytes / interval_len
-            tps = bps / self.size[0]
-            tps_per_time[i]=tps
-            i=i+interval_len
-            json.dump(tps_per_time, open(PathMaker.logs_path()+'/tps_intervals.log','w'))
 
     def _consensus_latency(self):
         latency = [c - self.proposals[d] for d, c in self.commits.items()]
