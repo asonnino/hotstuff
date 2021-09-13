@@ -184,7 +184,6 @@ class LogParser:
     def result(self):
         consensus_latency = self._consensus_latency() * 1000
         consensus_tps, consensus_bps, _ = self._consensus_throughput()
-        self._consensus_throughput_intervals(interval_len=10)
         end_to_end_tps, end_to_end_bps, duration = self._end_to_end_throughput()
         end_to_end_latency = self._end_to_end_latency() * 1000
 

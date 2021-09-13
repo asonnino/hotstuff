@@ -144,7 +144,7 @@ class Ploter:
         plt.axvline(x=120, color='k', linewidth=1)
         plt.axvline(x=180, color='k', linewidth=1)
 
-        for scheme in [(round_robin, 'Round-Robin'), (reputation, 'Leader Reputation')]:
+        for scheme in [(round_robin, 'Round-Robin'), (reputation, 'Carousel')]:
             x, name = scheme
             style = next(styles)
             marker = next(markers)
@@ -187,15 +187,15 @@ if __name__ == '__main__':
     Ploter.plot_time(
         round_robin_tps,
         leader_reputation_tps,
-        'Throughput (tx/s)',
+        'Throughput (cmd/s)',
         'time_tps',
-        legend_anchor=(0.83, 1)
+        legend_anchor=(0.85, 1)
     )
     Ploter.plot_time(
         round_robin_latency,
         leader_reputation_latency,
         'Latency (s)',
         'time_latency',
-        legend_anchor=(0.17, 1)
+        legend_anchor=(0.15, 1)
     )
     print('Done')

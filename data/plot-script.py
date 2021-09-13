@@ -284,7 +284,7 @@ class Ploter:
         if '2-chain' in system:
             return 'Round-Robin'
         elif 'leader-reputation' in system:
-            return 'Leader Reputation'
+            return 'Carousel'
         else:
             return system.capitalize()
 
@@ -336,11 +336,11 @@ class Ploter:
         color = next(self.colors)
         self._plot(x_label, y_label, self._tps, z_axis, 'tps', marker, color)
 
-    def finalize(self, name, legend_cols, top_lim=None, legend_anchor=(0.5, 1)):
+    def finalize(self, name, legend_cols, top_lim=None, legend_loc=None, legend_anchor=None):
         assert isinstance(name, str)
 
         plt.legend(
-            loc='lower center', bbox_to_anchor=legend_anchor, ncol=legend_cols
+            loc=legend_loc, bbox_to_anchor=legend_anchor, ncol=legend_cols
         )
         plt.xlim(xmin=0)
         plt.ylim(bottom=0, top=top_lim)
@@ -364,7 +364,12 @@ if __name__ == '__main__':
     for system in ['2-chain', 'leader-reputation']:
         ploter.plot_latency(system, [10, 20, 50], [0], 512)
     ploter.finalize(
-        'happy-path', legend_cols=2, top_lim=8_000, legend_anchor=(0.25, 0.79)
+        # 'happy-path', legend_cols=2, top_lim=8_000, legend_anchor=(0.25, 0.79)
+        'happy-path', 
+        legend_cols=1, 
+        top_lim=8_000, 
+        legend_loc='upper left',
+        legend_anchor=(0, 1)
     )
 
     # Plot 'Happy path TPS' graph.
@@ -380,5 +385,13 @@ if __name__ == '__main__':
     for system in ['2-chain', 'leader-reputation']:
         ploter.plot_latency(system, [10], [0, 1, 3], 512)
     ploter.finalize(
-        'dead-nodes', legend_cols=2, top_lim=30_000, legend_anchor=(0.5, 0.79)
+        'dead-nodes', 
+        legend_cols=2, 
+        top_lim=30_000, 
+        legend_loc='upper center',
+        legend_anchor=(0.5, 1)
     )
+
+    # Remove aggregated log files.
+    for system in ['2-chain', 'leader-reputation']:
+        [os.remove(x) for x in glob(f'{system}.*.txt')]
