@@ -119,7 +119,12 @@ class InstanceManager:
             FromPort=self.settings.front_port,
             ToPort=self.settings.front_port
         )
-
+        sec_group.authorize_ingress(
+            CidrIp='0.0.0.0/0',
+            IpProtocol='icmp',
+            FromPort=-1,
+            ToPort=-1
+        )
         return subnet.id, sec_group.id
 
     def _get_vpc_info(self, client):
