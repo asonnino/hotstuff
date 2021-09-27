@@ -7,7 +7,7 @@ class SettingsError(Exception):
 
 class Settings:
     def __init__(self, key_name, key_path, consensus_port, mempool_port, front_port, repo_name,
-                 repo_url, branch, instance_type, aws_regions):
+                 repo_url, branch, instance_type, aws_regions, vpc_cidr, subnet_cidr):
         regions = aws_regions if isinstance(
             aws_regions, list) else [aws_regions]
         inputs_str = [
@@ -35,6 +35,9 @@ class Settings:
         self.instance_type = instance_type
         self.aws_regions = regions
 
+        self.vpc_cidr = vpc_cidr
+        self.subnet_cidr = subnet_cidr
+
     @classmethod
     def load(cls, filename):
         try:
@@ -52,6 +55,8 @@ class Settings:
                 data['repo']['branch'],
                 data['instances']['type'],
                 data['instances']['regions'],
+                data['vpc']['vpc_cidr'],
+                data['vpc']['subnet_cidr']
             )
         except (OSError, JSONDecodeError) as e:
             raise SettingsError(str(e))

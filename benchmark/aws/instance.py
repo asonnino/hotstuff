@@ -70,7 +70,7 @@ class InstanceManager:
     def _create_vpc(self, region, index):
         ec2 = boto3.resource('ec2', region_name=region)
 
-        vpc = ec2.create_vpc(CidrBlock='192.168.0.0/16')
+        vpc = ec2.create_vpc(CidrBlock=self.settings.vpc_cidr)
         vpc.create_tags(
             Tags=[{
                 'Key': 'Name',
@@ -82,7 +82,7 @@ class InstanceManager:
         ig = ec2.create_internet_gateway()
         vpc.attach_internet_gateway(InternetGatewayId=ig.id)
 
-        subnet = ec2.create_subnet(CidrBlock='192.168.1.0/24', VpcId=vpc.id)
+        subnet = ec2.create_subnet(CidrBlock=self.settings.subnet_cidr, VpcId=vpc.id)
 
         route_table = vpc.create_route_table()
         route_table.create_route(
@@ -119,7 +119,12 @@ class InstanceManager:
             FromPort=self.settings.front_port,
             ToPort=self.settings.front_port
         )
-
+        sec_group.authorize_ingress(
+            CidrIp='0.0.0.0/0',
+            IpProtocol='icmp',
+            FromPort=-1,
+            ToPort=-1
+        )
         return subnet.id, sec_group.id
 
     def _get_vpc_info(self, client):
@@ -129,13 +134,18 @@ class InstanceManager:
                 vpc_ids += [x['VpcId']]
 
         subnet_ids = {}
-        for x in client.describe_subnets()['Subnets']:
+        for x in client.describe_subnets(
+            Filters=[{
+                'Name': 'cidr-block', 
+                'Values': [ self.settings.subnet_cidr ]
+            }]
+            )['Subnets']:
             if x['VpcId'] in vpc_ids:
                 subnet_ids[x['VpcId']] = x['SubnetId']
 
         sec_group_ids = {}
         for x in client.describe_security_groups()['SecurityGroups']:
-            if x['VpcId'] in vpc_ids:
+            if x['VpcId'] in vpc_ids and x['GroupName'] == f'{self.SECURITY_GROUP_NAME}-{x["VpcId"]}' :
                 sec_group_ids[x['VpcId']] = x['GroupId']
 
         info = {}
