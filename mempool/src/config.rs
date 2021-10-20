@@ -86,12 +86,39 @@ impl Committee {
         self.authorities.get(&name).map_or_else(|| 0, |x| x.stake)
     }
 
+    /// Returns the total stake in the system.
+    pub fn total_stake(&self) -> Stake {
+        self.authorities.values().map(|x| x.stake).sum()
+    }
+
+    /// Returns the stake required to reach f+1.
+    pub fn validity_threshold(&self) -> Stake {
+        // If N = 3f + 1 + k (0 <= k < 3)
+        // then (N + 2) / 3 = f + 1 + k/3 = f + 1
+        let total_votes: Stake = self.authorities.values().map(|x| x.stake).sum();
+        (total_votes + 2) / 3
+    }
+
     /// Returns the stake required to reach a quorum (2f+1).
     pub fn quorum_threshold(&self) -> Stake {
         // If N = 3f + 1 + k (0 <= k < 3)
         // then (2 N + 3) / 3 = 2f + 1 + (2k + 2)/3 = 2f + 1 + k = N - f
         let total_votes: Stake = self.authorities.values().map(|x| x.stake).sum();
         2 * total_votes / 3 + 1
+    }
+
+    // Return the index of an authority. The index is just a deterministically number designating the authority.
+    pub fn index(&self, name: &PublicKey) -> Option<usize> {
+        let mut keys: Vec<_> = self.authorities.keys().cloned().collect();
+        keys.sort();
+        keys.iter().position(|x| x == name)
+    }
+
+    // Return the name of the authority from its index.
+    pub fn name(&self, index: usize) -> Option<PublicKey> {
+        let mut keys: Vec<_> = self.authorities.keys().cloned().collect();
+        keys.sort();
+        (index < keys.len()).then(|| keys[index])
     }
 
     /// Returns the address to receive client transactions.

@@ -1,5 +1,6 @@
 use crate::batch_maker::{Batch, BatchMaker, Transaction};
 use crate::config::{Committee, Parameters};
+use crate::encoder::CodedBatch;
 use crate::helper::Helper;
 use crate::processor::{Processor, SerializedBatchMessage};
 use crate::quorum_waiter::QuorumWaiter;
@@ -30,6 +31,7 @@ pub type Round = u64;
 pub enum MempoolMessage {
     Batch(Batch),
     BatchRequest(Vec<Digest>, /* origin */ PublicKey),
+    CodedBatch(CodedBatch),
 }
 
 /// The messages sent by the consensus and the mempool.
@@ -238,6 +240,7 @@ impl MessageHandler for MempoolReceiverHandler {
                 .send((missing, requestor))
                 .await
                 .expect("Failed to send batch request"),
+            Ok(MempoolMessage::CodedBatch(_coded_batch)) => (), // TODO
             Err(e) => warn!("Serialization error: {}", e),
         }
         Ok(())
