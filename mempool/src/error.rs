@@ -54,4 +54,7 @@ pub enum MempoolError {
 
     #[error("Malformed batch")]
     MalformedBatch,
+
+    #[error("Failed to reconstruct batch")]
+    FailedToReconstructBatch(#[from] reed_solomon_erasure::Error),
 }

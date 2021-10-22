@@ -1,9 +1,10 @@
-use crate::config::{Committee, Stake};
-use crate::consensus::Round;
-use crate::error::{ConsensusError, ConsensusResult};
-use crate::messages::{Timeout, Vote, QC, TC};
-use crypto::Hash as _;
-use crypto::{Digest, PublicKey, Signature};
+use crate::{
+    config::{Committee, Stake},
+    consensus::Round,
+    error::{ConsensusError, ConsensusResult},
+    messages::{Timeout, Vote, QC, TC},
+};
+use crypto::{Digest, Hash as _, PublicKey, Signature};
 use std::collections::{HashMap, HashSet};
 
 #[cfg(test)]

@@ -1,8 +1,7 @@
 use super::*;
 use crate::common::{committee, qc};
 use crypto::generate_keypair;
-use rand::rngs::StdRng;
-use rand::SeedableRng as _;
+use rand::{rngs::StdRng, SeedableRng as _};
 
 #[test]
 fn verify_valid_qc() {

@@ -1,27 +1,23 @@
-use crate::batch_maker::Batch;
-use crate::config::Committee;
-use crate::ensure;
-use crate::error::{MempoolError, MempoolResult};
-use crate::mempool::MempoolMessage;
+use crate::{
+    batch_maker::Batch,
+    config::Committee,
+    ensure,
+    error::{MempoolError, MempoolResult},
+    mempool::MempoolMessage,
+};
 use bytes::Bytes;
 use crypto::{Digest, Hash, PublicKey, Signature, SignatureService};
-use ed25519_dalek::Digest as _;
-use ed25519_dalek::Sha512;
+use ed25519_dalek::{Digest as _, Sha512};
 use itertools::Itertools as _;
 use network::SimpleSender;
 use reed_solomon_erasure::galois_8::ReedSolomon;
 use serde::{Deserialize, Serialize};
 use smtree::{
-    index::{TreeIndex, MAX_HEIGHT},
-    node_template,
-    node_template::{HashNodeSmt, MTreeNodeSmt, SumNodeSmt},
-    proof::{MerkleProof as _, RandomSamplingProof},
-    traits::{
-        InclusionProvable, Mergeable, Paddable, PaddingProvable, ProofExtractable, Rand,
-        RandomSampleable, Serializable, TypeName,
-    },
+    index::TreeIndex,
+    node_template::MTreeNodeSmt,
+    proof::MerkleProof,
+    traits::{InclusionProvable, Serializable as _},
     tree::SparseMerkleTree,
-    utils::{generate_sorted_index_value_pairs, print_output},
 };
 use std::convert::TryInto as _;
 use store::Store;
@@ -31,47 +27,35 @@ use tokio::sync::mpsc::{Receiver, Sender};
 #[path = "tests/encoder_tests.rs"]
 pub mod encoder_tests;
 
-pub type MerkleProof = u64; // TODO
-
-pub const BATCH_STORAGE_PADDING: [u8; 1] = [0; 1];
+pub type SerializedProof = Vec<u8>;
+pub type SerializedRoot = Vec<u8>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CodedBatch {
     pub shard: Vec<u8>,
-    pub proof: MerkleProof,
+    pub proof: SerializedProof,
+    pub root: SerializedRoot,
     pub author: PublicKey,
     pub signature: Signature,
-}
-
-impl Hash for CodedBatch {
-    fn digest(&self) -> Digest {
-        let mut hasher = Sha512::new();
-        hasher.update(&self.shard);
-        hasher.update(self.proof.to_le_bytes());
-        hasher.update(self.author);
-        Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
-    }
 }
 
 impl CodedBatch {
     pub async fn new(
         shard: Vec<u8>,
-        proof: MerkleProof,
+        proof: MerkleProof<MTreeNodeSmt<blake3::Hasher>>,
+        root: MTreeNodeSmt<blake3::Hasher>,
         author: PublicKey,
         signature_service: &mut SignatureService,
     ) -> Self {
-        let coded_batch = Self {
-            shard,
-            proof,
-            author,
-            signature: Signature::default(),
-        };
-        let signature = signature_service
-            .request_signature(coded_batch.digest())
-            .await;
+        let serialized_root = root.serialize();
+        let digest = Digest(serialized_root[0..32].try_into().unwrap());
+        let signature = signature_service.request_signature(digest).await;
         Self {
+            shard,
+            proof: proof.serialize(),
+            root: serialized_root,
+            author,
             signature,
-            ..coded_batch
         }
     }
 
@@ -85,18 +69,15 @@ impl CodedBatch {
         committee: &Committee,
     ) -> MempoolResult<()> {
         let (data_shards, parity_shards) = committee.shards();
-        let r =
-            ReedSolomon::new(data_shards, parity_shards).expect("Failed to initialize RS encoder");
+        let decoder =
+            ReedSolomon::new(data_shards, parity_shards).expect("Failed to initialize RS decoder");
         let mut shards: Vec<_> = coded_batches
             .into_iter()
             .map(|x| x.map(|y| y.shard))
             .collect();
-        r.reconstruct(&mut shards);
+        decoder.reconstruct(&mut shards)?;
         let result: Vec<_> = shards.into_iter().filter_map(|x| x).collect();
-        ensure!(
-            r.verify(&result).expect("Failed to verify batch"),
-            MempoolError::MalformedBatch
-        );
+        ensure!(decoder.verify(&result)?, MempoolError::MalformedBatch);
         Ok(())
     }
 }
@@ -159,8 +140,6 @@ impl Encoder {
                 .expect("Failed to encode data");
 
             // Commit to each encoded shard.
-
-            // ----------- START: MAKE THE MERKLE TREE -----------
             let leaves: Vec<MTreeNodeSmt<blake3::Hasher>> = shards
                 .iter()
                 .cloned()
@@ -170,21 +149,14 @@ impl Encoder {
                     MTreeNodeSmt::new(shard)
                 })
                 .collect();
+            let tree = SparseMerkleTree::<MTreeNodeSmt<blake3::Hasher>>::new_merkle_tree(&leaves);
+            let root: MTreeNodeSmt<blake3::Hasher> = tree.get_root();
 
-            //let tree = SparseMerkleTree::<MTreeNodeSmt<blake3::Hasher>>::new_merkle_tree(&leaves);
-
-            // ----------- STOP: MAKE THE MERKLE TREE -----------
-
-            // Now that we have the Merkle root, store the batch. Make sure to not conflict with the coded
-            // batch, since they will be both stored under the same key (the Merkle root).
-            let proof = 0; // TODO
-            let root = Digest::default(); // TODO
-            let mut key = root.to_vec();
-            key.extend(BATCH_STORAGE_PADDING.to_vec());
-            let message = MempoolMessage::Batch(batch);
-            let serialized =
-                bincode::serialize(&message).expect("Failed to serialize our own batch");
-            self.store.write(key, serialized).await;
+            // Now that we have the Merkle root, store the batch.
+            let key = root.serialize();
+            let message = MempoolMessage::Batch(shards[0..data_shards].to_vec());
+            let value = bincode::serialize(&message).expect("Failed to serialize our own batch");
+            self.store.write(key, value).await;
 
             // Multicast the shards to the committee members so that we can sign it.
             for (i, shard) in shards.into_iter().enumerate() {
@@ -192,8 +164,22 @@ impl Encoder {
                     .committee
                     .name(i)
                     .expect("Mismatch between committee and shards");
-                let coded_batch =
-                    CodedBatch::new(shard, proof, self.name, &mut self.signature_service).await;
+
+                let index_list = vec![TreeIndex::from_u64(tree.get_height(), i as u64)];
+                let proof = MerkleProof::<MTreeNodeSmt<blake3::Hasher>>::generate_inclusion_proof(
+                    &tree,
+                    &index_list,
+                )
+                .expect("Failed to generate merkle proof");
+
+                let coded_batch = CodedBatch::new(
+                    shard,
+                    proof,
+                    root.clone(),
+                    self.name,
+                    &mut self.signature_service,
+                )
+                .await;
 
                 if to == self.name {
                     self.tx_coded_batch

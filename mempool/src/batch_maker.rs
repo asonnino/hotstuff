@@ -1,5 +1,4 @@
-use crate::mempool::MempoolMessage;
-use crate::quorum_waiter::QuorumWaiterMessage;
+use crate::{mempool::MempoolMessage, quorum_waiter::QuorumWaiterMessage};
 use bytes::Bytes;
 #[cfg(feature = "benchmark")]
 use crypto::Digest;
@@ -12,8 +11,10 @@ use network::ReliableSender;
 #[cfg(feature = "benchmark")]
 use std::convert::TryInto as _;
 use std::net::SocketAddr;
-use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::time::{sleep, Duration, Instant};
+use tokio::{
+    sync::mpsc::{Receiver, Sender},
+    time::{sleep, Duration, Instant},
+};
 
 #[cfg(test)]
 #[path = "tests/batch_maker_tests.rs"]

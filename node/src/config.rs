@@ -1,13 +1,12 @@
 use consensus::{Committee as ConsensusCommittee, Parameters as ConsensusParameters};
 use crypto::{generate_keypair, generate_production_keypair, PublicKey, SecretKey};
 use mempool::{Committee as MempoolCommittee, Parameters as MempoolParameters};
-use rand::rngs::StdRng;
-use rand::SeedableRng as _;
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
-use std::fs::{self, OpenOptions};
-use std::io::BufWriter;
-use std::io::Write as _;
+use rand::{rngs::StdRng, SeedableRng as _};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::{
+    fs::{self, OpenOptions},
+    io::{BufWriter, Write as _},
+};
 use thiserror::Error;
 
 #[derive(Error, Debug)]

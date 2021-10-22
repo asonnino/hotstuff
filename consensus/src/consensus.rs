@@ -1,12 +1,14 @@
-use crate::config::{Committee, Parameters};
-use crate::core::Core;
-use crate::error::ConsensusError;
-use crate::helper::Helper;
-use crate::leader::LeaderElector;
-use crate::mempool::MempoolDriver;
-use crate::messages::{Block, Timeout, Vote, TC};
-use crate::proposer::Proposer;
-use crate::synchronizer::Synchronizer;
+use crate::{
+    config::{Committee, Parameters},
+    core::Core,
+    error::ConsensusError,
+    helper::Helper,
+    leader::LeaderElector,
+    mempool::MempoolDriver,
+    messages::{Block, Timeout, Vote, TC},
+    proposer::Proposer,
+    synchronizer::Synchronizer,
+};
 use async_trait::async_trait;
 use bytes::Bytes;
 use crypto::{Digest, PublicKey, SignatureService};

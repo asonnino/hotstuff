@@ -1,19 +1,23 @@
-use crate::config::Committee;
-use crate::consensus::{ConsensusMessage, CHANNEL_CAPACITY};
-use crate::error::ConsensusResult;
-use crate::messages::{Block, QC};
+use crate::{
+    config::Committee,
+    consensus::{ConsensusMessage, CHANNEL_CAPACITY},
+    error::ConsensusResult,
+    messages::{Block, QC},
+};
 use bytes::Bytes;
-use crypto::Hash as _;
-use crypto::{Digest, PublicKey};
-use futures::stream::futures_unordered::FuturesUnordered;
-use futures::stream::StreamExt as _;
+use crypto::{Digest, Hash as _, PublicKey};
+use futures::stream::{futures_unordered::FuturesUnordered, StreamExt as _};
 use log::{debug, error};
 use network::SimpleSender;
-use std::collections::{HashMap, HashSet};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    collections::{HashMap, HashSet},
+    time::{SystemTime, UNIX_EPOCH},
+};
 use store::Store;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio::time::{sleep, Duration, Instant};
+use tokio::{
+    sync::mpsc::{channel, Receiver, Sender},
+    time::{sleep, Duration, Instant},
+};
 
 #[cfg(test)]
 #[path = "tests/synchronizer_tests.rs"]

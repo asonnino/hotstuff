@@ -1,11 +1,13 @@
-use crate::consensus::{Round, CHANNEL_CAPACITY};
-use crate::error::{ConsensusError, ConsensusResult};
-use crate::messages::Block;
-use crypto::Digest;
-use crypto::Hash as _;
-use futures::future::try_join_all;
-use futures::stream::futures_unordered::FuturesUnordered;
-use futures::stream::StreamExt as _;
+use crate::{
+    consensus::{Round, CHANNEL_CAPACITY},
+    error::{ConsensusError, ConsensusResult},
+    messages::Block,
+};
+use crypto::{Digest, Hash as _};
+use futures::{
+    future::try_join_all,
+    stream::{futures_unordered::FuturesUnordered, StreamExt as _},
+};
 use log::error;
 use mempool::ConsensusMempoolMessage;
 use std::collections::HashMap;

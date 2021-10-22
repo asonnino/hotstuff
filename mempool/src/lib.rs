@@ -12,5 +12,7 @@ mod synchronizer;
 #[path = "tests/common.rs"]
 mod common;
 
-pub use crate::config::{Committee, Parameters};
-pub use crate::mempool::{ConsensusMempoolMessage, Mempool};
+pub use crate::{
+    config::{Committee, Parameters},
+    mempool::{ConsensusMempoolMessage, Mempool},
+};

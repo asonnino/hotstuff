@@ -1,8 +1,7 @@
 use crypto::PublicKey;
 use log::info;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::{collections::HashMap, net::SocketAddr};
 
 #[derive(Deserialize, Serialize)]
 pub struct Parameters {

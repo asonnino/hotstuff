@@ -1,21 +1,21 @@
-use crate::aggregator::Aggregator;
-use crate::config::Committee;
-use crate::consensus::{ConsensusMessage, Round};
-use crate::error::{ConsensusError, ConsensusResult};
-use crate::leader::LeaderElector;
-use crate::mempool::MempoolDriver;
-use crate::messages::{Block, Timeout, Vote, QC, TC};
-use crate::proposer::ProposerMessage;
-use crate::synchronizer::Synchronizer;
-use crate::timer::Timer;
+use crate::{
+    aggregator::Aggregator,
+    config::Committee,
+    consensus::{ConsensusMessage, Round},
+    error::{ConsensusError, ConsensusResult},
+    leader::LeaderElector,
+    mempool::MempoolDriver,
+    messages::{Block, Timeout, Vote, QC, TC},
+    proposer::ProposerMessage,
+    synchronizer::Synchronizer,
+    timer::Timer,
+};
 use async_recursion::async_recursion;
 use bytes::Bytes;
-use crypto::Hash as _;
-use crypto::{PublicKey, SignatureService};
+use crypto::{Hash as _, PublicKey, SignatureService};
 use log::{debug, error, info, warn};
 use network::SimpleSender;
-use std::cmp::max;
-use std::collections::VecDeque;
+use std::{cmp::max, collections::VecDeque};
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
 

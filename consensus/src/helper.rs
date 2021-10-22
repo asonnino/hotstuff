@@ -1,5 +1,4 @@
-use crate::config::Committee;
-use crate::consensus::ConsensusMessage;
+use crate::{config::Committee, consensus::ConsensusMessage};
 use bytes::Bytes;
 use crypto::{Digest, PublicKey};
 use log::warn;

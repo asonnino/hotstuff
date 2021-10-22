@@ -16,6 +16,8 @@ mod timer;
 #[path = "tests/common.rs"]
 mod common;
 
-pub use crate::config::{Committee, Parameters};
-pub use crate::consensus::Consensus;
-pub use crate::messages::{Block, QC, TC};
+pub use crate::{
+    config::{Committee, Parameters},
+    consensus::Consensus,
+    messages::{Block, QC, TC},
+};

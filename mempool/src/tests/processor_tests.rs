@@ -1,6 +1,5 @@
 use super::*;
-use crate::common::batch;
-use crate::mempool::MempoolMessage;
+use crate::{common::batch, mempool::MempoolMessage};
 use std::fs;
 use tokio::sync::mpsc::channel;
 

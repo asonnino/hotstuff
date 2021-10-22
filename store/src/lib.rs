@@ -1,6 +1,8 @@
 use std::collections::{HashMap, VecDeque};
-use tokio::sync::mpsc::{channel, Sender};
-use tokio::sync::oneshot;
+use tokio::sync::{
+    mpsc::{channel, Sender},
+    oneshot,
+};
 
 #[cfg(test)]
 #[path = "tests/store_tests.rs"]

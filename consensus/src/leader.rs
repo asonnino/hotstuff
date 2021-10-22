@@ -1,5 +1,4 @@
-use crate::config::Committee;
-use crate::consensus::Round;
+use crate::{config::Committee, consensus::Round};
 use crypto::PublicKey;
 
 pub type LeaderElector = RRLeaderElector;

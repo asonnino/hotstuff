@@ -1,8 +1,7 @@
 use crypto::PublicKey;
 use log::info;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::{collections::HashMap, net::SocketAddr};
 
 pub type Stake = u32;
 pub type EpochNumber = u128;

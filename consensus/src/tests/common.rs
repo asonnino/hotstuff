@@ -1,16 +1,14 @@
-use crate::config::Committee;
-use crate::consensus::Round;
-use crate::messages::{Block, Timeout, Vote, QC};
+use crate::{
+    config::Committee,
+    consensus::Round,
+    messages::{Block, Timeout, Vote, QC},
+};
 use bytes::Bytes;
-use crypto::Hash as _;
-use crypto::{generate_keypair, Digest, PublicKey, SecretKey, Signature};
-use futures::sink::SinkExt as _;
-use futures::stream::StreamExt as _;
-use rand::rngs::StdRng;
-use rand::SeedableRng as _;
+use crypto::{generate_keypair, Digest, Hash as _, PublicKey, SecretKey, Signature};
+use futures::{sink::SinkExt as _, stream::StreamExt as _};
+use rand::{rngs::StdRng, SeedableRng as _};
 use std::net::SocketAddr;
-use tokio::net::TcpListener;
-use tokio::task::JoinHandle;
+use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 // Fixture.

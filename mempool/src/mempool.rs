@@ -1,10 +1,12 @@
-use crate::batch_maker::{Batch, BatchMaker, Transaction};
-use crate::config::{Committee, Parameters};
-use crate::encoder::CodedBatch;
-use crate::helper::Helper;
-use crate::processor::{Processor, SerializedBatchMessage};
-use crate::quorum_waiter::QuorumWaiter;
-use crate::synchronizer::Synchronizer;
+use crate::{
+    batch_maker::{Batch, BatchMaker, Transaction},
+    config::{Committee, Parameters},
+    encoder::CodedBatch,
+    helper::Helper,
+    processor::{Processor, SerializedBatchMessage},
+    quorum_waiter::QuorumWaiter,
+    synchronizer::Synchronizer,
+};
 use async_trait::async_trait;
 use bytes::Bytes;
 use crypto::{Digest, PublicKey};

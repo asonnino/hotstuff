@@ -1,5 +1,4 @@
-use crate::config::Export as _;
-use crate::config::{Committee, ConfigError, Parameters, Secret};
+use crate::config::{Committee, ConfigError, Export as _, Parameters, Secret};
 use consensus::{Block, Consensus};
 use crypto::SignatureService;
 use log::info;

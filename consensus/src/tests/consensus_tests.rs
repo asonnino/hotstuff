@@ -1,11 +1,12 @@
 use super::*;
-use crate::common::{committee_with_base_port, keys};
-use crate::config::Parameters;
+use crate::{
+    common::{committee_with_base_port, keys},
+    config::Parameters,
+};
 use crypto::SecretKey;
 use futures::future::try_join_all;
 use std::fs;
-use tokio::sync::mpsc::channel;
-use tokio::task::JoinHandle;
+use tokio::{sync::mpsc::channel, task::JoinHandle};
 
 fn spawn_nodes(
     keys: Vec<(PublicKey, SecretKey)>,
