@@ -31,7 +31,7 @@ async fn handle_clients_transactions() {
 
     // Spawn enough mempools' listeners to acknowledge our batches.
     for (_, address) in committee.broadcast_addresses(&name) {
-        let _ = listener(address, /* expected */ None);
+        let _ = listener(address);
     }
 
     // Send enough transactions to create a batch.

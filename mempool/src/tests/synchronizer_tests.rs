@@ -32,13 +32,14 @@ async fn synchronize() {
     let address = committee.mempool_address(&target).unwrap();
     let missing = vec![batch_digest()];
     let message = MempoolMessage::BatchRequest(missing.clone(), name);
-    let serialized = bincode::serialize(&message).unwrap();
-    let handle = listener(address, Some(Bytes::from(serialized)));
+    let expected = bincode::serialize(&message).unwrap();
+    let handle = listener(address);
 
     // Send a sync request.
     let message = ConsensusMempoolMessage::Synchronize(missing, target);
     tx_message.send(message).await.unwrap();
 
     // Ensure the target receives the sync request.
-    assert!(handle.await.is_ok());
+    let received = handle.await.unwrap();
+    assert_eq!(received, expected);
 }

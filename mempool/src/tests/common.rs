@@ -30,7 +30,7 @@ pub fn committee() -> Committee {
             .map(|(i, (name, _))| {
                 let stake = 1;
                 let front = format!("127.0.0.1:{}", 100 + i).parse().unwrap();
-                let mempool = format!("127.0.0.1:{}", 100 + i).parse().unwrap();
+                let mempool = format!("127.0.0.1:{}", 300 + i).parse().unwrap();
                 (name, stake, front, mempool)
             })
             .collect(),
@@ -77,7 +77,7 @@ pub fn batch_digest() -> Digest {
 }
 
 // Fixture
-pub fn listener(address: SocketAddr, expected: Option<Bytes>) -> JoinHandle<()> {
+pub fn listener(address: SocketAddr) -> JoinHandle<Bytes> {
     tokio::spawn(async move {
         let listener = TcpListener::bind(&address).await.unwrap();
         let (socket, _) = listener.accept().await.unwrap();
@@ -86,9 +86,7 @@ pub fn listener(address: SocketAddr, expected: Option<Bytes>) -> JoinHandle<()> 
         match reader.next().await {
             Some(Ok(received)) => {
                 writer.send(Bytes::from("Ack")).await.unwrap();
-                if let Some(expected) = expected {
-                    assert_eq!(received.freeze(), expected);
-                }
+                received.freeze()
             }
             _ => panic!("Failed to receive network message"),
         }

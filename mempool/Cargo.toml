@@ -15,6 +15,9 @@ futures = "0.3.14"
 async-trait = "0.1.50"
 reed-solomon-erasure = { version = "4.0", features = [ "simd-accel" ] }
 itertools = "0.10.1"
+thiserror = "1.0.30"
+smtree = "0.1.2"
+blake3 = "1.1.0"
 
 crypto = { path = "../crypto" }
 store = { path = "../store" }

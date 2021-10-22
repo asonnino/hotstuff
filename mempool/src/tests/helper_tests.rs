@@ -25,12 +25,13 @@ async fn batch_reply() {
     // Spawn a listener to receive the batch reply.
     let address = committee.mempool_address(&requestor).unwrap();
     let expected = Bytes::from(serialized_batch());
-    let handle = listener(address, Some(expected));
+    let handle = listener(address);
 
     // Send a batch request.
     let digests = vec![batch_digest()];
     tx_request.send((digests, requestor)).await.unwrap();
 
     // Ensure the requestor received the batch (ie. it did not panic).
-    assert!(handle.await.is_ok());
+    let received = handle.await.unwrap();
+    assert_eq!(received, expected);
 }

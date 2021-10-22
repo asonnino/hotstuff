@@ -26,7 +26,7 @@ async fn wait_for_quorum() {
     let mut addresses = Vec::new();
     let mut listener_handles = Vec::new();
     for (name, address) in committee.broadcast_addresses(&myself) {
-        let handle = listener(address, Some(expected.clone()));
+        let handle = listener(address);
         names.push(name);
         addresses.push(address);
         listener_handles.push(handle);
@@ -48,5 +48,10 @@ async fn wait_for_quorum() {
     assert_eq!(output, serialized);
 
     // Ensure the other listeners correctly received the batch.
-    assert!(try_join_all(listener_handles).await.is_ok());
+    let ok = try_join_all(listener_handles)
+        .await
+        .unwrap()
+        .into_iter()
+        .all(|x| x == expected);
+    assert!(ok);
 }

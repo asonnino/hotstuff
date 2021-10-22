@@ -107,6 +107,13 @@ impl Committee {
         2 * total_votes / 3 + 1
     }
 
+    /// Returns the number of data shards and parity shard for erasure coding.
+    pub fn shards(&self) -> (usize, usize) {
+        let data_shards = (self.total_stake() - self.validity_threshold()) as usize;
+        let parity_shards = self.validity_threshold() as usize;
+        (data_shards, parity_shards)
+    }
+
     // Return the index of an authority. The index is just a deterministically number designating the authority.
     pub fn index(&self, name: &PublicKey) -> Option<usize> {
         let mut keys: Vec<_> = self.authorities.keys().cloned().collect();

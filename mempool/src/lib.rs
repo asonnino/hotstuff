@@ -1,6 +1,7 @@
 mod batch_maker;
 mod config;
 mod encoder;
+mod error;
 mod helper;
 mod mempool;
 mod processor;
