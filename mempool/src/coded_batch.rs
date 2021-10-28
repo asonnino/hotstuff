@@ -22,13 +22,13 @@ use std::convert::TryInto as _;
 pub mod coded_batch_tests;
 
 /// Represents an erasure-coded shard, generated from a batch of transactions.
-pub type Shard = Vec<u8>;
+type Shard = Vec<u8>;
 
 /// Convenient shortcut representing a Merkle tree.
 type Tree = SparseMerkleTree<MTreeNodeSmt<blake3::Hasher>>;
 
 /// An erasure-corrected transaction batch.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CodedBatch {
     /// All the data shards (not the parity shards) of the erasure-coded transactions batch.
     pub shards: Vec<Shard>,
@@ -82,11 +82,10 @@ impl CodedBatch {
         let leaves: Vec<_> = self
             .shards
             .iter()
-            .cloned()
             .enumerate()
             .map(|(i, shard)| {
                 let mut hasher = blake3::Hasher::new();
-                hasher.update(&shard);
+                hasher.update(shard);
                 hasher.update(&i.to_le_bytes());
                 let hash = hasher.finalize();
                 MTreeNodeSmt::new(hash.as_bytes().to_vec())
@@ -95,13 +94,29 @@ impl CodedBatch {
 
         Tree::new_merkle_tree(&leaves)
     }
+
+    /// Compress the coded batch by only keeping the data shards.
+    pub fn compress(&mut self, committee: &Committee) {
+        let (data_shards, _) = committee.shards();
+        self.shards.truncate(data_shards);
+    }
+
+    /// Expand the coded batch by re-creating the parity shards.
+    pub fn expand(&mut self, committee: &Committee) {
+        let (_, parity_shards) = committee.shards();
+        let mut coded_shards: Vec<_> = self.shards.iter().cloned().map(Some).collect();
+        coded_shards.extend(vec![None; parity_shards]);
+        self.shards = Self::reconstruct(coded_shards, committee)
+            .expect("Failed to expand coded batch")
+            .shards;
+    }
 }
 
 /// Represents a serialized Merkle proof.
-pub type SerializedProof = Vec<u8>;
+type SerializedProof = Vec<u8>;
 
 /// Represents a serialize Merkle root.
-pub type SerializedRoot = Vec<u8>;
+type SerializedRoot = Vec<u8>;
 
 /// Convenient shortcut representing a Merkle proof.
 type Proof = MerkleProof<MTreeNodeSmt<blake3::Hasher>>;

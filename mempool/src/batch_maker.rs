@@ -53,7 +53,7 @@ impl BatchMaker {
     ) {
         tokio::spawn(async move {
             Self {
-                batch_size, // TODO: Ensure it is divisible by 2f.
+                batch_size,
                 max_batch_delay,
                 rx_transaction,
                 tx_message,
@@ -100,7 +100,7 @@ impl BatchMaker {
 
     /// Seal and broadcast the current batch.
     async fn seal(&mut self) {
-        // TODO: fill with zeros. It is important that the batch size is divisible by 2f.
+        // TODO: fill with zeros. It is important that the batch size is divisible by f+1.
 
         #[cfg(feature = "benchmark")]
         let size = self.current_batch_size;

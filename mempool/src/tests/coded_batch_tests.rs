@@ -69,6 +69,25 @@ fn reconstruct_coded_batch_fail() {
     assert!(result.is_err());
 }
 
+#[test]
+fn compress_coded_batch() {
+    let (data_shards, _) = committee().shards();
+    let batch_size = 100;
+    let batch = vec![vec![1; 50], vec![2; 50]];
+
+    // Encode the batch.
+    let mut coded_batch = CodedBatch::new(batch, batch_size, &committee());
+    let original_shards = coded_batch.shards.clone();
+
+    // Compress the coded batch.
+    coded_batch.compress(&committee());
+    assert_eq!(coded_batch.shards.len(), data_shards);
+
+    // Re-expand the batch and verify that we get the original.
+    coded_batch.expand(&committee());
+    assert_eq!(coded_batch.shards, original_shards);
+}
+
 #[tokio::test]
 async fn verify_coded_shards() {
     let batch_size = 100;

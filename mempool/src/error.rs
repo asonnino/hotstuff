@@ -1,5 +1,4 @@
 use crypto::{CryptoError, PublicKey};
-use store::StoreError;
 use thiserror::Error;
 
 #[macro_export]
@@ -22,9 +21,6 @@ pub type MempoolResult<T> = Result<T, MempoolError>;
 
 #[derive(Error, Debug)]
 pub enum MempoolError {
-    #[error("Store error: {0}")]
-    StoreError(#[from] StoreError),
-
     #[error("Received payload from unknown authority {0:?}")]
     UnknownAuthority(PublicKey),
 
@@ -34,23 +30,11 @@ pub enum MempoolError {
     #[error("Serialization error: {0}")]
     SerializationError(#[from] Box<bincode::ErrorKind>),
 
-    #[error("Payload exceed max size")]
-    PayloadTooBig,
-
-    #[error("Mempool full: dropping transaction")]
-    MempoolFull,
-
-    #[error("Node {0:?} is not in the committee")]
-    NotInCommittee(PublicKey),
-
     #[error("Inclusion proof failed")]
     BadInclusionProof,
 
     #[error("Received more than one vote from {0}")]
     AuthorityReuse(PublicKey),
-
-    #[error("Received unexpected chunk Ack from {0}")]
-    UnexpectedAck(PublicKey),
 
     #[error("Failed to reconstruct batch for erasure-coded shards")]
     MalformedCodedBatch,

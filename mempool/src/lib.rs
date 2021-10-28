@@ -1,7 +1,7 @@
 mod batch_maker;
-mod config;
-//mod encoder;
 pub mod coded_batch;
+mod config;
+pub mod encoder;
 mod error;
 mod helper;
 mod mempool;

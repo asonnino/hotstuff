@@ -1,35 +1,19 @@
 use crate::{
     batch_maker::Batch,
+    coded_batch::{AuthenticatedShard, CodedBatch},
     config::Committee,
-    ensure,
-    error::{MempoolError, MempoolResult},
     mempool::MempoolMessage,
 };
 use bytes::Bytes;
-use crypto::{Digest, Hash, PublicKey, Signature, SignatureService};
-use ed25519_dalek::{Digest as _, Sha512};
-use itertools::Itertools as _;
+use crypto::{PublicKey, SignatureService};
 use network::SimpleSender;
-use reed_solomon_erasure::galois_8::ReedSolomon;
-use serde::{Deserialize, Serialize};
-use smtree::{
-    index::TreeIndex,
-    node_template::MTreeNodeSmt,
-    proof::MerkleProof,
-    traits::{InclusionProvable, Serializable as _},
-    tree::SparseMerkleTree,
-};
-use std::convert::TryInto as _;
+use smtree::traits::Serializable as _;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
 
-#[cfg(test)]
-#[path = "tests/encoder_tests.rs"]
-pub mod encoder_tests;
-
-pub type SerializedProof = Vec<u8>;
-pub type SerializedRoot = Vec<u8>;
-pub type Shard = Vec<u8>;
+//#[cfg(test)]
+//#[path = "tests/encoder_tests.rs"]
+//pub mod encoder_tests;
 
 pub struct Encoder {
     name: PublicKey,
@@ -37,7 +21,7 @@ pub struct Encoder {
     signature_service: SignatureService,
     store: Store,
     rx_batch: Receiver<(Batch, usize)>,
-    tx_coded_batch: Sender<CodedShard>,
+    tx_coded_batch: Sender<AuthenticatedShard>,
     network: SimpleSender,
 }
 
@@ -48,7 +32,7 @@ impl Encoder {
         signature_service: SignatureService,
         store: Store,
         rx_batch: Receiver<(Batch, usize)>,
-        tx_coded_batch: Sender<CodedShard>,
+        tx_coded_batch: Sender<AuthenticatedShard>,
     ) {
         tokio::spawn(async move {
             Self {
@@ -66,79 +50,48 @@ impl Encoder {
     }
 
     async fn run(&mut self) {
-        let (data_shards, parity_shards) = self.committee.shards();
-
         // Encode and commit to every incoming batch.
         while let Some((batch, batch_size)) = self.rx_batch.recv().await {
             // Encode the payload using RS erasure codes. We can recover with f+1 shards.
-            let symbols_length = batch_size / data_shards;
-            let parity = vec![0u8; symbols_length * parity_shards];
-            let mut shards: Vec<Vec<u8>> = batch
-                .clone()
-                .into_iter()
-                .flatten()
-                .chain(parity.into_iter())
-                .chunks(symbols_length)
-                .into_iter()
-                .map(|x| x.collect::<Vec<_>>())
-                .collect();
+            let coded_batch = CodedBatch::new(batch, batch_size, &self.committee);
 
-            ReedSolomon::new(data_shards, parity_shards)
-                .expect("Failed to initialize RS encoder")
-                .encode(&mut shards)
-                .expect("Failed to encode data");
+            // Commit to each encoded shard (i.e. build a Merkle tree using the erasure-coded shards as leaves).
+            let tree = coded_batch.commit();
 
-            // Commit to each encoded shard.
-            let leaves: Vec<MTreeNodeSmt<blake3::Hasher>> = shards
-                .iter()
-                .cloned()
-                .enumerate()
-                .map(|(i, mut shard)| {
-                    shard.extend(i.to_le_bytes());
-                    MTreeNodeSmt::new(shard)
-                })
-                .collect();
-            let tree = SparseMerkleTree::<MTreeNodeSmt<blake3::Hasher>>::new_merkle_tree(&leaves);
-            let root: MTreeNodeSmt<blake3::Hasher> = tree.get_root();
+            // Now that we have the Merkle root, store the coded batch.
+            let root = tree.get_root().serialize();
+            let mut compressed_batch = coded_batch.clone();
+            compressed_batch.compress(&self.committee);
+            let message = MempoolMessage::CodedBatch(compressed_batch);
+            let value = bincode::serialize(&message).expect("Failed to serialize coded batch");
+            self.store.write(root, value).await;
 
-            // Now that we have the Merkle root, store the batch.
-            let key = root.serialize();
-            let message = MempoolMessage::Batch(shards[0..data_shards].to_vec());
-            let value = bincode::serialize(&message).expect("Failed to serialize our own batch");
-            self.store.write(key, value).await;
-
-            // Multicast the shards to the committee members so that we can sign it.
-            for (i, shard) in shards.into_iter().enumerate() {
-                let to = self
-                    .committee
-                    .name(i)
-                    .expect("Mismatch between committee and shards");
-
-                let index_list = vec![TreeIndex::from_u64(tree.get_height(), i as u64)];
-                let proof = MerkleProof::<MTreeNodeSmt<blake3::Hasher>>::generate_inclusion_proof(
-                    &tree,
-                    &index_list,
-                )
-                .expect("Failed to generate merkle proof");
-
-                let coded_batch = CodedShard::new(
+            // Disseminate the coded batch.
+            for (i, shard) in coded_batch.shards.into_iter().enumerate() {
+                // Make the coded shard.
+                let authenticated_shard = AuthenticatedShard::new(
                     shard,
-                    proof,
-                    root.clone(),
+                    /* destination */ i,
+                    &tree,
                     self.name,
                     &mut self.signature_service,
                 )
                 .await;
 
+                // Multicast the shards to the committee members so that they can sign it.
+                let to = self
+                    .committee
+                    .name(i)
+                    .expect("Mismatch between committee and shards");
                 if to == self.name {
                     self.tx_coded_batch
-                        .send(coded_batch)
+                        .send(authenticated_shard)
                         .await
                         .expect("Failed to send our own coded batch to processor");
                 } else {
-                    let message = MempoolMessage::CodedShard(coded_batch);
-                    let serialized =
-                        bincode::serialize(&message).expect("Failed to serialize coded batch");
+                    let message = MempoolMessage::AuthenticatedShard(authenticated_shard);
+                    let serialized = bincode::serialize(&message)
+                        .expect("Failed to serialize authenticated shard");
                     let address = self.committee.mempool_address(&to).unwrap();
                     self.network.send(address, Bytes::from(serialized)).await;
                 }

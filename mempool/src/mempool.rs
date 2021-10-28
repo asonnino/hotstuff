@@ -1,6 +1,6 @@
 use crate::{
     batch_maker::{Batch, BatchMaker, Transaction},
-    coded_batch::AuthenticatedShard,
+    coded_batch::{AuthenticatedShard, CodedBatch},
     config::{Committee, Parameters},
     helper::Helper,
     processor::{Processor, SerializedBatchMessage},
@@ -33,6 +33,7 @@ pub type Round = u64;
 pub enum MempoolMessage {
     Batch(Batch),
     BatchRequest(Vec<Digest>, /* origin */ PublicKey),
+    CodedBatch(CodedBatch),
     AuthenticatedShard(AuthenticatedShard),
 }
 
@@ -242,6 +243,7 @@ impl MessageHandler for MempoolReceiverHandler {
                 .send((missing, requestor))
                 .await
                 .expect("Failed to send batch request"),
+            Ok(MempoolMessage::CodedBatch(_batch)) => (), // TODO
             Ok(MempoolMessage::AuthenticatedShard(_shard)) => (), // TODO
             Err(e) => warn!("Serialization error: {}", e),
         }
