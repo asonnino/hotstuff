@@ -44,3 +44,4 @@ async fn handle_clients_transactions() {
     let received = rx_mempool_to_consensus.recv().await.unwrap();
     assert_eq!(batch_digest(), received);
 }
+

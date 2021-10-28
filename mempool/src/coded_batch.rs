@@ -38,13 +38,27 @@ impl CodedBatch {
     /// Encodes (erasure-corrected) a transactions batch.
     pub fn new(batch: Batch, batch_size: usize, committee: &Committee) -> Self {
         let (data_shards, parity_shards) = committee.shards();
-        let symbols_length = batch_size / data_shards;
+        let remainder = batch_size % data_shards;
+        let symbols_length = match remainder {
+            0 => batch_size / data_shards,
+            _ => batch_size / data_shards + 1,
+        };
+
+        // Fill with zeros: it is important that the batch size is divisible by 'data_shards'.
+        let filler = match remainder {
+            0 => Vec::default(),
+            remainder => vec![0u8; remainder],
+        };
+
+        // make the parity shards.
         let parity = vec![0u8; symbols_length * parity_shards];
 
+        // Assemble all shards and encode them.
         let mut shards: Vec<Shard> = batch
             .clone()
             .into_iter()
             .flatten()
+            .chain(filler.into_iter())
             .chain(parity.into_iter())
             .chunks(symbols_length)
             .into_iter()
@@ -115,9 +129,6 @@ impl CodedBatch {
 /// Represents a serialized Merkle proof.
 type SerializedProof = Vec<u8>;
 
-/// Represents a serialize Merkle root.
-type SerializedRoot = Vec<u8>;
-
 /// Convenient shortcut representing a Merkle proof.
 type Proof = MerkleProof<MTreeNodeSmt<blake3::Hasher>>;
 
@@ -127,7 +138,7 @@ pub struct AuthenticatedShard {
     pub shard: Shard,
     pub destination: usize,
     pub proof: SerializedProof,
-    pub root: SerializedRoot,
+    pub root: Digest,
     pub author: PublicKey,
     pub signature: Signature,
 }
@@ -143,8 +154,8 @@ impl AuthenticatedShard {
     ) -> Self {
         // Sign the Merkle root.
         let serialized_root = tree.get_root().serialize();
-        let digest = Digest(serialized_root[0..32].try_into().unwrap());
-        let signature = signature_service.request_signature(digest).await;
+        let root = Digest(serialized_root[0..32].try_into().unwrap());
+        let signature = signature_service.request_signature(root.clone()).await;
 
         // Construct the Merkle proof.
         let index_list = vec![TreeIndex::from_u64(tree.get_height(), destination as u64)];
@@ -155,7 +166,7 @@ impl AuthenticatedShard {
             shard,
             destination,
             proof: proof.serialize(),
-            root: serialized_root,
+            root,
             author,
             signature,
         }
@@ -163,16 +174,20 @@ impl AuthenticatedShard {
 
     /// Verify the authenticated shard.
     pub fn verify(&self, name: &PublicKey, committee: &Committee) -> MempoolResult<()> {
+        // Ensure the authority has voting rights.
+        ensure!(
+            committee.stake(&self.author) > 0,
+            MempoolError::UnknownAuthority(self.author)
+        );
+
         // Deserialize the proof and the tree's root.
         let deserialized_proof =
             Proof::deserialize(&self.proof).map_err(|_| MempoolError::BadInclusionProof)?;
-        let deserialized_root =
-            MTreeNodeSmt::deserialize(&self.root).map_err(|_| MempoolError::BadInclusionProof)?;
+        let deserialized_root = MTreeNodeSmt::deserialize(&self.root.to_vec())
+            .map_err(|_| MempoolError::BadInclusionProof)?;
 
-        // Verify the signature on the Merkle root. Note that the conversion of the root into
-        // a digest cannot fail since we already deserialized it into a valid Merkle root.
-        let digest = Digest(self.root[0..32].try_into().unwrap());
-        self.signature.verify(&digest, &self.author)?;
+        // Verify the signature on the Merkle root.
+        self.signature.verify(&self.root, &self.author)?;
 
         // Build the leaf of the Merkle Tree.
         let index = committee

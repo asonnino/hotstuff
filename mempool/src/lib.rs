@@ -1,13 +1,11 @@
 mod batch_maker;
 pub mod coded_batch;
 mod config;
-pub mod encoder;
 mod error;
 mod helper;
 mod mempool;
-mod processor;
-mod quorum_waiter;
-mod synchronizer;
+mod voter;
+//mod synchronizer;
 
 #[cfg(test)]
 #[path = "tests/common.rs"]

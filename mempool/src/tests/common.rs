@@ -54,15 +54,19 @@ pub fn transaction() -> Transaction {
 }
 
 // Fixture
-pub fn batch() -> Batch {
-    vec![transaction(), transaction()]
+pub fn batch() -> (Batch, usize) {
+    let batch = vec![vec![1; 30], vec![2; 36], vec![3; 33]];
+    let batch_size = 99;
+    (batch, batch_size)
 }
 
 // Fixture
+/*
 pub fn serialized_batch() -> Vec<u8> {
     let message = MempoolMessage::Batch(batch());
     bincode::serialize(&message).unwrap()
 }
+
 
 // Fixture
 pub fn batch_digest() -> Digest {
@@ -72,6 +76,7 @@ pub fn batch_digest() -> Digest {
             .unwrap(),
     )
 }
+*/
 
 // Fixture
 pub fn listener(address: SocketAddr) -> JoinHandle<Bytes> {

@@ -1,66 +1,82 @@
-use crate::{mempool::MempoolMessage, quorum_waiter::QuorumWaiterMessage};
+use crate::{
+    coded_batch::{AuthenticatedShard, CodedBatch},
+    config::Committee,
+    mempool::MempoolMessage,
+    voter::SerializedShard,
+};
 use bytes::Bytes;
-#[cfg(feature = "benchmark")]
-use crypto::Digest;
-use crypto::PublicKey;
-#[cfg(feature = "benchmark")]
-use ed25519_dalek::{Digest as _, Sha512};
+use crypto::{Digest, PublicKey, SignatureService};
 #[cfg(feature = "benchmark")]
 use log::info;
-use network::ReliableSender;
-#[cfg(feature = "benchmark")]
-use std::convert::TryInto as _;
-use std::net::SocketAddr;
+use network::{CancelHandler, ReliableSender};
+use smtree::traits::Serializable as _;
+use std::{collections::HashMap, convert::TryInto as _};
+use store::Store;
 use tokio::{
     sync::mpsc::{Receiver, Sender},
     time::{sleep, Duration, Instant},
 };
 
-#[cfg(test)]
-#[path = "tests/batch_maker_tests.rs"]
-pub mod batch_maker_tests;
+//#[cfg(test)]
+//#[path = "tests/batch_maker_tests.rs"]
+//pub mod batch_maker_tests;
 
 pub type Transaction = Vec<u8>;
 pub type Batch = Vec<Transaction>;
 
 /// Assemble clients transactions into batches.
 pub struct BatchMaker {
+    /// The public key of this authority.
+    name: PublicKey,
+    /// The committee information.
+    committee: Committee,
+    /// The service signing digests.
+    signature_service: SignatureService,
+    /// the persistent storage.
+    store: Store,
     /// The preferred batch size (in bytes).
     batch_size: usize,
     /// The maximum delay after which to seal the batch (in ms).
     max_batch_delay: u64,
     /// Channel to receive transactions from the network.
     rx_transaction: Receiver<Transaction>,
-    /// Output channel to deliver sealed batches to the `QuorumWaiter`.
-    tx_message: Sender<QuorumWaiterMessage>,
-    /// The network addresses of the other mempools.
-    mempool_addresses: Vec<(PublicKey, SocketAddr)>,
+    /// Output channel to deliver shards of transactions batches.
+    tx_authenticated_shard: Sender<(AuthenticatedShard, SerializedShard)>,
     /// Holds the current batch.
     current_batch: Batch,
     /// Holds the size of the current batch (in bytes).
     current_batch_size: usize,
     /// A network sender to broadcast the batches to the other mempools.
     network: ReliableSender,
+    /// Keeps the handlers of the coded batch multicast.
+    pending: HashMap<Digest, Vec<CancelHandler>>,
 }
 
 impl BatchMaker {
     pub fn spawn(
+        name: PublicKey,
+        committee: Committee,
+        signature_service: SignatureService,
+        store: Store,
         batch_size: usize,
         max_batch_delay: u64,
         rx_transaction: Receiver<Transaction>,
-        tx_message: Sender<QuorumWaiterMessage>,
-        mempool_addresses: Vec<(PublicKey, SocketAddr)>,
+        tx_authenticated_shard: Sender<(AuthenticatedShard, SerializedShard)>,
     ) {
         tokio::spawn(async move {
             Self {
+                name,
+                committee,
+                signature_service,
+                store,
                 batch_size,
                 max_batch_delay,
                 rx_transaction,
-                tx_message,
-                mempool_addresses,
+                tx_authenticated_shard,
                 current_batch: Batch::with_capacity(batch_size * 2),
                 current_batch_size: 0,
                 network: ReliableSender::new(),
+                pending: HashMap::new(),
             }
             .run()
             .await;
@@ -100,60 +116,87 @@ impl BatchMaker {
 
     /// Seal and broadcast the current batch.
     async fn seal(&mut self) {
-        // TODO: fill with zeros. It is important that the batch size is divisible by f+1.
+        #[cfg(feature = "benchmark")]
+        let batch_clone = self.current_batch.clone();
+        #[cfg(feature = "benchmark")]
+        let batch_size_clone = self.current_batch_size;
+
+        // Encode the payload using RS erasure codes. We can recover with f+1 shards.
+        let batch: Vec<_> = self.current_batch.drain(..).collect();
+        let coded_batch = CodedBatch::new(batch, self.current_batch_size, &self.committee);
+        self.current_batch_size = 0;
+
+        // Commit to each encoded shard (i.e. build a Merkle tree using the erasure-coded shards as leaves).
+        let tree = coded_batch.commit();
+        let serialized_root = tree.get_root().serialize();
+        let root = Digest(serialized_root[0..32].try_into().unwrap());
 
         #[cfg(feature = "benchmark")]
-        let size = self.current_batch_size;
+        Self::print_benchmark_info(&batch_clone, batch_size_clone, root);
 
+        // Now that we have the Merkle root, store the coded batch.
+        let mut compressed_batch = coded_batch.clone();
+        compressed_batch.compress(&self.committee);
+        let message = MempoolMessage::CodedBatch(compressed_batch);
+        let value = bincode::serialize(&message).expect("Failed to serialize coded batch");
+        self.store.write(serialized_root, value).await;
+
+        // Disseminate the coded batch.
+        for (i, shard) in coded_batch.shards.into_iter().enumerate() {
+            // Make the coded shard.
+            let authenticated_shard = AuthenticatedShard::new(
+                shard,
+                /* destination */ i,
+                &tree,
+                self.name,
+                &mut self.signature_service,
+            )
+            .await;
+
+            // Multicast the shards to the committee members so that they can sign it.
+            let to = self
+                .committee
+                .name(i)
+                .expect("Mismatch between committee and shards");
+            let message = MempoolMessage::AuthenticatedShard(authenticated_shard.clone());
+            let serialized =
+                bincode::serialize(&message).expect("Failed to serialize authenticated shard");
+
+            if to == self.name {
+                self.tx_authenticated_shard
+                    .send((authenticated_shard, serialized))
+                    .await
+                    .expect("Failed to send our own coded batch to processor");
+            } else {
+                let address = self.committee.mempool_address(&to).unwrap();
+                let handle = self.network.send(address, Bytes::from(serialized)).await;
+                self.pending
+                    .entry(root.clone())
+                    .or_insert_with(Vec::new)
+                    .push(handle);
+            }
+        }
+    }
+
+    #[cfg(feature = "benchmark")]
+    fn print_benchmark_info(batch: &Batch, batch_size: usize, root: Digest) {
         // Look for sample txs (they all start with 0) and gather their txs id (the next 8 bytes).
-        #[cfg(feature = "benchmark")]
-        let tx_ids: Vec<_> = self
-            .current_batch
+        let tx_ids: Vec<_> = batch
             .iter()
             .filter(|tx| tx[0] == 0u8 && tx.len() > 8)
             .filter_map(|tx| tx[1..9].try_into().ok())
             .collect();
 
-        // Serialize the batch.
-        self.current_batch_size = 0;
-        let batch: Vec<_> = self.current_batch.drain(..).collect();
-        let message = MempoolMessage::Batch(batch);
-        let serialized = bincode::serialize(&message).expect("Failed to serialize our own batch");
-
-        #[cfg(feature = "benchmark")]
-        {
-            // NOTE: This is one extra hash that is only needed to print the following log entries.
-            let digest = Digest(
-                Sha512::digest(&serialized).as_slice()[..32]
-                    .try_into()
-                    .unwrap(),
-            );
-
-            for id in tx_ids {
-                // NOTE: This log entry is used to compute performance.
-                info!(
-                    "Batch {:?} contains sample tx {}",
-                    digest,
-                    u64::from_be_bytes(id)
-                );
-            }
-
+        for id in tx_ids {
             // NOTE: This log entry is used to compute performance.
-            info!("Batch {:?} contains {} B", digest, size);
+            info!(
+                "Batch {:?} contains sample tx {}",
+                root,
+                u64::from_be_bytes(id)
+            );
         }
 
-        // Broadcast the batch through the network.
-        let (names, addresses): (Vec<_>, _) = self.mempool_addresses.iter().cloned().unzip();
-        let bytes = Bytes::from(serialized.clone());
-        let handlers = self.network.broadcast(addresses, bytes).await;
-
-        // Send the batch through the deliver channel for further processing.
-        self.tx_message
-            .send(QuorumWaiterMessage {
-                batch: serialized,
-                handlers: names.into_iter().zip(handlers.into_iter()).collect(),
-            })
-            .await
-            .expect("Failed to deliver batch");
+        // NOTE: This log entry is used to compute performance.
+        info!("Batch {:?} contains {} B", root, batch_size);
     }
 }

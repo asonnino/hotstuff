@@ -3,13 +3,11 @@ use crate::{
     coded_batch::{AuthenticatedShard, CodedBatch},
     config::{Committee, Parameters},
     helper::Helper,
-    processor::{Processor, SerializedBatchMessage},
-    quorum_waiter::QuorumWaiter,
-    synchronizer::Synchronizer,
+    voter::BatchVote,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
-use crypto::{Digest, PublicKey};
+use crypto::{Digest, PublicKey, SignatureService};
 use futures::sink::SinkExt as _;
 use log::{info, warn};
 use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
@@ -18,9 +16,9 @@ use std::error::Error;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
-#[cfg(test)]
-#[path = "tests/mempool_tests.rs"]
-pub mod mempool_tests;
+//#[cfg(test)]
+//#[path = "tests/mempool_tests.rs"]
+//pub mod mempool_tests;
 
 /// The default channel capacity for each channel of the mempool.
 pub const CHANNEL_CAPACITY: usize = 1_000;
@@ -31,10 +29,9 @@ pub type Round = u64;
 /// The message exchanged between the nodes' mempool.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum MempoolMessage {
-    Batch(Batch),
-    BatchRequest(Vec<Digest>, /* origin */ PublicKey),
     CodedBatch(CodedBatch),
     AuthenticatedShard(AuthenticatedShard),
+    BatchVote(BatchVote),
 }
 
 /// The messages sent by the consensus and the mempool.
@@ -58,11 +55,12 @@ pub struct Mempool {
     /// Send messages to consensus.
     tx_consensus: Sender<Digest>,
 }
-
+/*
 impl Mempool {
     pub fn spawn(
         name: PublicKey,
         committee: Committee,
+        signature_service: SignatureService,
         parameters: Parameters,
         store: Store,
         rx_consensus: Receiver<ConsensusMempoolMessage>,
@@ -82,7 +80,7 @@ impl Mempool {
 
         // Spawn all mempool tasks.
         mempool.handle_consensus_messages(rx_consensus);
-        mempool.handle_clients_transactions();
+        mempool.handle_clients_transactions(signature_service);
         mempool.handle_mempool_messages();
 
         info!(
@@ -111,9 +109,9 @@ impl Mempool {
     }
 
     /// Spawn all tasks responsible to handle clients transactions.
-    fn handle_clients_transactions(&self) {
+    fn handle_clients_transactions(&self, signature_service: SignatureService) {
         let (tx_batch_maker, rx_batch_maker) = channel(CHANNEL_CAPACITY);
-        let (tx_quorum_waiter, rx_quorum_waiter) = channel(CHANNEL_CAPACITY);
+        let (tx_coded_batch, rx_coded_batch) = channel(CHANNEL_CAPACITY);
         let (tx_processor, rx_processor) = channel(CHANNEL_CAPACITY);
 
         // We first receive clients' transactions from the network.
@@ -131,14 +129,17 @@ impl Mempool {
         // (in a reliable manner) the batches to all other mempools that share the same `id` as us. Finally,
         // it gathers the 'cancel handlers' of the messages and send them to the `QuorumWaiter`.
         BatchMaker::spawn(
+            self.name,
+            self.committee.clone(),
+            signature_service,
+            self.store.clone(),
             self.parameters.batch_size,
             self.parameters.max_batch_delay,
             /* rx_transaction */ rx_batch_maker,
-            /* tx_message */ tx_quorum_waiter,
-            /* mempool_addresses */
-            self.committee.broadcast_addresses(&self.name),
+            /* tx_coded_batch */ tx_coded_batch,
         );
 
+        /*
         // The `QuorumWaiter` waits for 2f authorities to acknowledge reception of the batch. It then forwards
         // the batch to the `Processor`.
         QuorumWaiter::spawn(
@@ -147,6 +148,7 @@ impl Mempool {
             /* rx_message */ rx_quorum_waiter,
             /* tx_batch */ tx_processor,
         );
+        */
 
         // The `Processor` hashes and stores the batch. It then forwards the batch's digest to the consensus.
         Processor::spawn(
@@ -250,3 +252,4 @@ impl MessageHandler for MempoolReceiverHandler {
         Ok(())
     }
 }
+*/

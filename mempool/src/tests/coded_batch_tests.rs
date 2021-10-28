@@ -1,10 +1,9 @@
 use super::*;
-use crate::common::{committee, keys};
+use crate::common::{batch, committee, keys};
 
 #[test]
 fn make_coded_batch() {
-    let batch_size = 100;
-    let batch = vec![vec![1; 50], vec![2; 50]];
+    let (batch, batch_size) = batch();
 
     // Encode the batch.
     let coded_batch = CodedBatch::new(batch.clone(), batch_size, &committee());
@@ -14,27 +13,27 @@ fn make_coded_batch() {
     assert_eq!(coded_batch.shards.len(), data_shards + parity_shards);
 
     // Ensure the first shards are the batch itself.
-    assert_eq!(coded_batch.shards[..batch.len()], batch);
+    assert_eq!(
+        coded_batch.shards.iter().flatten().collect::<Vec<_>>()[..batch_size],
+        batch.iter().flatten().collect::<Vec<_>>()
+    );
 }
 
 #[test]
 fn reconstruct_coded_batch() {
-    let batch_size = 100;
-    let batch = vec![vec![1; 50], vec![2; 50]];
+    let (_, parity_shards) = committee().shards();
+    let (batch, batch_size) = batch();
 
     // Encode the batch.
     let coded_batch = CodedBatch::new(batch, batch_size, &committee());
 
-    // Loose 2 shards.
+    // Loose all parity shards.
     let coded_shards = coded_batch
         .shards
         .clone()
         .into_iter()
         .enumerate()
-        .map(|(i, shard)| match i {
-            1 | 3 => None,
-            _ => Some(shard),
-        })
+        .map(|(i, shard)| if i < parity_shards { None } else { Some(shard) })
         .collect();
 
     // Attempt to reconstruct the coded batch.
@@ -46,21 +45,24 @@ fn reconstruct_coded_batch() {
 
 #[test]
 fn reconstruct_coded_batch_fail() {
-    let batch_size = 100;
-    let batch = vec![vec![1; 50], vec![2; 50]];
+    let (_, parity_shards) = committee().shards();
+    let (batch, batch_size) = batch();
 
     // Encode the batch.
     let coded_batch = CodedBatch::new(batch, batch_size, &committee());
 
-    // Loose 3 shards.
+    // Loose too many shards.
     let coded_shards = coded_batch
         .shards
         .clone()
         .into_iter()
         .enumerate()
-        .map(|(i, shard)| match i {
-            1 | 2 | 3 => None,
-            _ => Some(shard),
+        .map(|(i, shard)| {
+            if i <= parity_shards {
+                None
+            } else {
+                Some(shard)
+            }
         })
         .collect();
 
@@ -72,8 +74,7 @@ fn reconstruct_coded_batch_fail() {
 #[test]
 fn compress_coded_batch() {
     let (data_shards, _) = committee().shards();
-    let batch_size = 100;
-    let batch = vec![vec![1; 50], vec![2; 50]];
+    let (batch, batch_size) = batch();
 
     // Encode the batch.
     let mut coded_batch = CodedBatch::new(batch, batch_size, &committee());
@@ -90,8 +91,7 @@ fn compress_coded_batch() {
 
 #[tokio::test]
 async fn verify_coded_shards() {
-    let batch_size = 100;
-    let batch = vec![vec![1; 50], vec![2; 50]];
+    let (batch, batch_size) = batch();
 
     // Encode the batch and commit to it.
     let coded_batch = CodedBatch::new(batch, batch_size, &committee());
