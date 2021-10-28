@@ -52,8 +52,8 @@ pub enum MempoolError {
     #[error("Received unexpected chunk Ack from {0}")]
     UnexpectedAck(PublicKey),
 
-    #[error("Malformed batch")]
-    MalformedBatch,
+    #[error("Failed to reconstruct batch for erasure-coded shards")]
+    MalformedCodedBatch,
 
     #[error("Failed to reconstruct batch")]
     FailedToReconstructBatch(#[from] reed_solomon_erasure::Error),

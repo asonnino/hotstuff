@@ -29,58 +29,7 @@ pub mod encoder_tests;
 
 pub type SerializedProof = Vec<u8>;
 pub type SerializedRoot = Vec<u8>;
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct CodedBatch {
-    pub shard: Vec<u8>,
-    pub proof: SerializedProof,
-    pub root: SerializedRoot,
-    pub author: PublicKey,
-    pub signature: Signature,
-}
-
-impl CodedBatch {
-    pub async fn new(
-        shard: Vec<u8>,
-        proof: MerkleProof<MTreeNodeSmt<blake3::Hasher>>,
-        root: MTreeNodeSmt<blake3::Hasher>,
-        author: PublicKey,
-        signature_service: &mut SignatureService,
-    ) -> Self {
-        let serialized_root = root.serialize();
-        let digest = Digest(serialized_root[0..32].try_into().unwrap());
-        let signature = signature_service.request_signature(digest).await;
-        Self {
-            shard,
-            proof: proof.serialize(),
-            root: serialized_root,
-            author,
-            signature,
-        }
-    }
-
-    pub fn verify(&self, _name: &PublicKey, _committee: &Committee) -> MempoolResult<()> {
-        // TODO
-        Ok(())
-    }
-
-    pub fn reconstruct(
-        coded_batches: Vec<Option<Self>>,
-        committee: &Committee,
-    ) -> MempoolResult<()> {
-        let (data_shards, parity_shards) = committee.shards();
-        let decoder =
-            ReedSolomon::new(data_shards, parity_shards).expect("Failed to initialize RS decoder");
-        let mut shards: Vec<_> = coded_batches
-            .into_iter()
-            .map(|x| x.map(|y| y.shard))
-            .collect();
-        decoder.reconstruct(&mut shards)?;
-        let result: Vec<_> = shards.into_iter().filter_map(|x| x).collect();
-        ensure!(decoder.verify(&result)?, MempoolError::MalformedBatch);
-        Ok(())
-    }
-}
+pub type Shard = Vec<u8>;
 
 pub struct Encoder {
     name: PublicKey,
@@ -88,7 +37,7 @@ pub struct Encoder {
     signature_service: SignatureService,
     store: Store,
     rx_batch: Receiver<(Batch, usize)>,
-    tx_coded_batch: Sender<CodedBatch>,
+    tx_coded_batch: Sender<CodedShard>,
     network: SimpleSender,
 }
 
@@ -99,7 +48,7 @@ impl Encoder {
         signature_service: SignatureService,
         store: Store,
         rx_batch: Receiver<(Batch, usize)>,
-        tx_coded_batch: Sender<CodedBatch>,
+        tx_coded_batch: Sender<CodedShard>,
     ) {
         tokio::spawn(async move {
             Self {
@@ -172,7 +121,7 @@ impl Encoder {
                 )
                 .expect("Failed to generate merkle proof");
 
-                let coded_batch = CodedBatch::new(
+                let coded_batch = CodedShard::new(
                     shard,
                     proof,
                     root.clone(),
@@ -187,7 +136,7 @@ impl Encoder {
                         .await
                         .expect("Failed to send our own coded batch to processor");
                 } else {
-                    let message = MempoolMessage::CodedBatch(coded_batch);
+                    let message = MempoolMessage::CodedShard(coded_batch);
                     let serialized =
                         bincode::serialize(&message).expect("Failed to serialize coded batch");
                     let address = self.committee.mempool_address(&to).unwrap();

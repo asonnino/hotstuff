@@ -108,8 +108,8 @@ impl Committee {
 
     /// Returns the number of data shards and parity shard for erasure coding.
     pub fn shards(&self) -> (usize, usize) {
-        let data_shards = (self.total_stake() - self.validity_threshold()) as usize;
-        let parity_shards = self.validity_threshold() as usize;
+        let data_shards = self.validity_threshold() as usize;
+        let parity_shards = (self.total_stake() - self.validity_threshold()) as usize;
         (data_shards, parity_shards)
     }
 
