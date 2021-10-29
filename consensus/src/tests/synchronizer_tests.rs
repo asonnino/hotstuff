@@ -84,7 +84,8 @@ async fn get_missing_parent_block() {
     let expected = Bytes::from(bincode::serialize(&message).unwrap());
     let listener_handle = listener(address, Some(expected.clone()));
 
-    // Ask for the parent of a block to the synchronizer. The store does not have the parent yet.
+    // Ask for the parent of a block to the synchronizer. The store does not have
+    // the parent yet.
     let copy = block.clone();
     let handle = tokio::spawn(async move {
         let ret = synchronizer.get_parent_block(&copy).await;
@@ -95,7 +96,8 @@ async fn get_missing_parent_block() {
     // Ensure the other listeners correctly received the sync request.
     assert!(listener_handle.await.is_ok());
 
-    // Ensure the synchronizer returns None, thus suspending the processing of the block.
+    // Ensure the synchronizer returns None, thus suspending the processing of the
+    // block.
     assert!(handle.await.is_ok());
 
     // Add the parent to the store.
@@ -103,8 +105,8 @@ async fn get_missing_parent_block() {
     let value = bincode::serialize(&parent_block).unwrap();
     let _ = store.write(key, value).await;
 
-    // Now that we have the parent, ensure the synchronizer loops back the block to the core
-    // to resume processing.
+    // Now that we have the parent, ensure the synchronizer loops back the block to
+    // the core to resume processing.
     let delivered = rx_loopback.recv().await.unwrap();
     assert_eq!(delivered, block.clone());
 }

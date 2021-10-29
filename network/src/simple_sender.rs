@@ -15,12 +15,14 @@ use tokio_util::codec::{Framed, LengthDelimitedCodec};
 #[path = "tests/simple_sender_tests.rs"]
 pub mod simple_sender_tests;
 
-/// We keep alive one TCP connection per peer, each connection is handled by a separate task (called `Connection`).
-/// We communicate with our 'connections' through a dedicated channel kept by the HashMap called `connections`.
+/// We keep alive one TCP connection per peer, each connection is handled by a
+/// separate task (called `Connection`). We communicate with our 'connections'
+/// through a dedicated channel kept by the HashMap called `connections`.
 pub struct SimpleSender {
     /// A map holding the channels to our connections.
     connections: HashMap<SocketAddr, Sender<Bytes>>,
-    /// Small RNG just used to shuffle nodes and randomize connections (not crypto related).
+    /// Small RNG just used to shuffle nodes and randomize connections (not
+    /// crypto related).
     rng: SmallRng,
 }
 
@@ -69,8 +71,9 @@ impl SimpleSender {
         }
     }
 
-    /// Pick a few addresses at random (specified by `nodes`) and try (best-effort) to send the
-    /// message only to them. This is useful to pick nodes with whom to sync.
+    /// Pick a few addresses at random (specified by `nodes`) and try
+    /// (best-effort) to send the message only to them. This is useful to
+    /// pick nodes with whom to sync.
     pub async fn lucky_broadcast(
         &mut self,
         mut addresses: Vec<SocketAddr>,
@@ -83,7 +86,8 @@ impl SimpleSender {
     }
 }
 
-/// A connection is responsible to establish and keep alive (if possible) a connection with a single peer.
+/// A connection is responsible to establish and keep alive (if possible) a
+/// connection with a single peer.
 struct Connection {
     /// The destination address.
     address: SocketAddr,
@@ -115,7 +119,8 @@ impl Connection {
 
         // Transmit messages once we have established a connection.
         loop {
-            // Check if there are any new messages to send or if we get an ACK for messages we already sent.
+            // Check if there are any new messages to send or if we get an ACK for messages
+            // we already sent.
             tokio::select! {
                 Some(data) = self.receiver.recv() => {
                     if let Err(e) = writer.send(data).await {

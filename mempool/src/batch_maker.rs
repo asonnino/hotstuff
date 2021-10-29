@@ -24,6 +24,9 @@ use tokio::{
 pub type Transaction = Vec<u8>;
 pub type Batch = Vec<Transaction>;
 
+/// The maximum number of batches that have been created but are not yet certified.
+const MAX_PENDING_BATCHES: usize = 10;
+
 /// Assemble clients transactions into batches.
 pub struct BatchMaker {
     /// The public key of this authority.
@@ -40,6 +43,8 @@ pub struct BatchMaker {
     max_batch_delay: u64,
     /// Channel to receive transactions from the network.
     rx_transaction: Receiver<Transaction>,
+    /// Control channel to handle congestions.
+    rx_control: Receiver<Digest>,
     /// Output channel to deliver shards of transactions batches.
     tx_authenticated_shard: Sender<(AuthenticatedShard, SerializedShard)>,
     /// Holds the current batch.
@@ -50,6 +55,8 @@ pub struct BatchMaker {
     network: ReliableSender,
     /// Keeps the handlers of the coded batch multicast.
     pending: HashMap<Digest, Vec<CancelHandler>>,
+    /// Number of batches created but not yet certified.
+    batch_counter: usize,
 }
 
 impl BatchMaker {
@@ -61,6 +68,7 @@ impl BatchMaker {
         batch_size: usize,
         max_batch_delay: u64,
         rx_transaction: Receiver<Transaction>,
+        rx_control: Receiver<Digest>,
         tx_authenticated_shard: Sender<(AuthenticatedShard, SerializedShard)>,
     ) {
         tokio::spawn(async move {
@@ -72,11 +80,13 @@ impl BatchMaker {
                 batch_size,
                 max_batch_delay,
                 rx_transaction,
+                rx_control,
                 tx_authenticated_shard,
                 current_batch: Batch::with_capacity(batch_size * 2),
                 current_batch_size: 0,
                 network: ReliableSender::new(),
                 pending: HashMap::new(),
+                batch_counter: 0,
             }
             .run()
             .await;
@@ -110,7 +120,18 @@ impl BatchMaker {
             }
 
             // Give the change to schedule other tasks.
-            tokio::task::yield_now().await;
+            //tokio::task::yield_now().await;
+            self.wait().await;
+        }
+    }
+
+    /// Wait until enough batches are certified and cleanup internal state.
+    async fn wait(&mut self) {
+        while self.batch_counter >= MAX_PENDING_BATCHES {
+            if let Some(root) = self.rx_control.recv().await {
+                let _ = self.pending.remove(&root);
+                self.batch_counter -= 1;
+            }
         }
     }
 
@@ -121,12 +142,16 @@ impl BatchMaker {
         #[cfg(feature = "benchmark")]
         let batch_size_clone = self.current_batch_size;
 
+        // Increase the batch count.
+        self.batch_counter += 1;
+
         // Encode the payload using RS erasure codes. We can recover with f+1 shards.
         let batch: Vec<_> = self.current_batch.drain(..).collect();
         let coded_batch = CodedBatch::new(batch, self.current_batch_size, &self.committee);
         self.current_batch_size = 0;
 
-        // Commit to each encoded shard (i.e. build a Merkle tree using the erasure-coded shards as leaves).
+        // Commit to each encoded shard (i.e. build a Merkle tree using the
+        // erasure-coded shards as leaves).
         let tree = coded_batch.commit();
         let serialized_root = tree.get_root().serialize();
         let root = Digest(serialized_root[0..32].try_into().unwrap());
@@ -180,7 +205,8 @@ impl BatchMaker {
 
     #[cfg(feature = "benchmark")]
     fn print_benchmark_info(batch: &Batch, batch_size: usize, root: Digest) {
-        // Look for sample txs (they all start with 0) and gather their txs id (the next 8 bytes).
+        // Look for sample txs (they all start with 0) and gather their txs id (the next
+        // 8 bytes).
         let tx_ids: Vec<_> = batch
             .iter()
             .filter(|tx| tx[0] == 0u8 && tx.len() > 8)

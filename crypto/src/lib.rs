@@ -221,8 +221,8 @@ impl Signature {
     }
 }
 
-/// This service holds the node's private key. It takes digests as input and returns a signature
-/// over the digest (through a oneshot channel).
+/// This service holds the node's private key. It takes digests as input and
+/// returns a signature over the digest (through a oneshot channel).
 #[derive(Clone)]
 pub struct SignatureService {
     channel: Sender<(Digest, oneshot::Sender<Signature>)>,

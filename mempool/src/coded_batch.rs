@@ -30,7 +30,8 @@ type Tree = SparseMerkleTree<MTreeNodeSmt<blake3::Hasher>>;
 /// An erasure-corrected transaction batch.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CodedBatch {
-    /// All the data shards (not the parity shards) of the erasure-coded transactions batch.
+    /// All the data shards (not the parity shards) of the erasure-coded
+    /// transactions batch.
     pub shards: Vec<Shard>,
 }
 
@@ -44,7 +45,8 @@ impl CodedBatch {
             _ => batch_size / data_shards + 1,
         };
 
-        // Fill with zeros: it is important that the batch size is divisible by 'data_shards'.
+        // Fill with zeros: it is important that the batch size is divisible by
+        // 'data_shards'.
         let filler = match remainder {
             0 => Vec::default(),
             remainder => vec![0u8; remainder],

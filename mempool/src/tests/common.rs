@@ -31,7 +31,7 @@ pub fn committee() -> Committee {
                 (name, stake, front, mempool)
             })
             .collect(),
-        /*  epoch */ 100,
+        /* epoch */ 100,
     )
 }
 

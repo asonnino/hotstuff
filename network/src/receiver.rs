@@ -17,15 +17,17 @@ pub type Writer = SplitSink<Framed<TcpStream, LengthDelimitedCodec>, Bytes>;
 
 #[async_trait]
 pub trait MessageHandler: Clone + Send + Sync + 'static {
-    /// Defines how to handle an incoming message. A typical usage is to define a `MessageHandler` with a
-    /// number of `Sender<T>` channels. Then implement `dispatch` to deserialize incoming messages and
-    /// forward them through the appropriate delivery channel. Then `writer` can be used to send back
-    /// responses or acknowledgements to the sender machine (see unit tests for examples).
+    /// Defines how to handle an incoming message. A typical usage is to define
+    /// a `MessageHandler` with a number of `Sender<T>` channels. Then
+    /// implement `dispatch` to deserialize incoming messages and
+    /// forward them through the appropriate delivery channel. Then `writer` can
+    /// be used to send back responses or acknowledgements to the sender
+    /// machine (see unit tests for examples).
     async fn dispatch(&self, writer: &mut Writer, message: Bytes) -> Result<(), Box<dyn Error>>;
 }
 
-/// For each incoming request, we spawn a new runner responsible to receive messages and forward them
-/// through the provided deliver channel.
+/// For each incoming request, we spawn a new runner responsible to receive
+/// messages and forward them through the provided deliver channel.
 pub struct Receiver<Handler: MessageHandler> {
     /// Address to listen to.
     address: SocketAddr,
@@ -34,14 +36,16 @@ pub struct Receiver<Handler: MessageHandler> {
 }
 
 impl<Handler: MessageHandler> Receiver<Handler> {
-    /// Spawn a new network receiver handling connections from any incoming peer.
+    /// Spawn a new network receiver handling connections from any incoming
+    /// peer.
     pub fn spawn(address: SocketAddr, handler: Handler) {
         tokio::spawn(async move {
             Self { address, handler }.run().await;
         });
     }
 
-    /// Main loop responsible to accept incoming connections and spawn a new runner to handle it.
+    /// Main loop responsible to accept incoming connections and spawn a new
+    /// runner to handle it.
     async fn run(&self) {
         let listener = TcpListener::bind(&self.address)
             .await
@@ -61,8 +65,8 @@ impl<Handler: MessageHandler> Receiver<Handler> {
         }
     }
 
-    /// Spawn a new runner to handle a specific TCP connection. It receives messages and process them
-    /// using the provided handler.
+    /// Spawn a new runner to handle a specific TCP connection. It receives
+    /// messages and process them using the provided handler.
     async fn spawn_runner(socket: TcpStream, peer: SocketAddr, handler: Handler) {
         tokio::spawn(async move {
             let transport = Framed::new(socket, LengthDelimitedCodec::new());

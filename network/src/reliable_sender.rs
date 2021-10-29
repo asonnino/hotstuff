@@ -27,14 +27,17 @@ pub mod reliable_sender_tests;
 /// Convenient alias for cancel handlers returned to the caller task.
 pub type CancelHandler = oneshot::Receiver<Bytes>;
 
-/// We keep alive one TCP connection per peer, each connection is handled by a separate task (called `Connection`).
-/// We communicate with our 'connections' through a dedicated channel kept by the HashMap called `connections`.
-/// This sender is 'reliable' in the sense that it keeps trying to re-transmit messages for which it didn't
-/// receive an ACK back (until they succeed or are canceled).
+/// We keep alive one TCP connection per peer, each connection is handled by a
+/// separate task (called `Connection`). We communicate with our 'connections'
+/// through a dedicated channel kept by the HashMap called `connections`.
+/// This sender is 'reliable' in the sense that it keeps trying to re-transmit
+/// messages for which it didn't receive an ACK back (until they succeed or are
+/// canceled).
 pub struct ReliableSender {
     /// A map holding the channels to our connections.
     connections: HashMap<SocketAddr, Sender<InnerMessage>>,
-    /// Small RNG just used to shuffle nodes and randomize connections (not crypto related).
+    /// Small RNG just used to shuffle nodes and randomize connections (not
+    /// crypto related).
     rng: SmallRng,
 }
 
@@ -74,8 +77,9 @@ impl ReliableSender {
         receiver
     }
 
-    /// Broadcast the message to all specified addresses in a reliable manner. It returns a vector of
-    /// cancel handlers ordered as the input `addresses` vector.
+    /// Broadcast the message to all specified addresses in a reliable manner.
+    /// It returns a vector of cancel handlers ordered as the input
+    /// `addresses` vector.
     pub async fn broadcast(
         &mut self,
         addresses: Vec<SocketAddr>,
@@ -89,8 +93,9 @@ impl ReliableSender {
         handlers
     }
 
-    /// Pick a few addresses at random (specified by `nodes`) and send the message only to them.
-    /// It returns a vector of cancel handlers with no specific order.
+    /// Pick a few addresses at random (specified by `nodes`) and send the
+    /// message only to them. It returns a vector of cancel handlers with no
+    /// specific order.
     pub async fn lucky_broadcast(
         &mut self,
         mut addresses: Vec<SocketAddr>,
@@ -108,12 +113,13 @@ impl ReliableSender {
 struct InnerMessage {
     /// The data to transmit.
     data: Bytes,
-    /// The cancel handler allowing the caller task to cancel the transmission of this message
-    /// and to be notified of its successfully transmission.
+    /// The cancel handler allowing the caller task to cancel the transmission
+    /// of this message and to be notified of its successfully transmission.
     cancel_handler: oneshot::Sender<Bytes>,
 }
 
-/// A connection is responsible to reliably establish (and keep alive) a connection with a single peer.
+/// A connection is responsible to reliably establish (and keep alive) a
+/// connection with a single peer.
 struct Connection {
     /// The destination address.
     address: SocketAddr,
@@ -152,8 +158,9 @@ impl Connection {
                     delay = self.retry_delay;
                     retry = 0;
 
-                    // Try to transmit all messages in the buffer and keep transmitting incoming messages.
-                    // The following function only returns if there is an error.
+                    // Try to transmit all messages in the buffer and keep transmitting incoming
+                    // messages. The following function only returns if there is
+                    // an error.
                     let error = self.keep_alive(stream).await;
                     warn!("{}", error);
                 }
@@ -186,8 +193,8 @@ impl Connection {
 
     /// Transmit messages once we have established a connection.
     async fn keep_alive(&mut self, stream: TcpStream) -> NetworkError {
-        // This buffer keeps all messages and handlers that we have successfully transmitted but for
-        // which we are still waiting to receive an ACK.
+        // This buffer keeps all messages and handlers that we have successfully
+        // transmitted but for which we are still waiting to receive an ACK.
         let mut pending_replies = VecDeque::new();
 
         let (mut writer, mut reader) = Framed::new(stream, LengthDelimitedCodec::new()).split();
@@ -214,7 +221,8 @@ impl Connection {
                 }
             }
 
-            // Check if there are any new messages to send or if we get an ACK for messages we already sent.
+            // Check if there are any new messages to send or if we get an ACK for messages
+            // we already sent.
             tokio::select! {
                 Some(InnerMessage{data, cancel_handler}) = self.receiver.recv() => {
                     // Add the message to the buffer of messages to send.
@@ -241,8 +249,9 @@ impl Connection {
             }
         };
 
-        // If we reach this code, it means something went wrong. Put the messages for which we didn't receive an ACK
-        // back into the sending buffer, we will try to send them again once we manage to establish a new connection.
+        // If we reach this code, it means something went wrong. Put the messages for
+        // which we didn't receive an ACK back into the sending buffer, we will
+        // try to send them again once we manage to establish a new connection.
         while let Some(message) = pending_replies.pop_back() {
             self.buffer.push_front(message);
         }

@@ -7,16 +7,17 @@ use std::{collections::HashMap, net::SocketAddr};
 pub struct Parameters {
     /// The depth of the garbage collection (Denominated in number of rounds).
     pub gc_depth: u64,
-    /// The delay after which the synchronizer retries to send sync requests. Denominated in ms.
+    /// The delay after which the synchronizer retries to send sync requests.
+    /// Denominated in ms.
     pub sync_retry_delay: u64,
-    /// Determine with how many nodes to sync when re-trying to send sync-request. These nodes
-    /// are picked at random from the committee.
+    /// Determine with how many nodes to sync when re-trying to send
+    /// sync-request. These nodes are picked at random from the committee.
     pub sync_retry_nodes: usize,
-    /// The preferred batch size. The workers seal a batch of transactions when it reaches this size.
-    /// Denominated in bytes.
+    /// The preferred batch size. The workers seal a batch of transactions when
+    /// it reaches this size. Denominated in bytes.
     pub batch_size: usize,
-    /// The delay after which the workers seal a batch of transactions, even if `max_batch_size`
-    /// is not reached. Denominated in ms.
+    /// The delay after which the workers seal a batch of transactions, even if
+    /// `max_batch_size` is not reached. Denominated in ms.
     pub max_batch_delay: u64,
 }
 
@@ -113,7 +114,8 @@ impl Committee {
         (data_shards, parity_shards)
     }
 
-    // Return the index of an authority. The index is just a deterministically number designating the authority.
+    // Return the index of an authority. The index is just a deterministically
+    // number designating the authority.
     pub fn index(&self, name: &PublicKey) -> Option<usize> {
         let mut keys: Vec<_> = self.authorities.keys().cloned().collect();
         keys.sort();

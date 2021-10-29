@@ -10,7 +10,8 @@ use tokio::sync::mpsc::Receiver;
 #[path = "tests/helper_tests.rs"]
 pub mod helper_tests;
 
-/// A task dedicated to help other authorities by replying to their sync requests.
+/// A task dedicated to help other authorities by replying to their sync
+/// requests.
 pub struct Helper {
     /// The committee information.
     committee: Committee,
@@ -38,7 +39,8 @@ impl Helper {
 
     async fn run(&mut self) {
         while let Some((digest, origin)) = self.rx_requests.recv().await {
-            // TODO [issue #58]: Do some accounting to prevent bad nodes from monopolizing our resources.
+            // TODO [issue #58]: Do some accounting to prevent bad nodes from monopolizing
+            // our resources.
 
             // get the requestors address.
             let address = match self.committee.address(&origin) {

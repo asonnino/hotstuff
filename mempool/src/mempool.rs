@@ -37,7 +37,8 @@ pub enum MempoolMessage {
 /// The messages sent by the consensus and the mempool.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ConsensusMempoolMessage {
-    /// The consensus notifies the mempool that it need to sync the target missing batches.
+    /// The consensus notifies the mempool that it need to sync the target
+    /// missing batches.
     Synchronize(Vec<Digest>, /* target */ PublicKey),
     /// The consensus notifies the mempool of a round update.
     Cleanup(Round),
