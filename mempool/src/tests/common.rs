@@ -59,24 +59,6 @@ pub fn batch() -> (Batch, usize) {
 }
 
 // Fixture
-/*
-pub fn serialized_batch() -> Vec<u8> {
-    let message = MempoolMessage::Batch(batch());
-    bincode::serialize(&message).unwrap()
-}
-
-
-// Fixture
-pub fn batch_digest() -> Digest {
-    Digest(
-        Sha512::digest(&serialized_batch()).as_slice()[..32]
-            .try_into()
-            .unwrap(),
-    )
-}
-*/
-
-// Fixture
 pub fn listener(address: SocketAddr) -> JoinHandle<Bytes> {
     tokio::spawn(async move {
         let listener = TcpListener::bind(&address).await.unwrap();

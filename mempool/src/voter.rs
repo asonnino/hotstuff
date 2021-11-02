@@ -14,10 +14,6 @@ use std::collections::HashMap;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
 
-//#[cfg(test)]
-//#[path = "tests/voter_tests.rs"]
-//pub mod voter_tests;
-
 /// A vote on a coded batch.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BatchVote {
