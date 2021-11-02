@@ -1,8 +1,10 @@
-use crate::config::{Committee, Stake};
-use crate::ensure;
-use crate::error::{MempoolError, MempoolResult};
-use crate::mempool::MempoolMessage;
-use crate::voter::BatchVote;
+use crate::{
+    config::{Committee, Stake},
+    ensure,
+    error::{MempoolError, MempoolResult},
+    mempool::MempoolMessage,
+    voter::BatchVote,
+};
 use bytes::Bytes;
 use crypto::{Digest, PublicKey, Signature};
 use log::warn;

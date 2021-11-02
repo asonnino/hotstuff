@@ -2,8 +2,7 @@ use super::*;
 use crate::common::{committee_with_base_port, keys, listener, transaction};
 use futures::future::try_join_all;
 use network::SimpleSender;
-use std::collections::HashMap;
-use std::fs;
+use std::{collections::HashMap, fs};
 
 #[tokio::test]
 async fn handle_clients_transactions() {
