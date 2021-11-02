@@ -1,9 +1,10 @@
 use crate::{
-    batch_maker::{Batch, BatchMaker, Transaction},
+    aggregator::{AggregatorService, BatchCertificate},
+    batch_maker::{BatchMaker, Transaction},
+    certificate_verifier::CertificateVerifier,
     coded_batch::{AuthenticatedShard, CodedBatch},
     config::{Committee, Parameters},
-    helper::Helper,
-    voter::BatchVote,
+    voter::{BatchVote, NodesVoter, SelfVoter, SerializedShard},
 };
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -32,6 +33,7 @@ pub enum MempoolMessage {
     CodedBatch(CodedBatch),
     AuthenticatedShard(AuthenticatedShard),
     BatchVote(BatchVote),
+    BatchCertificate(BatchCertificate),
 }
 
 /// The messages sent by the consensus and the mempool.
@@ -44,81 +46,106 @@ pub enum ConsensusMempoolMessage {
     Cleanup(Round),
 }
 
-pub struct Mempool {
-    /// The public key of this authority.
-    name: PublicKey,
-    /// The committee information.
-    committee: Committee,
-    /// The configuration parameters.
-    parameters: Parameters,
-    /// The persistent storage.
-    store: Store,
-    /// Send messages to consensus.
-    tx_consensus: Sender<Digest>,
-}
-/*
+pub struct Mempool;
+
 impl Mempool {
     pub fn spawn(
+        // The public key of this authority.
         name: PublicKey,
+        // The committee information.
         committee: Committee,
+        // The service signing digests.
         signature_service: SignatureService,
+        // The configuration parameters.
         parameters: Parameters,
+        // The persistent storage.
         store: Store,
+        // Receives messages from consensus.
         rx_consensus: Receiver<ConsensusMempoolMessage>,
-        tx_consensus: Sender<Digest>,
+        // Sends messages to consensus.
+        tx_consensus: Sender<BatchCertificate>,
     ) {
         // NOTE: This log entry is used to compute performance.
         parameters.log();
 
-        // Define a mempool instance.
-        let mempool = Self {
-            name,
-            committee,
-            parameters,
-            store,
-            tx_consensus,
-        };
+        let (tx_aggregator, rx_aggregator) = channel(CHANNEL_CAPACITY);
 
         // Spawn all mempool tasks.
-        mempool.handle_consensus_messages(rx_consensus);
-        mempool.handle_clients_transactions(signature_service);
-        mempool.handle_mempool_messages();
+        Self::handle_consensus_messages(
+            name,
+            committee.clone(),
+            store.clone(),
+            &parameters,
+            rx_consensus,
+        );
+        Self::handle_clients_transactions(
+            name,
+            committee.clone(),
+            signature_service.clone(),
+            store.clone(),
+            &parameters,
+            tx_consensus.clone(),
+            tx_aggregator.clone(),
+            rx_aggregator,
+        );
+        Self::handle_mempool_messages(
+            name,
+            committee.clone(),
+            signature_service,
+            store,
+            tx_consensus,
+            tx_aggregator,
+        );
 
         info!(
             "Mempool successfully booted on {}",
-            mempool
-                .committee
-                .mempool_address(&mempool.name)
+            committee
+                .mempool_address(&name)
                 .expect("Our public key is not in the committee")
                 .ip()
         );
     }
 
     /// Spawn all tasks responsible to handle messages from the consensus.
-    fn handle_consensus_messages(&self, rx_consensus: Receiver<ConsensusMempoolMessage>) {
+    fn handle_consensus_messages(
+        _name: PublicKey,
+        _committee: Committee,
+        _store: Store,
+        _parameters: &Parameters,
+        _rx_consensus: Receiver<ConsensusMempoolMessage>,
+    ) {
         // The `Synchronizer` is responsible to keep the mempool in sync with the others. It handles the commands
         // it receives from the consensus (which are mainly notifications that we are out of sync).
+        /*
         Synchronizer::spawn(
             self.name,
-            self.committee.clone(),
+            self.committee,
             self.store.clone(),
             self.parameters.gc_depth,
             self.parameters.sync_retry_delay,
             self.parameters.sync_retry_nodes,
             /* rx_message */ rx_consensus,
         );
+        */
     }
 
     /// Spawn all tasks responsible to handle clients transactions.
-    fn handle_clients_transactions(&self, signature_service: SignatureService) {
+    fn handle_clients_transactions(
+        name: PublicKey,
+        committee: Committee,
+        signature_service: SignatureService,
+        store: Store,
+        parameters: &Parameters,
+        tx_consensus: Sender<BatchCertificate>,
+        tx_aggregator: Sender<BatchVote>,
+        rx_aggregator: Receiver<BatchVote>,
+    ) {
         let (tx_batch_maker, rx_batch_maker) = channel(CHANNEL_CAPACITY);
-        let (tx_coded_batch, rx_coded_batch) = channel(CHANNEL_CAPACITY);
-        let (tx_processor, rx_processor) = channel(CHANNEL_CAPACITY);
+        let (tx_voter, rx_voter) = channel(CHANNEL_CAPACITY);
+        let (tx_control, rx_control) = channel(CHANNEL_CAPACITY);
 
-        // We first receive clients' transactions from the network.
-        let mut address = self
-            .committee
-            .transactions_address(&self.name)
+        let mut address = committee
+            .transactions_address(&name)
             .expect("Our public key is not in the committee");
         address.set_ip("0.0.0.0".parse().unwrap());
         NetworkReceiver::spawn(
@@ -126,75 +153,88 @@ impl Mempool {
             /* handler */ TxReceiverHandler { tx_batch_maker },
         );
 
-        // The transactions are sent to the `BatchMaker` that assembles them into batches. It then broadcasts
-        // (in a reliable manner) the batches to all other mempools that share the same `id` as us. Finally,
-        // it gathers the 'cancel handlers' of the messages and send them to the `QuorumWaiter`.
         BatchMaker::spawn(
-            self.name,
-            self.committee.clone(),
-            signature_service,
-            self.store.clone(),
-            self.parameters.batch_size,
-            self.parameters.max_batch_delay,
+            name,
+            committee.clone(),
+            signature_service.clone(),
+            store.clone(),
+            parameters.batch_size,
+            parameters.max_batch_delay,
             /* rx_transaction */ rx_batch_maker,
-            /* tx_coded_batch */ tx_coded_batch,
+            rx_control,
+            /* tx_authenticated_shard */ tx_voter,
         );
 
-        /*
-        // The `QuorumWaiter` waits for 2f authorities to acknowledge reception of the batch. It then forwards
-        // the batch to the `Processor`.
-        QuorumWaiter::spawn(
-            self.committee.clone(),
-            /* stake */ self.committee.stake(&self.name),
-            /* rx_message */ rx_quorum_waiter,
-            /* tx_batch */ tx_processor,
+        SelfVoter::spawn(
+            name,
+            committee.clone(),
+            store,
+            signature_service,
+            /* rx_authenticated_shard */ rx_voter,
+            tx_aggregator,
         );
-        */
 
-        // The `Processor` hashes and stores the batch. It then forwards the batch's digest to the consensus.
-        Processor::spawn(
-            self.store.clone(),
-            /* rx_batch */ rx_processor,
-            /* tx_digest */ self.tx_consensus.clone(),
+        AggregatorService::spawn(
+            name,
+            committee,
+            /* rx_input */ rx_aggregator,
+            /* tx_output */ tx_consensus,
+            tx_control,
         );
 
         info!("Mempool listening to client transactions on {}", address);
     }
 
     /// Spawn all tasks responsible to handle messages from other mempools.
-    fn handle_mempool_messages(&self) {
-        let (tx_helper, rx_helper) = channel(CHANNEL_CAPACITY);
-        let (tx_processor, rx_processor) = channel(CHANNEL_CAPACITY);
+    fn handle_mempool_messages(
+        name: PublicKey,
+        committee: Committee,
+        signature_service: SignatureService,
+        store: Store,
+        tx_consensus: Sender<BatchCertificate>,
+        tx_aggregator: Sender<BatchVote>,
+    ) {
+        let (tx_voter, rx_voter) = channel(CHANNEL_CAPACITY);
+        let (tx_certificate_verifier, rx_certificate_verifier) = channel(CHANNEL_CAPACITY);
+        let (tx_cleanup, rx_cleanup) = channel(CHANNEL_CAPACITY);
 
-        // Receive incoming messages from other mempools.
-        let mut address = self
-            .committee
-            .mempool_address(&self.name)
+        let mut address = committee
+            .mempool_address(&name)
             .expect("Our public key is not in the committee");
         address.set_ip("0.0.0.0".parse().unwrap());
         NetworkReceiver::spawn(
             address,
             /* handler */
             MempoolReceiverHandler {
-                tx_helper,
-                tx_processor,
+                tx_voter,
+                tx_aggregator,
+                tx_certificate_verifier,
             },
         );
 
-        // The `Helper` is dedicated to reply to batch requests from other mempools.
-        Helper::spawn(
-            self.committee.clone(),
-            self.store.clone(),
-            /* rx_request */ rx_helper,
+        NodesVoter::spawn(
+            name,
+            committee.clone(),
+            store,
+            signature_service,
+            /* rx_authenticated_shard */ rx_voter,
+            rx_cleanup,
         );
 
-        // This `Processor` hashes and stores the batches we receive from the other mempools. It then forwards the
-        // batch's digest to the consensus.
-        Processor::spawn(
-            self.store.clone(),
-            /* rx_batch */ rx_processor,
-            /* tx_digest */ self.tx_consensus.clone(),
+        CertificateVerifier::spawn(
+            committee,
+            /* rx_input */ rx_certificate_verifier,
+            /* tx_output */ tx_consensus,
+            tx_cleanup,
         );
+
+        /*
+        Helper::spawn(
+            committee.clone(),
+            store.clone(),
+            /* rx_request */ rx_helper,
+        );
+        */
 
         info!("Mempool listening to mempool messages on {}", address);
     }
@@ -224,8 +264,9 @@ impl MessageHandler for TxReceiverHandler {
 /// Defines how the network receiver handles incoming mempool messages.
 #[derive(Clone)]
 struct MempoolReceiverHandler {
-    tx_helper: Sender<(Vec<Digest>, PublicKey)>,
-    tx_processor: Sender<SerializedBatchMessage>,
+    tx_voter: Sender<(AuthenticatedShard, SerializedShard)>,
+    tx_aggregator: Sender<BatchVote>,
+    tx_certificate_verifier: Sender<BatchCertificate>,
 }
 
 #[async_trait]
@@ -236,21 +277,24 @@ impl MessageHandler for MempoolReceiverHandler {
 
         // Deserialize and parse the message.
         match bincode::deserialize(&serialized) {
-            Ok(MempoolMessage::Batch(..)) => self
-                .tx_processor
-                .send(serialized.to_vec())
+            Ok(MempoolMessage::CodedBatch(..)) => (), // TODO
+            Ok(MempoolMessage::AuthenticatedShard(shard)) => self
+                .tx_voter
+                .send((shard, serialized.to_vec()))
                 .await
-                .expect("Failed to send batch"),
-            Ok(MempoolMessage::BatchRequest(missing, requestor)) => self
-                .tx_helper
-                .send((missing, requestor))
+                .expect("Failed to send shard"),
+            Ok(MempoolMessage::BatchVote(vote)) => self
+                .tx_aggregator
+                .send(vote)
                 .await
-                .expect("Failed to send batch request"),
-            Ok(MempoolMessage::CodedBatch(_batch)) => (), // TODO
-            Ok(MempoolMessage::AuthenticatedShard(_shard)) => (), // TODO
+                .expect("Failed to send vote"),
+            Ok(MempoolMessage::BatchCertificate(certificate)) => self
+                .tx_certificate_verifier
+                .send(certificate)
+                .await
+                .expect("Failed to send certificate"),
             Err(e) => warn!("Serialization error: {}", e),
         }
         Ok(())
     }
 }
-*/

@@ -128,10 +128,13 @@ impl BatchMaker {
     /// Wait until enough batches are certified and cleanup internal state.
     async fn wait(&mut self) {
         while self.batch_counter >= MAX_PENDING_BATCHES {
-            if let Some(root) = self.rx_control.recv().await {
-                let _ = self.pending.remove(&root);
-                self.batch_counter -= 1;
-            }
+            let root = self
+                .rx_control
+                .recv()
+                .await
+                .expect("Control channel dropped");
+            let _ = self.pending.remove(&root);
+            self.batch_counter -= 1;
         }
     }
 

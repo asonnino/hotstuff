@@ -41,4 +41,7 @@ pub enum MempoolError {
 
     #[error("Failed to reconstruct batch")]
     FailedToReconstructBatch(#[from] reed_solomon_erasure::Error),
+
+    #[error("Received Certificate without a quorum")]
+    CertificateRequiresQuorum,
 }
