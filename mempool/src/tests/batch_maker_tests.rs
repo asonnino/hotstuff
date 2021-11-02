@@ -1,58 +1,106 @@
 use super::*;
-use crate::common::transaction;
+use crate::common::{committee, committee_with_base_port, keys, listener, transaction};
+use futures::future::try_join_all;
+use std::fs;
 use tokio::sync::mpsc::channel;
 
 #[tokio::test]
 async fn make_batch() {
     let (tx_transaction, rx_transaction) = channel(1);
-    let (tx_message, mut rx_message) = channel(1);
-    let dummy_addresses = vec![(PublicKey::default(), "127.0.0.1:0".parse().unwrap())];
+    let (_tx_control, rx_control) = channel(1);
+    let (tx_authenticated_shard, mut rx_authenticated_shard) = channel(1);
+    let (tx_root, mut rx_root) = channel(1);
+
+    let (name, secret) = keys().pop().unwrap();
+    let signature_service = SignatureService::new(secret);
+
+    let committee = committee_with_base_port(6_000);
+
+    let path = ".db_test_make_batch";
+    let _ = fs::remove_dir_all(path);
+    let mut store = Store::new(path).unwrap();
 
     // Spawn a `BatchMaker` instance.
     BatchMaker::spawn(
+        name,
+        committee.clone(),
+        signature_service,
+        store.clone(),
         /* max_batch_size */ 200,
         /* max_batch_delay */ 1_000_000, // Ensure the timer is not triggered.
         rx_transaction,
-        tx_message,
-        /* mempool_addresses */ dummy_addresses,
+        rx_control,
+        tx_authenticated_shard,
+        tx_root,
     );
+
+    // Spawn the receiver that will receive coded shards.
+    let handles: Vec<_> = committee
+        .broadcast_addresses(&name)
+        .iter()
+        .map(|(_, x)| listener(*x))
+        .collect();
+    tokio::task::yield_now().await;
 
     // Send enough transactions to seal a batch.
     tx_transaction.send(transaction()).await.unwrap();
     tx_transaction.send(transaction()).await.unwrap();
 
-    // Ensure the batch is as expected.
-    let expected_batch = vec![transaction(), transaction()];
-    let QuorumWaiterMessage { batch, handlers: _ } = rx_message.recv().await.unwrap();
-    match bincode::deserialize(&batch).unwrap() {
-        MempoolMessage::Batch(batch) => assert_eq!(batch, expected_batch),
-        _ => panic!("Unexpected message"),
+    // Ensure we receive the coded batch's root.
+    let root = rx_root.recv().await.unwrap();
+
+    // Ensure we receive our own authenticated shard to vote on.
+    let (shard, _) = rx_authenticated_shard.recv().await.unwrap();
+    assert_eq!(root, shard.root);
+
+    // Ensure everybody else received their authenticated shard.
+    assert!(try_join_all(handles).await.is_ok());
+
+    // Ensure we correctly stored the coded batch.
+    let stored = store.read(root.to_vec()).await.unwrap();
+    assert!(stored.is_some());
+    let message: MempoolMessage = bincode::deserialize(&stored.unwrap()).unwrap();
+    match message {
+        MempoolMessage::CodedBatch(mut x) => {
+            x.expand(&committee);
+            let serialized_root = x.commit().get_root().serialize();
+            assert_eq!(root.to_vec(), serialized_root)
+        }
+        _ => panic!("Unexpected message type"),
     }
 }
 
 #[tokio::test]
 async fn batch_timeout() {
     let (tx_transaction, rx_transaction) = channel(1);
-    let (tx_message, mut rx_message) = channel(1);
-    let dummy_addresses = vec![(PublicKey::default(), "127.0.0.1:0".parse().unwrap())];
+    let (_tx_control, rx_control) = channel(1);
+    let (tx_authenticated_shard, _rx_authenticated_shard) = channel(1);
+    let (tx_root, mut rx_root) = channel(1);
+
+    let (name, secret) = keys().pop().unwrap();
+    let signature_service = SignatureService::new(secret);
+
+    let path = ".db_test_batch_timeout";
+    let _ = fs::remove_dir_all(path);
+    let store = Store::new(path).unwrap();
 
     // Spawn a `BatchMaker` instance.
     BatchMaker::spawn(
+        name,
+        committee(),
+        signature_service,
+        store,
         /* max_batch_size */ 200,
         /* max_batch_delay */ 50, // Ensure the timer is triggered.
         rx_transaction,
-        tx_message,
-        /* mempool_addresses */ dummy_addresses,
+        rx_control,
+        tx_authenticated_shard,
+        tx_root,
     );
 
-    // Do not send enough transactions to seal a batch..
+    // Do not send enough transactions to seal a batch.
     tx_transaction.send(transaction()).await.unwrap();
 
-    // Ensure the batch is as expected.
-    let expected_batch = vec![transaction()];
-    let QuorumWaiterMessage { batch, handlers: _ } = rx_message.recv().await.unwrap();
-    match bincode::deserialize(&batch).unwrap() {
-        MempoolMessage::Batch(batch) => assert_eq!(batch, expected_batch),
-        _ => panic!("Unexpected message"),
-    }
+    // Ensure we receive the coded batch's root.
+    let _ = rx_root.recv().await.unwrap();
 }

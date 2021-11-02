@@ -1,16 +1,22 @@
 use super::*;
-use crate::common::{batch_digest, committee_with_base_port, keys, listener, transaction};
+use crate::common::{committee_with_base_port, keys, listener, transaction};
+use futures::future::try_join_all;
 use network::SimpleSender;
+use std::collections::HashMap;
 use std::fs;
 
 #[tokio::test]
 async fn handle_clients_transactions() {
-    let (name, _) = keys().pop().unwrap();
+    let (name, secret) = keys().pop().unwrap();
+    let signature_service = SignatureService::new(secret);
     let committee = committee_with_base_port(11_000);
     let parameters = Parameters {
         batch_size: 200, // Two transactions.
         ..Parameters::default()
     };
+    let tx_address = committee.transactions_address(&name).unwrap();
+    let mempool_address = committee.mempool_address(&name).unwrap();
+    let mut network = SimpleSender::new();
 
     // Create a new test store.
     let path = ".db_test_handle_clients_transactions";
@@ -23,25 +29,50 @@ async fn handle_clients_transactions() {
     Mempool::spawn(
         name,
         committee.clone(),
+        signature_service,
         parameters,
         store,
         rx_consensus_to_mempool,
         tx_mempool_to_consensus,
     );
 
-    // Spawn enough mempools' listeners to acknowledge our batches.
-    for (_, address) in committee.broadcast_addresses(&name) {
-        let _ = listener(address);
-    }
+    // Spawn enough mempools' listeners to acknowledge our messages.
+    let (names, handles): (Vec<_>, Vec<_>) = committee
+        .broadcast_addresses(&name)
+        .iter()
+        .map(|(name, x)| (*name, listener(*x)))
+        .unzip();
+    tokio::task::yield_now().await;
+
+    // Make a signature service for every node.
+    let mut services: HashMap<_, _> = keys()
+        .into_iter()
+        .map(|(name, secret)| (name, SignatureService::new(secret)))
+        .collect();
 
     // Send enough transactions to create a batch.
-    let mut network = SimpleSender::new();
-    let address = committee.transactions_address(&name).unwrap();
-    network.send(address, Bytes::from(transaction())).await;
-    network.send(address, Bytes::from(transaction())).await;
+    network.send(tx_address, Bytes::from(transaction())).await;
+    network.send(tx_address, Bytes::from(transaction())).await;
 
-    // Ensure the consensus got the batch digest.
-    let received = rx_mempool_to_consensus.recv().await.unwrap();
-    assert_eq!(batch_digest(), received);
+    // Ensure the consensus got the coded shards and reply with a vote.
+    for (name, serialized) in names
+        .into_iter()
+        .zip(try_join_all(handles).await.unwrap().into_iter())
+    {
+        let message: MempoolMessage = bincode::deserialize(&serialized).unwrap();
+        match message {
+            MempoolMessage::AuthenticatedShard(shard) => {
+                let signature_service = services.get_mut(&name).unwrap();
+                let vote = BatchVote::new(shard.root, name, signature_service).await;
+                let message = MempoolMessage::BatchVote(vote);
+                let bytes = bincode::serialize(&message).unwrap();
+                network.send(mempool_address, Bytes::from(bytes)).await;
+            }
+            _ => panic!("Unexpected message"),
+        }
+    }
+
+    // Ensure we got a certificate
+    let certificate = rx_mempool_to_consensus.recv().await.unwrap();
+    assert!(certificate.verify(&committee).is_ok());
 }
-

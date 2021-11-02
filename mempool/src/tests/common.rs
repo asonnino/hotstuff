@@ -1,14 +1,12 @@
 use crate::{
     batch_maker::{Batch, Transaction},
     config::Committee,
-    mempool::MempoolMessage,
 };
 use bytes::Bytes;
-use crypto::{generate_keypair, Digest, PublicKey, SecretKey};
-use ed25519_dalek::{Digest as _, Sha512};
+use crypto::{generate_keypair, PublicKey, SecretKey};
 use futures::{sink::SinkExt as _, stream::StreamExt as _};
 use rand::{rngs::StdRng, SeedableRng as _};
-use std::{convert::TryInto as _, net::SocketAddr};
+use std::net::SocketAddr;
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 

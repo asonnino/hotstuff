@@ -1,14 +1,17 @@
 use crate::config::{Committee, Stake};
 use crate::ensure;
 use crate::error::{MempoolError, MempoolResult};
+use crate::mempool::MempoolMessage;
 use crate::voter::BatchVote;
+use bytes::Bytes;
 use crypto::{Digest, PublicKey, Signature};
 use log::warn;
+use network::SimpleSender;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use tokio::sync::mpsc::{Receiver, Sender};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BatchCertificate {
     pub root: Digest,
     pub author: PublicKey,
@@ -89,42 +92,60 @@ impl AggregatorService {
     pub fn spawn(
         name: PublicKey,
         committee: Committee,
-        mut rx_input: Receiver<BatchVote>,
+        mut rx_root: Receiver<Digest>,
+        mut rx_vote: Receiver<BatchVote>,
         tx_output: Sender<BatchCertificate>,
         tx_control: Sender<Digest>,
     ) {
         tokio::spawn(async move {
             let mut aggregators = HashMap::new();
-            while let Some(vote) = rx_input.recv().await {
-                if let Err(e) = vote.verify(&committee) {
-                    warn!("{}", e);
-                    continue;
-                }
-                if vote.author != name {
-                    continue;
-                }
+            let mut network = SimpleSender::new();
 
-                let potential_certificate = match aggregators
-                    .entry(vote.root.clone())
-                    .or_insert_with(|| Aggregator::new(name))
-                    .append(vote.root, vote.signature, vote.author, &committee)
-                {
-                    Ok(x) => x,
-                    Err(e) => {
-                        warn!("{}", e);
-                        continue;
+            loop {
+                tokio::select! {
+                    Some(root) = rx_root.recv() => {
+                        aggregators.insert(root, Aggregator::new(name));
+                    },
+                    Some(vote) = rx_vote.recv() => {
+                        if let Err(e) = vote.verify(&committee) {
+                            warn!("{}", e);
+                            continue;
+                        }
+                        let aggregator = match aggregators.get_mut(&vote.root) {
+                            Some(x) => x,
+                            None => {
+                                continue;
+                            }
+                        };
+
+                        match aggregator.append(vote.root, vote.signature, vote.author, &committee) {
+                            Ok(Some(certificate)) => {
+                                let root = certificate.root.clone();
+                                let _ = aggregators.remove(&root);
+
+                                tx_output
+                                    .send(certificate.clone())
+                                    .await
+                                    .expect("Failed to output certificate");
+                                tx_control
+                                    .send(root)
+                                    .await
+                                    .expect("Failed to loopback certified root");
+
+                                let addresses = committee
+                                    .broadcast_addresses(&name)
+                                    .into_iter()
+                                    .map(|(_, x)| x)
+                                    .collect();
+                                let message = MempoolMessage::BatchCertificate(certificate);
+                                let serialized = bincode::serialize(&message)
+                                    .expect("Failed to serialize certificate");
+                                network.broadcast(addresses, Bytes::from(serialized)).await;
+                            },
+                            Ok(None) => (),
+                            Err(e) =>  warn!("{}", e)
+                        }
                     }
-                };
-                if let Some(certificate) = potential_certificate {
-                    let root = certificate.root.clone();
-                    tx_output
-                        .send(certificate)
-                        .await
-                        .expect("Failed to output certificate");
-                    tx_control
-                        .send(root)
-                        .await
-                        .expect("Failed to loopback certified root");
                 }
             }
         });

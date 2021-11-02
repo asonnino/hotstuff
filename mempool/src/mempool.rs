@@ -17,9 +17,9 @@ use std::error::Error;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
-//#[cfg(test)]
-//#[path = "tests/mempool_tests.rs"]
-//pub mod mempool_tests;
+#[cfg(test)]
+#[path = "tests/mempool_tests.rs"]
+pub mod mempool_tests;
 
 /// The default channel capacity for each channel of the mempool.
 pub const CHANNEL_CAPACITY: usize = 1_000;
@@ -143,6 +143,7 @@ impl Mempool {
         let (tx_batch_maker, rx_batch_maker) = channel(CHANNEL_CAPACITY);
         let (tx_voter, rx_voter) = channel(CHANNEL_CAPACITY);
         let (tx_control, rx_control) = channel(CHANNEL_CAPACITY);
+        let (tx_root, rx_root) = channel(CHANNEL_CAPACITY);
 
         let mut address = committee
             .transactions_address(&name)
@@ -163,6 +164,7 @@ impl Mempool {
             /* rx_transaction */ rx_batch_maker,
             rx_control,
             /* tx_authenticated_shard */ tx_voter,
+            tx_root,
         );
 
         SelfVoter::spawn(
@@ -177,7 +179,8 @@ impl Mempool {
         AggregatorService::spawn(
             name,
             committee,
-            /* rx_input */ rx_aggregator,
+            rx_root,
+            /* rx_vote */ rx_aggregator,
             /* tx_output */ tx_consensus,
             tx_control,
         );

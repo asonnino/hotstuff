@@ -17,9 +17,9 @@ use tokio::{
     time::{sleep, Duration, Instant},
 };
 
-//#[cfg(test)]
-//#[path = "tests/batch_maker_tests.rs"]
-//pub mod batch_maker_tests;
+#[cfg(test)]
+#[path = "tests/batch_maker_tests.rs"]
+pub mod batch_maker_tests;
 
 pub type Transaction = Vec<u8>;
 pub type Batch = Vec<Transaction>;
@@ -47,6 +47,8 @@ pub struct BatchMaker {
     rx_control: Receiver<Digest>,
     /// Output channel to deliver shards of transactions batches.
     tx_authenticated_shard: Sender<(AuthenticatedShard, SerializedShard)>,
+    /// Send the roots for which we are trying to assemble a certificate.
+    tx_root: Sender<Digest>,
     /// Holds the current batch.
     current_batch: Batch,
     /// Holds the size of the current batch (in bytes).
@@ -70,6 +72,7 @@ impl BatchMaker {
         rx_transaction: Receiver<Transaction>,
         rx_control: Receiver<Digest>,
         tx_authenticated_shard: Sender<(AuthenticatedShard, SerializedShard)>,
+        tx_root: Sender<Digest>,
     ) {
         tokio::spawn(async move {
             Self {
@@ -82,6 +85,7 @@ impl BatchMaker {
                 rx_transaction,
                 rx_control,
                 tx_authenticated_shard,
+                tx_root,
                 current_batch: Batch::with_capacity(batch_size * 2),
                 current_batch_size: 0,
                 network: ReliableSender::new(),
@@ -168,6 +172,12 @@ impl BatchMaker {
         let message = MempoolMessage::CodedBatch(compressed_batch);
         let value = bincode::serialize(&message).expect("Failed to serialize coded batch");
         self.store.write(serialized_root, value).await;
+
+        // Send the root to the certificates aggregator.
+        self.tx_root
+            .send(root.clone())
+            .await
+            .expect("Failed to send root");
 
         // Disseminate the coded batch.
         for (i, shard) in coded_batch.shards.into_iter().enumerate() {
