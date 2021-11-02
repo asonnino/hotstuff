@@ -52,9 +52,6 @@ impl BatchVote {
     }
 }
 
-/// Offset of the storage address to persist authenticated shards.
-pub const AUTHENTICATED_SHARD_ADDRESS_OFFSET: u8 = 1;
-
 /// Maximum number of votes for which we are waiting for a certificate.
 const MAX_PENDING_VOTES: usize = 100;
 
@@ -110,7 +107,7 @@ impl SelfVoter {
 
             // Store the shard.
             let mut key = shard.root.to_vec();
-            key.push(AUTHENTICATED_SHARD_ADDRESS_OFFSET);
+            key.extend(self.name.to_vec());
             self.store.write(key, serialized_shard).await;
 
             // Reply with a signature.
@@ -178,7 +175,7 @@ impl NodesVoter {
 
                     // Store the shard.
                     let mut key = shard.root.to_vec();
-                    key.push(AUTHENTICATED_SHARD_ADDRESS_OFFSET);
+                    key.extend(self.name.to_vec());
                     self.store.write(key, serialized_shard).await;
 
                     // Reply with a signature.

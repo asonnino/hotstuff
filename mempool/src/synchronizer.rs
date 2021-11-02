@@ -120,6 +120,11 @@ impl Synchronizer {
                                 continue;
                             }
 
+                            // Ensure we don't already have the coded batch.
+                            if self.store.read(digest.to_vec()).await.expect("Failed to read store").is_some() {
+                                continue;
+                            }
+
                             // Register the digest as missing.
                             missing.push(digest.clone());
                             debug!("Requesting sync for batch {}", digest);
@@ -145,22 +150,8 @@ impl Synchronizer {
                         let serialized = bincode::serialize(&message).expect("Failed to serialize our own message");
                         self.network.send(address, Bytes::from(serialized)).await;
                     },
-                    ConsensusMempoolMessage::Cleanup(round) => {
-                        // Keep track of the consensus' round number.
-                        self.round = round;
-
-                        // Cleanup internal state.
-                        if self.round < self.gc_depth {
-                            continue;
-                        }
-
-                        let mut gc_round = self.round - self.gc_depth;
-                        for (r, handler, _) in self.pending.values() {
-                            if r <= &gc_round {
-                                let _ = handler.send(()).await;
-                            }
-                        }
-                        self.pending.retain(|_, (r, _, _)| r > &mut gc_round);
+                    ConsensusMempoolMessage::Cleanup(_round) => {
+                        // TODO: Nothing to do, remove this message.
                     }
                 },
 
