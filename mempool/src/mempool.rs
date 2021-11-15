@@ -4,6 +4,9 @@ use crate::{
     certificate_verifier::CertificateVerifier,
     coded_batch::{AuthenticatedShard, CodedBatch},
     config::{Committee, Parameters},
+    helper::Helper,
+    reconstructor::{Reconstructor, SerializedCodedBatch},
+    synchronizer::Synchronizer,
     voter::{BatchVote, NodesVoter, SelfVoter, SerializedShard},
 };
 use async_trait::async_trait;
@@ -24,26 +27,16 @@ pub mod mempool_tests;
 /// The default channel capacity for each channel of the mempool.
 pub const CHANNEL_CAPACITY: usize = 1_000;
 
-/// The consensus round number.
-pub type Round = u64;
-
 /// The message exchanged between the nodes' mempool.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum MempoolMessage {
-    CodedBatch(CodedBatch),
     AuthenticatedShard(AuthenticatedShard),
     BatchVote(BatchVote),
     BatchCertificate(BatchCertificate),
-}
-
-/// The messages sent by the consensus and the mempool.
-#[derive(Debug, Serialize, Deserialize)]
-pub enum ConsensusMempoolMessage {
-    /// The consensus notifies the mempool that it need to sync the target
-    /// missing batches.
-    Synchronize(Vec<Digest>, /* target */ PublicKey),
-    /// The consensus notifies the mempool of a round update.
-    Cleanup(Round),
+    ShardRequest(Digest, PublicKey),
+    ShardReply(AuthenticatedShard),
+    BatchRequest(Digest, PublicKey),
+    CodedBatch(CodedBatch),
 }
 
 pub struct Mempool;
@@ -61,7 +54,7 @@ impl Mempool {
         // The persistent storage.
         store: Store,
         // Receives messages from consensus.
-        rx_consensus: Receiver<ConsensusMempoolMessage>,
+        rx_consensus: Receiver<BatchCertificate>,
         // Sends messages to consensus.
         tx_consensus: Sender<BatchCertificate>,
     ) {
@@ -69,6 +62,7 @@ impl Mempool {
         parameters.log();
 
         let (tx_aggregator, rx_aggregator) = channel(CHANNEL_CAPACITY);
+        let (tx_missing, rx_missing) = channel(CHANNEL_CAPACITY);
 
         // Spawn all mempool tasks.
         Self::handle_consensus_messages(
@@ -77,6 +71,7 @@ impl Mempool {
             store.clone(),
             &parameters,
             rx_consensus,
+            tx_missing,
         );
         Self::handle_clients_transactions(
             name,
@@ -95,6 +90,7 @@ impl Mempool {
             store,
             tx_consensus,
             tx_aggregator,
+            rx_missing,
         );
 
         info!(
@@ -108,25 +104,22 @@ impl Mempool {
 
     /// Spawn all tasks responsible to handle messages from the consensus.
     fn handle_consensus_messages(
-        _name: PublicKey,
-        _committee: Committee,
-        _store: Store,
-        _parameters: &Parameters,
-        _rx_consensus: Receiver<ConsensusMempoolMessage>,
+        name: PublicKey,
+        committee: Committee,
+        store: Store,
+        parameters: &Parameters,
+        rx_consensus: Receiver<BatchCertificate>,
+        tx_missing: Sender<Digest>,
     ) {
-        // The `Synchronizer` is responsible to keep the mempool in sync with the others. It handles the commands
-        // it receives from the consensus (which are mainly notifications that we are out of sync).
-        /*
         Synchronizer::spawn(
-            self.name,
-            self.committee,
-            self.store.clone(),
-            self.parameters.gc_depth,
-            self.parameters.sync_retry_delay,
-            self.parameters.sync_retry_nodes,
-            /* rx_message */ rx_consensus,
+            name,
+            committee,
+            store,
+            parameters.sync_retry_delay,
+            parameters.sync_nodes,
+            /* rx_certificate */ rx_consensus,
+            tx_missing,
         );
-        */
     }
 
     /// Spawn all tasks responsible to handle clients transactions.
@@ -196,10 +189,14 @@ impl Mempool {
         store: Store,
         tx_consensus: Sender<BatchCertificate>,
         tx_aggregator: Sender<BatchVote>,
+        rx_missing: Receiver<Digest>,
     ) {
         let (tx_voter, rx_voter) = channel(CHANNEL_CAPACITY);
         let (tx_certificate_verifier, rx_certificate_verifier) = channel(CHANNEL_CAPACITY);
         let (tx_cleanup, rx_cleanup) = channel(CHANNEL_CAPACITY);
+        let (tx_helper, rx_helper) = channel(CHANNEL_CAPACITY);
+        let (tx_shard, rx_shard) = channel(CHANNEL_CAPACITY);
+        let (tx_batch, rx_batch) = channel(CHANNEL_CAPACITY);
 
         let mut address = committee
             .mempool_address(&name)
@@ -212,32 +209,43 @@ impl Mempool {
                 tx_voter,
                 tx_aggregator,
                 tx_certificate_verifier,
+                tx_helper,
+                tx_shard,
+                tx_batch,
             },
         );
 
         NodesVoter::spawn(
             name,
             committee.clone(),
-            store,
+            store.clone(),
             signature_service,
             /* rx_authenticated_shard */ rx_voter,
             rx_cleanup,
         );
 
         CertificateVerifier::spawn(
-            committee,
+            committee.clone(),
             /* rx_input */ rx_certificate_verifier,
             /* tx_output */ tx_consensus,
             tx_cleanup,
         );
 
-        /*
         Helper::spawn(
+            name,
             committee.clone(),
             store.clone(),
             /* rx_request */ rx_helper,
         );
-        */
+
+        Reconstructor::spawn(
+            name,
+            committee.clone(),
+            store,
+            rx_missing,
+            rx_shard,
+            rx_batch,
+        );
 
         info!("Mempool listening to mempool messages on {}", address);
     }
@@ -270,6 +278,9 @@ struct MempoolReceiverHandler {
     tx_voter: Sender<(AuthenticatedShard, SerializedShard)>,
     tx_aggregator: Sender<BatchVote>,
     tx_certificate_verifier: Sender<BatchCertificate>,
+    tx_helper: Sender<(Digest, PublicKey, bool)>,
+    tx_shard: Sender<AuthenticatedShard>,
+    tx_batch: Sender<(CodedBatch, SerializedCodedBatch)>,
 }
 
 #[async_trait]
@@ -280,7 +291,6 @@ impl MessageHandler for MempoolReceiverHandler {
 
         // Deserialize and parse the message.
         match bincode::deserialize(&serialized) {
-            Ok(MempoolMessage::CodedBatch(..)) => (), // TODO
             Ok(MempoolMessage::AuthenticatedShard(shard)) => self
                 .tx_voter
                 .send((shard, serialized.to_vec()))
@@ -296,6 +306,31 @@ impl MessageHandler for MempoolReceiverHandler {
                 .send(certificate)
                 .await
                 .expect("Failed to send certificate"),
+            Ok(MempoolMessage::ShardRequest(missing, sender)) => self
+                .tx_helper
+                .send((missing, sender, true))
+                .await
+                .expect("Failed to send shard request"),
+            Ok(MempoolMessage::BatchRequest(missing, sender)) => self
+                .tx_helper
+                .send((missing, sender, false))
+                .await
+                .expect("Failed to send batch request"),
+            Ok(MempoolMessage::ShardReply(shard)) => {
+                // TODO: Ensure that `shard.destination` is the sender of this message. Otherwise
+                // a bad batch creator may send us junk shards impersonating other nodes, and
+                // we won't be able to reconstruct the batch.
+
+                self.tx_shard
+                    .send(shard)
+                    .await
+                    .expect("Failed to send shard");
+            }
+            Ok(MempoolMessage::CodedBatch(batch)) => self
+                .tx_batch
+                .send((batch, serialized.to_vec()))
+                .await
+                .expect("Failed to send batch"),
             Err(e) => warn!("Serialization error: {}", e),
         }
         Ok(())

@@ -62,7 +62,7 @@ async fn make_batch() {
     let message: MempoolMessage = bincode::deserialize(&stored.unwrap()).unwrap();
     match message {
         MempoolMessage::CodedBatch(mut x) => {
-            x.expand(&committee);
+            x.expand(&committee).unwrap();
             let serialized_root = x.commit().get_root().serialize();
             assert_eq!(root.to_vec(), serialized_root)
         }

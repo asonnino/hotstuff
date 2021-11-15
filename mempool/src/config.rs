@@ -10,9 +10,9 @@ pub struct Parameters {
     /// The delay after which the synchronizer retries to send sync requests.
     /// Denominated in ms.
     pub sync_retry_delay: u64,
-    /// Determine with how many nodes to sync when re-trying to send
-    /// sync-request. These nodes are picked at random from the committee.
-    pub sync_retry_nodes: usize,
+    /// Determine with how many nodes to sync when trying to send sync-request.
+    /// These nodes are picked at random from the committee.
+    pub sync_nodes: usize,
     /// The preferred batch size. The workers seal a batch of transactions when
     /// it reaches this size. Denominated in bytes.
     pub batch_size: usize,
@@ -26,7 +26,7 @@ impl Default for Parameters {
         Self {
             gc_depth: 50,
             sync_retry_delay: 5_000,
-            sync_retry_nodes: 3,
+            sync_nodes: 3,
             batch_size: 500_000,
             max_batch_delay: 100,
         }
@@ -38,7 +38,7 @@ impl Parameters {
         // NOTE: These log entries are used to compute performance.
         info!("Garbage collection depth set to {} rounds", self.gc_depth);
         info!("Sync retry delay set to {} ms", self.sync_retry_delay);
-        info!("Sync retry nodes set to {} nodes", self.sync_retry_nodes);
+        info!("Sync retry nodes set to {} nodes", self.sync_nodes);
         info!("Batch size set to {} B", self.batch_size);
         info!("Max batch delay set to {} ms", self.max_batch_delay);
     }
@@ -79,6 +79,11 @@ impl Committee {
                 .collect(),
             epoch,
         }
+    }
+
+    /// Return the committee size.
+    pub fn size(&self) -> usize {
+        self.authorities.len()
     }
 
     /// Return the stake of a specific authority.

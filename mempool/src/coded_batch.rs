@@ -22,7 +22,7 @@ use std::convert::TryInto as _;
 pub mod coded_batch_tests;
 
 /// Represents an erasure-coded shard, generated from a batch of transactions.
-type Shard = Vec<u8>;
+pub type Shard = Vec<u8>;
 
 /// Convenient shortcut representing a Merkle tree.
 type Tree = SparseMerkleTree<MTreeNodeSmt<blake3::Hasher>>;
@@ -118,13 +118,12 @@ impl CodedBatch {
     }
 
     /// Expand the coded batch by re-creating the parity shards.
-    pub fn expand(&mut self, committee: &Committee) {
+    pub fn expand(&mut self, committee: &Committee) -> MempoolResult<()> {
         let (_, parity_shards) = committee.shards();
         let mut coded_shards: Vec<_> = self.shards.iter().cloned().map(Some).collect();
         coded_shards.extend(vec![None; parity_shards]);
-        self.shards = Self::reconstruct(coded_shards, committee)
-            .expect("Failed to expand coded batch")
-            .shards;
+        self.shards = Self::reconstruct(coded_shards, committee)?.shards;
+        Ok(())
     }
 }
 

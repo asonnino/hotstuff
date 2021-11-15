@@ -85,7 +85,7 @@ fn compress_coded_batch() {
     assert_eq!(coded_batch.shards.len(), data_shards);
 
     // Re-expand the batch and verify that we get the original.
-    coded_batch.expand(&committee());
+    coded_batch.expand(&committee()).unwrap();
     assert_eq!(coded_batch.shards, original_shards);
 }
 

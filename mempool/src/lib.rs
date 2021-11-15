@@ -1,19 +1,21 @@
+mod aggregator;
 mod batch_maker;
+mod certificate_verifier;
 mod coded_batch;
 mod config;
 mod error;
-//mod helper;
+mod helper;
 mod mempool;
+mod reconstructor;
+mod synchronizer;
 mod voter;
-//mod synchronizer;
-mod aggregator;
-mod certificate_verifier;
 
 #[cfg(test)]
 #[path = "tests/common.rs"]
 mod common;
 
 pub use crate::{
+    aggregator::BatchCertificate,
     config::{Committee, Parameters},
-    mempool::{ConsensusMempoolMessage, Mempool},
+    mempool::Mempool,
 };

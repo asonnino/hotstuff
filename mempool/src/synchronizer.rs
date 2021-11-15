@@ -1,19 +1,17 @@
-use crate::{
-    config::Committee,
-    mempool::{ConsensusMempoolMessage, MempoolMessage, Round},
-};
+use crate::{aggregator::BatchCertificate, config::Committee, mempool::MempoolMessage};
 use bytes::Bytes;
 use crypto::{Digest, PublicKey};
 use futures::stream::{futures_unordered::FuturesUnordered, StreamExt as _};
-use log::{debug, error};
+use log::debug;
 use network::SimpleSender;
+use rand::Rng as _;
 use std::{
     collections::HashMap,
     time::{SystemTime, UNIX_EPOCH},
 };
-use store::{Store, StoreError};
+use store::Store;
 use tokio::{
-    sync::mpsc::{channel, Receiver, Sender},
+    sync::mpsc::{Receiver, Sender},
     time::{sleep, Duration, Instant},
 };
 
@@ -32,23 +30,20 @@ pub struct Synchronizer {
     committee: Committee,
     // The persistent storage.
     store: Store,
-    /// The depth of the garbage collection.
-    gc_depth: Round,
     /// The delay to wait before re-trying to send sync requests.
     sync_retry_delay: u64,
-    /// Determine with how many nodes to sync when re-trying to send sync-requests. These nodes
-    /// are picked at random from the committee.
-    sync_retry_nodes: usize,
-    /// Input channel to receive the commands from the consensus.
-    rx_message: Receiver<ConsensusMempoolMessage>,
+    /// Determine with how many nodes to sync when requesting coded batches.
+    sync_nodes: usize,
+    /// Input channel to receive the certificates from the consensus.
+    rx_certificate: Receiver<BatchCertificate>,
+    /// Inform the `Reconstructor` of the missing batches.
+    tx_missing: Sender<Digest>,
     /// A network sender to send requests to the other mempools.
     network: SimpleSender,
-    /// Loosely keep track of the consensus's round number (only used for cleanup).
-    round: Round,
     /// Keeps the digests (of batches) that are waiting to be processed by the consensus. Their
     /// processing will resume when we get the missing batches in the store or we no longer need them.
     /// It also keeps the round number and a timestamp (`u128`) of each request we sent.
-    pending: HashMap<Digest, (Round, Sender<()>, u128)>,
+    pending: HashMap<Digest, u128>,
 }
 
 impl Synchronizer {
@@ -57,22 +52,21 @@ impl Synchronizer {
         name: PublicKey,
         committee: Committee,
         store: Store,
-        gc_depth: Round,
         sync_retry_delay: u64,
-        sync_retry_nodes: usize,
-        rx_message: Receiver<ConsensusMempoolMessage>,
+        sync_nodes: usize,
+        rx_certificate: Receiver<BatchCertificate>,
+        tx_missing: Sender<Digest>,
     ) {
         tokio::spawn(async move {
             Self {
                 name,
                 committee,
                 store,
-                gc_depth,
                 sync_retry_delay,
-                sync_retry_nodes,
-                rx_message,
+                sync_nodes,
+                rx_certificate,
+                tx_missing,
                 network: SimpleSender::new(),
-                round: Round::default(),
                 pending: HashMap::new(),
             }
             .run()
@@ -82,18 +76,38 @@ impl Synchronizer {
 
     /// Helper function. It waits for a batch to become available in the storage
     /// and then delivers its digest.
-    async fn waiter(
-        missing: Digest,
-        mut store: Store,
-        deliver: Digest,
-        mut handler: Receiver<()>,
-    ) -> Result<Option<Digest>, StoreError> {
-        tokio::select! {
-            result = store.notify_read(missing.to_vec()) => {
-                result.map(|_| Some(deliver))
-            }
-            _ = handler.recv() => Ok(None),
-        }
+    async fn waiter(missing: Digest, mut store: Store) -> Digest {
+        store
+            .notify_read(missing.to_vec())
+            .await
+            .expect("Failed to read store");
+        missing
+    }
+
+    async fn sync(&mut self, missing: Digest) {
+        let coin = rand::thread_rng().gen_range(0, self.committee.size());
+
+        let (message, nodes) = match coin < self.sync_nodes {
+            true => (
+                MempoolMessage::ShardRequest(missing, self.name),
+                self.committee.size(),
+            ),
+            false => (
+                MempoolMessage::BatchRequest(missing, self.name),
+                self.sync_nodes,
+            ),
+        };
+
+        let addresses = self
+            .committee
+            .broadcast_addresses(&self.name)
+            .iter()
+            .map(|(_, address)| *address)
+            .collect();
+        let serialized = bincode::serialize(&message).expect("Failed to serialize our own message");
+        self.network
+            .lucky_broadcast(addresses, Bytes::from(serialized), nodes)
+            .await;
     }
 
     /// Main loop listening to the consensus' messages.
@@ -106,65 +120,45 @@ impl Synchronizer {
         loop {
             tokio::select! {
                 // Handle consensus' messages.
-                Some(message) = self.rx_message.recv() => match message {
-                    ConsensusMempoolMessage::Synchronize(digests, target) => {
-                        let now = SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .expect("Failed to measure time")
-                            .as_millis();
+                Some(certificate) = self.rx_certificate.recv() => {
+                    let digest = certificate.root.clone();
 
-                        let mut missing = Vec::new();
-                        for digest in digests {
-                            // Ensure we do not send twice the same sync request.
-                            if self.pending.contains_key(&digest) {
-                                continue;
-                            }
-
-                            // Ensure we don't already have the coded batch.
-                            if self.store.read(digest.to_vec()).await.expect("Failed to read store").is_some() {
-                                continue;
-                            }
-
-                            // Register the digest as missing.
-                            missing.push(digest.clone());
-                            debug!("Requesting sync for batch {}", digest);
-
-                            // Add the digest to the waiter.
-                            let deliver = digest.clone();
-                            let (tx_cancel, rx_cancel) = channel(1);
-                            let fut = Self::waiter(digest.clone(), self.store.clone(), deliver, rx_cancel);
-                            waiting.push(fut);
-                            self.pending.insert(digest, (self.round, tx_cancel, now));
-                        }
-
-                        // Send sync request to a single node. If this fails, we will send it
-                        // to other nodes when a timer times out.
-                        let address = match self.committee.mempool_address(&target) {
-                            Some(address) => address,
-                            None => {
-                                error!("Consensus asked us to sync with an unknown node: {}", target);
-                                continue;
-                            }
-                        };
-                        let message = MempoolMessage::BatchRequest(missing, self.name);
-                        let serialized = bincode::serialize(&message).expect("Failed to serialize our own message");
-                        self.network.send(address, Bytes::from(serialized)).await;
-                    },
-                    ConsensusMempoolMessage::Cleanup(_round) => {
-                        // TODO: Nothing to do, remove this message.
+                    // Ensure we do not send twice the same sync request.
+                    if self.pending.contains_key(&digest) {
+                        continue;
                     }
+
+                    // Ensure we don't already have the coded batch.
+                    if self
+                        .store
+                        .read(digest.to_vec())
+                        .await
+                        .expect("Failed to read store")
+                        .is_some()
+                    {
+                        continue;
+                    }
+
+                    // Register the missing root.
+                    let now = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .expect("Failed to measure time")
+                        .as_millis();
+                    let fut = Self::waiter(digest.clone(), self.store.clone());
+                    waiting.push(fut);
+                    self.pending.insert(digest.clone(), now);
+
+                    // Notify the reconstructor task about this missing batch.
+                    self.tx_missing.send(digest.clone()).await.expect("Failed to send root");
+
+                    // Try to sync with other nodes
+                    self.sync(digest).await;
                 },
 
                 // Stream out the futures of the `FuturesUnordered` that completed.
-                Some(result) = waiting.next() => match result {
-                    Ok(Some(digest)) => {
-                        // We got the batch, remove it from the pending list.
-                        self.pending.remove(&digest);
-                    },
-                    Ok(None) => {
-                        // The sync request for this batch has been canceled.
-                    },
-                    Err(e) => error!("{}", e)
+                Some(digest) = waiting.next() =>{
+                    // We got the batch, remove it from the pending list.
+                    self.pending.remove(&digest);
                 },
 
                 // Triggers on timer's expiration.
@@ -178,23 +172,14 @@ impl Synchronizer {
                         .as_millis();
 
                     let mut retry = Vec::new();
-                    for (digest, (_, _, timestamp)) in &self.pending {
+                    for (digest, timestamp) in &self.pending {
                         if timestamp + (self.sync_retry_delay as u128) < now {
                             debug!("Requesting sync for batch {} (retry)", digest);
                             retry.push(digest.clone());
                         }
                     }
-                    if !retry.is_empty() {
-                        let addresses = self.committee
-                            .broadcast_addresses(&self.name)
-                            .iter()
-                            .map(|(_, address)| *address)
-                            .collect();
-                        let message = MempoolMessage::BatchRequest(retry, self.name);
-                        let serialized = bincode::serialize(&message).expect("Failed to serialize our own message");
-                        self.network
-                            .lucky_broadcast(addresses, Bytes::from(serialized), self.sync_retry_nodes)
-                            .await;
+                    for digest in retry {
+                        self.sync(digest).await;
                     }
 
                     // Reschedule the timer.

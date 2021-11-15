@@ -193,6 +193,7 @@ impl NodesVoter {
                     let map = self.pending.entry(shard.author).or_insert_with(HashMap::new);
                     if map.len() >= MAX_PENDING_VOTES {
                         // TODO: Remove the oldest handler rather than a random one.
+                        // TODO: Keep separate accounting per node.
                         let key = map.keys().next().unwrap().clone();
                         map.retain(|x, _| x != &key);
                     }
