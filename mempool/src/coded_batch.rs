@@ -57,7 +57,6 @@ impl CodedBatch {
 
         // Assemble all shards and encode them.
         let mut shards: Vec<Shard> = batch
-            .clone()
             .into_iter()
             .flatten()
             .chain(filler.into_iter())
@@ -88,7 +87,7 @@ impl CodedBatch {
         decoder.reconstruct(&mut coded_shards)?;
 
         // Ensure the reconstruction succeeded.
-        let result: Vec<_> = coded_shards.into_iter().filter_map(|x| x).collect();
+        let result: Vec<_> = coded_shards.into_iter().flatten().collect();
         ensure!(decoder.verify(&result)?, MempoolError::MalformedCodedBatch);
         Ok(Self { shards: result })
     }
@@ -160,7 +159,7 @@ impl AuthenticatedShard {
 
         // Construct the Merkle proof.
         let index_list = vec![TreeIndex::from_u64(tree.get_height(), destination as u64)];
-        let proof = Proof::generate_inclusion_proof(&tree, &index_list)
+        let proof = Proof::generate_inclusion_proof(tree, &index_list)
             .expect("Failed to generate merkle proof");
 
         Self {
@@ -192,7 +191,7 @@ impl AuthenticatedShard {
 
         // Build the leaf of the Merkle Tree.
         let index = committee
-            .index(&name)
+            .index(name)
             .expect("Our public key is not in the committee");
 
         let mut hasher = blake3::Hasher::new();

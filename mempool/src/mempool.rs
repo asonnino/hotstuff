@@ -123,6 +123,7 @@ impl Mempool {
     }
 
     /// Spawn all tasks responsible to handle clients transactions.
+    #[allow(clippy::too_many_arguments)]
     fn handle_clients_transactions(
         name: PublicKey,
         committee: Committee,
@@ -238,14 +239,7 @@ impl Mempool {
             /* rx_request */ rx_helper,
         );
 
-        Reconstructor::spawn(
-            name,
-            committee.clone(),
-            store,
-            rx_missing,
-            rx_shard,
-            rx_batch,
-        );
+        Reconstructor::spawn(name, committee, store, rx_missing, rx_shard, rx_batch);
 
         info!("Mempool listening to mempool messages on {}", address);
     }

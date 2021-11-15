@@ -62,6 +62,7 @@ pub struct BatchMaker {
 }
 
 impl BatchMaker {
+    #[allow(clippy::too_many_arguments)]
     pub fn spawn(
         name: PublicKey,
         committee: Committee,
