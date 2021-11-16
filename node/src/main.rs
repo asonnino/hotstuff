@@ -56,7 +56,7 @@ async fn main() {
     match matches.subcommand() {
         ("keys", Some(subm)) => {
             let filename = subm.value_of("filename").unwrap();
-            if let Err(e) = Node::print_key_file(&filename) {
+            if let Err(e) = Node::print_key_file(filename) {
                 error!("{}", e);
             }
         }

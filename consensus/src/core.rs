@@ -112,7 +112,7 @@ impl Core {
         // Ensure we won't vote for contradicting blocks.
         self.increase_last_voted_round(block.round);
         // TODO [issue #15]: Write to storage preferred_round and last_voted_round.
-        Some(Vote::new(&block, self.name, self.signature_service.clone()).await)
+        Some(Vote::new(block, self.name, self.signature_service.clone()).await)
     }
 
     async fn commit(&mut self, block: Block) -> ConsensusResult<()> {
@@ -327,7 +327,7 @@ impl Core {
         // Store the block only if we have already processed all its ancestors.
         self.store_block(block).await;
 
-        self.cleanup_proposer(&b0, &b1, &block).await;
+        self.cleanup_proposer(&b0, &b1, block).await;
 
         // Check if we can commit the head of the 2-chain.
         // Note that we commit blocks only if we have all its ancestors.

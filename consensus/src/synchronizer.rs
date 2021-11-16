@@ -78,7 +78,7 @@ impl Synchronizer {
                     Some(result) = waiting.next() => match result {
                         Ok(block) => {
                             let _ = pending.remove(&block.digest());
-                            let _ = requests.remove(&block.parent());
+                            let _ = requests.remove(block.parent());
                             if let Err(e) = tx_loopback.send(block).await {
                                 panic!("Failed to send message through core channel: {}", e);
                             }
