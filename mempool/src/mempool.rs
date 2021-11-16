@@ -54,7 +54,7 @@ impl Mempool {
         // The persistent storage.
         store: Store,
         // Receives messages from consensus.
-        rx_consensus: Receiver<BatchCertificate>,
+        rx_consensus: Receiver<Vec<Digest>>,
         // Sends messages to consensus.
         tx_consensus: Sender<BatchCertificate>,
     ) {
@@ -108,7 +108,7 @@ impl Mempool {
         committee: Committee,
         store: Store,
         parameters: &Parameters,
-        rx_consensus: Receiver<BatchCertificate>,
+        rx_consensus: Receiver<Vec<Digest>>,
         tx_missing: Sender<Digest>,
     ) {
         Synchronizer::spawn(

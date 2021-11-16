@@ -1,4 +1,4 @@
-use crate::{aggregator::BatchCertificate, config::Committee, mempool::MempoolMessage};
+use crate::{config::Committee, mempool::MempoolMessage};
 use bytes::Bytes;
 use crypto::{Digest, PublicKey};
 use futures::stream::{futures_unordered::FuturesUnordered, StreamExt as _};
@@ -35,8 +35,9 @@ pub struct Synchronizer {
     sync_retry_delay: u64,
     /// Determine with how many nodes to sync when requesting coded batches.
     sync_nodes: usize,
-    /// Input channel to receive the certificates from the consensus.
-    rx_certificate: Receiver<BatchCertificate>,
+    /// Input channel to receive the digests of certificates from the consensus. We need to sync
+    /// the batches of behind these digests.
+    rx_digest: Receiver<Vec<Digest>>,
     /// Inform the `Reconstructor` of the missing batches.
     tx_missing: Sender<Digest>,
     /// A network sender to send requests to the other mempools.
@@ -55,7 +56,7 @@ impl Synchronizer {
         store: Store,
         sync_retry_delay: u64,
         sync_nodes: usize,
-        rx_certificate: Receiver<BatchCertificate>,
+        rx_digest: Receiver<Vec<Digest>>,
         tx_missing: Sender<Digest>,
     ) {
         tokio::spawn(async move {
@@ -65,7 +66,7 @@ impl Synchronizer {
                 store,
                 sync_retry_delay,
                 sync_nodes,
-                rx_certificate,
+                rx_digest,
                 tx_missing,
                 network: SimpleSender::new(),
                 pending: HashMap::new(),
@@ -127,39 +128,39 @@ impl Synchronizer {
         loop {
             tokio::select! {
                 // Handle consensus' messages.
-                Some(certificate) = self.rx_certificate.recv() => {
-                    let digest = certificate.root.clone();
+                Some(digests) = self.rx_digest.recv() => {
+                    for digest in digests {
+                        // Ensure we do not send twice the same sync request.
+                        if self.pending.contains_key(&digest) {
+                            continue;
+                        }
 
-                    // Ensure we do not send twice the same sync request.
-                    if self.pending.contains_key(&digest) {
-                        continue;
+                        // Ensure we don't already have the coded batch.
+                        if self
+                            .store
+                            .read(digest.to_vec())
+                            .await
+                            .expect("Failed to read store")
+                            .is_some()
+                        {
+                            continue;
+                        }
+
+                        // Register the missing root.
+                        let now = SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .expect("Failed to measure time")
+                            .as_millis();
+                        let fut = Self::waiter(digest.clone(), self.store.clone());
+                        waiting.push(fut);
+                        self.pending.insert(digest.clone(), now);
+
+                        // Notify the reconstructor task about this missing batch.
+                        self.tx_missing.send(digest.clone()).await.expect("Failed to send root");
+
+                        // Try to sync with other nodes
+                        self.sync(digest).await;
                     }
-
-                    // Ensure we don't already have the coded batch.
-                    if self
-                        .store
-                        .read(digest.to_vec())
-                        .await
-                        .expect("Failed to read store")
-                        .is_some()
-                    {
-                        continue;
-                    }
-
-                    // Register the missing root.
-                    let now = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .expect("Failed to measure time")
-                        .as_millis();
-                    let fut = Self::waiter(digest.clone(), self.store.clone());
-                    waiting.push(fut);
-                    self.pending.insert(digest.clone(), now);
-
-                    // Notify the reconstructor task about this missing batch.
-                    self.tx_missing.send(digest.clone()).await.expect("Failed to send root");
-
-                    // Try to sync with other nodes
-                    self.sync(digest).await;
                 },
 
                 // Stream out the futures of the `FuturesUnordered` that completed.

@@ -39,12 +39,7 @@ async fn sync_shards() {
 
     // Send a sync request.
     let missing = Digest([0; 32]); // Ensure the synchronizer requests shards.
-    let certificate = BatchCertificate {
-        root: missing.clone(),
-        author: PublicKey::default(), // Not used.
-        votes: Vec::default(),        // Not used
-    };
-    tx_certificate.send(certificate).await.unwrap();
+    tx_certificate.send(vec![missing.clone()]).await.unwrap();
 
     // Ensure the synchronizer register the missing root.
     let digest = rx_missing.recv().await.unwrap();
@@ -95,12 +90,7 @@ async fn sync_batch() {
 
     // Send a sync request.
     let missing = Digest([1; 32]); // Ensure the synchronizer requests the batch.
-    let certificate = BatchCertificate {
-        root: missing.clone(),
-        author: PublicKey::default(), // Not used.
-        votes: Vec::default(),        // Not used
-    };
-    tx_certificate.send(certificate).await.unwrap();
+    tx_certificate.send(vec![missing.clone()]).await.unwrap();
 
     // Ensure the synchronizer register the missing root.
     let digest = rx_missing.recv().await.unwrap();
