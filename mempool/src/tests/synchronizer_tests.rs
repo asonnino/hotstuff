@@ -1,18 +1,20 @@
 use super::*;
-use crate::common::{batch_digest, committee_with_base_port, keys, listener};
+use crate::common::{committee_with_base_port, keys, listener};
+use futures::future::try_join_all;
 use std::fs;
 use tokio::sync::mpsc::channel;
 
 #[tokio::test]
-async fn synchronize() {
-    let (tx_message, rx_message) = channel(1);
+async fn sync_shards() {
+    let (tx_certificate, rx_certificate) = channel(1);
+    let (tx_missing, mut rx_missing) = channel(1);
 
     let mut keys = keys();
     let (name, _) = keys.pop().unwrap();
-    let committee = committee_with_base_port(9_000);
+    let committee = committee_with_base_port(7_000);
 
     // Create a new test store.
-    let path = ".db_test_synchronize";
+    let path = ".db_test_sync_shards";
     let _ = fs::remove_dir_all(path);
     let store = Store::new(path).unwrap();
 
@@ -21,25 +23,95 @@ async fn synchronize() {
         name,
         committee.clone(),
         store.clone(),
-        /* gc_depth */ 50, // Not used in this test.
         /* sync_retry_delay */ 1_000_000, // Ensure it is not triggered.
-        /* sync_retry_nodes */ 3, // Not used in this test.
-        rx_message,
+        /* sync_nodes */ 3,
+        rx_certificate,
+        tx_missing,
     );
 
-    // Spawn a listener to receive our batch requests.
-    let (target, _) = keys.pop().unwrap();
-    let address = committee.mempool_address(&target).unwrap();
-    let missing = vec![batch_digest()];
-    let message = MempoolMessage::BatchRequest(missing.clone(), name);
-    let expected = bincode::serialize(&message).unwrap();
-    let handle = listener(address);
+    // Spawn the listeners to receive our batch requests.
+    let handles: Vec<_> = committee
+        .broadcast_addresses(&name)
+        .iter()
+        .map(|(_, address)| listener(*address))
+        .collect();
+    tokio::task::yield_now().await;
 
     // Send a sync request.
-    let message = ConsensusMempoolMessage::Synchronize(missing, target);
-    tx_message.send(message).await.unwrap();
+    let missing = Digest([0; 32]); // Ensure the synchronizer requests shards.
+    let certificate = BatchCertificate {
+        root: missing.clone(),
+        author: PublicKey::default(), // Not used.
+        votes: Vec::default(),        // Not used
+    };
+    tx_certificate.send(certificate).await.unwrap();
 
-    // Ensure the target receives the sync request.
-    let received = handle.await.unwrap();
-    assert_eq!(received, expected);
+    // Ensure the synchronizer register the missing root.
+    let digest = rx_missing.recv().await.unwrap();
+    assert_eq!(digest, missing);
+
+    // Ensure the other nodes receive the sync request.
+    let ok = try_join_all(handles).await.unwrap().iter().all(|x| {
+        match bincode::deserialize(x).unwrap() {
+            MempoolMessage::ShardRequest(digest, origin) => digest == missing && origin == name,
+            _ => false,
+        }
+    });
+    assert!(ok);
+}
+
+#[tokio::test]
+async fn sync_batch() {
+    let (tx_certificate, rx_certificate) = channel(1);
+    let (tx_missing, mut rx_missing) = channel(1);
+
+    let mut keys = keys();
+    let (name, _) = keys.pop().unwrap();
+    let committee = committee_with_base_port(7_100);
+
+    // Create a new test store.
+    let path = ".db_test_sync_batch";
+    let _ = fs::remove_dir_all(path);
+    let store = Store::new(path).unwrap();
+
+    // Spawn a `Synchronizer` instance.
+    Synchronizer::spawn(
+        name,
+        committee.clone(),
+        store.clone(),
+        /* sync_retry_delay */ 1_000_000, // Ensure it is not triggered.
+        /* sync_nodes */ committee.size(),
+        rx_certificate,
+        tx_missing,
+    );
+
+    // Spawn the listeners to receive our batch requests.
+    let handles: Vec<_> = committee
+        .broadcast_addresses(&name)
+        .iter()
+        .map(|(_, address)| listener(*address))
+        .collect();
+    tokio::task::yield_now().await;
+
+    // Send a sync request.
+    let missing = Digest([1; 32]); // Ensure the synchronizer requests the batch.
+    let certificate = BatchCertificate {
+        root: missing.clone(),
+        author: PublicKey::default(), // Not used.
+        votes: Vec::default(),        // Not used
+    };
+    tx_certificate.send(certificate).await.unwrap();
+
+    // Ensure the synchronizer register the missing root.
+    let digest = rx_missing.recv().await.unwrap();
+    assert_eq!(digest, missing);
+
+    // Ensure the other nodes receive the sync request.
+    let ok = try_join_all(handles).await.unwrap().iter().all(|x| {
+        match bincode::deserialize(x).unwrap() {
+            MempoolMessage::BatchRequest(digest, origin) => digest == missing && origin == name,
+            _ => false,
+        }
+    });
+    assert!(ok);
 }

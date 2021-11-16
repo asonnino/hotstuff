@@ -4,6 +4,7 @@ use crypto::{Digest, PublicKey};
 use futures::stream::{futures_unordered::FuturesUnordered, StreamExt as _};
 use log::debug;
 use network::SimpleSender;
+#[cfg(not(test))]
 use rand::Rng as _;
 use std::{
     collections::HashMap,
@@ -15,9 +16,9 @@ use tokio::{
     time::{sleep, Duration, Instant},
 };
 
-//#[cfg(test)]
-//#[path = "tests/synchronizer_tests.rs"]
-//pub mod synchronizer_tests;
+#[cfg(test)]
+#[path = "tests/synchronizer_tests.rs"]
+pub mod synchronizer_tests;
 
 /// Resolution of the timer managing retrials of sync requests (in ms).
 const TIMER_RESOLUTION: u64 = 1_000;
@@ -40,9 +41,9 @@ pub struct Synchronizer {
     tx_missing: Sender<Digest>,
     /// A network sender to send requests to the other mempools.
     network: SimpleSender,
-    /// Keeps the digests (of batches) that are waiting to be processed by the consensus. Their
-    /// processing will resume when we get the missing batches in the store or we no longer need them.
-    /// It also keeps the round number and a timestamp (`u128`) of each request we sent.
+    /// Keeps the root (of batches) that are waiting to be processed by the consensus. Their
+    /// processing will resume when we get the missing batches in the store. It also keeps the
+    /// round number and a timestamp (`u128`) of each request we sent.
     pending: HashMap<Digest, u128>,
 }
 
@@ -85,7 +86,13 @@ impl Synchronizer {
     }
 
     async fn sync(&mut self, missing: Digest) {
+        #[cfg(not(test))]
         let coin = rand::thread_rng().gen_range(0, self.committee.size());
+        #[cfg(test)]
+        let coin = match missing.to_vec()[0] % 2 == 0 {
+            true => 0,
+            false => self.committee.size(),
+        };
 
         let (message, nodes) = match coin < self.sync_nodes {
             true => (
@@ -163,19 +170,17 @@ impl Synchronizer {
 
                 // Triggers on timer's expiration.
                 () = &mut timer => {
-                    // We optimistically sent sync requests to a single node. If this timer triggers,
-                    // it means we were wrong to trust it. We are done waiting for a reply and we now
-                    // broadcast the request to a bunch of other nodes (selected at random).
                     let now = SystemTime::now()
                         .duration_since(UNIX_EPOCH)
                         .expect("Failed to measure time")
                         .as_millis();
 
                     let mut retry = Vec::new();
-                    for (digest, timestamp) in &self.pending {
-                        if timestamp + (self.sync_retry_delay as u128) < now {
+                    for (digest, timestamp) in &mut self.pending {
+                        if *timestamp + (self.sync_retry_delay as u128) < now {
                             debug!("Requesting sync for batch {} (retry)", digest);
                             retry.push(digest.clone());
+                            *timestamp = now;
                         }
                     }
                     for digest in retry {
