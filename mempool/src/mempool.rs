@@ -239,7 +239,7 @@ impl Mempool {
             /* rx_request */ rx_helper,
         );
 
-        Reconstructor::spawn(name, committee, store, rx_missing, rx_shard, rx_batch);
+        Reconstructor::spawn(committee, store, rx_missing, rx_shard, rx_batch);
 
         info!("Mempool listening to mempool messages on {}", address);
     }

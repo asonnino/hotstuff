@@ -1,6 +1,5 @@
 use super::*;
 use crate::common::{committee, committee_with_base_port, keys, listener, transaction};
-use futures::future::try_join_all;
 use std::fs;
 use tokio::sync::mpsc::channel;
 
@@ -37,8 +36,8 @@ async fn make_batch() {
     // Spawn the receiver that will receive coded shards.
     let handles: Vec<_> = committee
         .broadcast_addresses(&name)
-        .iter()
-        .map(|(_, x)| listener(*x))
+        .into_iter()
+        .map(|(name, x)| (name, listener(x)))
         .collect();
     tokio::task::yield_now().await;
 
@@ -54,7 +53,17 @@ async fn make_batch() {
     assert_eq!(root, shard.root);
 
     // Ensure everybody else received their authenticated shard.
-    assert!(try_join_all(handles).await.is_ok());
+    let mut ok = true;
+    for (name, handle) in handles {
+        let bytes = handle.await.unwrap();
+        match bincode::deserialize(&bytes).unwrap() {
+            MempoolMessage::AuthenticatedShard(shard) => {
+                ok &= shard.verify(&name, &committee).is_ok()
+            }
+            _ => panic!("Unexpected protocol message"),
+        }
+    }
+    assert!(ok);
 
     // Ensure we correctly stored the coded batch.
     let stored = store.read(root.to_vec()).await.unwrap();

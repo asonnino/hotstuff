@@ -165,7 +165,7 @@ impl BatchMaker {
         let root = Digest(serialized_root[0..32].try_into().unwrap());
 
         #[cfg(feature = "benchmark")]
-        Self::print_benchmark_info(&batch_clone, batch_size_clone, root);
+        Self::print_benchmark_info(&batch_clone, batch_size_clone, root.clone());
 
         // Now that we have the Merkle root, store the coded batch.
         let mut compressed_batch = coded_batch.clone();

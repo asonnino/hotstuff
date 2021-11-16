@@ -3,7 +3,7 @@ use crate::{
     config::Committee,
     mempool::MempoolMessage,
 };
-use crypto::{Digest, PublicKey};
+use crypto::Digest;
 use log::warn;
 use smtree::traits::Serializable as _;
 use std::{
@@ -13,12 +13,14 @@ use std::{
 use store::Store;
 use tokio::sync::mpsc::Receiver;
 
+#[cfg(test)]
+#[path = "tests/reconstructor_tests.rs"]
+pub mod reconstructor_tests;
+
 /// Indicates a serialized coded batch.
 pub type SerializedCodedBatch = Vec<u8>;
 
 pub struct Reconstructor {
-    /// The public key of this authority.
-    name: PublicKey,
     /// The committee information.
     committee: Committee,
     /// The persistent storage.
@@ -37,7 +39,6 @@ pub struct Reconstructor {
 
 impl Reconstructor {
     pub fn spawn(
-        name: PublicKey,
         committee: Committee,
         store: Store,
         rx_missing: Receiver<Digest>,
@@ -46,7 +47,6 @@ impl Reconstructor {
     ) {
         tokio::spawn(async move {
             Self {
-                name,
                 committee,
                 store,
                 rx_missing,
@@ -67,7 +67,14 @@ impl Reconstructor {
                 }
                 Some(shard) = self.rx_shard.recv() => {
                     // Verify the shard.
-                    if let Err(e) = shard.verify(&self.name, &self.committee) {
+                    let destination = match self.committee.name(shard.destination) {
+                        Some(x) => x,
+                        None => {
+                            warn!("Invalid shard: Unknown destination node");
+                            continue;
+                        }
+                    };
+                    if let Err(e) = shard.verify(&destination, &self.committee) {
                         warn!("{}", e);
                         continue;
                     }
