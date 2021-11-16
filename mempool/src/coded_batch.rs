@@ -29,6 +29,7 @@ type Tree = SparseMerkleTree<MTreeNodeSmt<blake3::Hasher>>;
 
 /// An erasure-corrected transaction batch.
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct CodedBatch {
     /// All the data shards (not the parity shards) of the erasure-coded
     /// transactions batch.
@@ -142,6 +143,20 @@ pub struct AuthenticatedShard {
     pub author: PublicKey,
     pub signature: Signature,
 }
+
+#[cfg(test)]
+impl PartialEq for AuthenticatedShard {
+    fn eq(&self, other: &Self) -> bool {
+        self.shard == other.shard
+            && self.destination == other.destination
+            && self.proof == other.proof
+            && self.root == other.root
+            && self.author == other.author
+    }
+}
+
+#[cfg(test)]
+impl Eq for AuthenticatedShard {}
 
 impl AuthenticatedShard {
     /// Make a new authenticated batch shard from an encoded shard.

@@ -6,9 +6,9 @@ use network::SimpleSender;
 use store::Store;
 use tokio::sync::mpsc::Receiver;
 
-//#[cfg(test)]
-//#[path = "tests/helper_tests.rs"]
-//pub mod helper_tests;
+#[cfg(test)]
+#[path = "tests/helper_tests.rs"]
+pub mod helper_tests;
 
 /// A task dedicated to help other authorities by replying to their batch
 /// requests.
