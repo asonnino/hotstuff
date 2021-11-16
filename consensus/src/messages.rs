@@ -5,6 +5,7 @@ use crate::{
 };
 use crypto::{Digest, Hash, PublicKey, Signature, SignatureService};
 use ed25519_dalek::{Digest as _, Sha512};
+use mempool::BatchCertificate;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, convert::TryInto, fmt};
 
@@ -18,7 +19,7 @@ pub struct Block {
     pub tc: Option<TC>,
     pub author: PublicKey,
     pub round: Round,
-    pub payload: Vec<Digest>,
+    pub payload: Vec<BatchCertificate>,
     pub signature: Signature,
 }
 
@@ -28,7 +29,7 @@ impl Block {
         tc: Option<TC>,
         author: PublicKey,
         round: Round,
-        payload: Vec<Digest>,
+        payload: Vec<BatchCertificate>,
         mut signature_service: SignatureService,
     ) -> Self {
         let block = Self {
@@ -81,7 +82,7 @@ impl Hash for Block {
         hasher.update(self.author.0);
         hasher.update(self.round.to_le_bytes());
         for x in &self.payload {
-            hasher.update(x);
+            hasher.update(&x.root);
         }
         hasher.update(&self.qc.hash);
         Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
@@ -97,7 +98,7 @@ impl fmt::Debug for Block {
             self.author,
             self.round,
             self.qc,
-            self.payload.iter().map(|x| x.size()).sum::<usize>(),
+            self.payload.iter().count(),
         )
     }
 }

@@ -6,6 +6,7 @@ use crate::{
 use bytes::Bytes;
 use crypto::{generate_keypair, Digest, Hash as _, PublicKey, SecretKey, Signature};
 use futures::{sink::SinkExt as _, stream::StreamExt as _};
+use mempool::{BatchCertificate, Committee as MempoolCommittee};
 use rand::{rngs::StdRng, SeedableRng as _};
 use std::net::SocketAddr;
 use tokio::{net::TcpListener, task::JoinHandle};
@@ -43,12 +44,30 @@ pub fn committee_with_base_port(base_port: u16) -> Committee {
     committee
 }
 
+// Fixture
+pub fn mempool_committee() -> MempoolCommittee {
+    MempoolCommittee::new(
+        committee()
+            .authorities
+            .keys()
+            .enumerate()
+            .map(|(i, name)| {
+                let stake = 1;
+                let front = format!("127.0.0.1:{}", 100 + i).parse().unwrap();
+                let mempool = format!("127.0.0.1:{}", 300 + i).parse().unwrap();
+                (*name, stake, front, mempool)
+            })
+            .collect(),
+        /* epoch */ 100,
+    )
+}
+
 impl Block {
     pub fn new_from_key(
         qc: QC,
         author: PublicKey,
         round: Round,
-        payload: Vec<Digest>,
+        payload: Vec<BatchCertificate>,
         secret: &SecretKey,
     ) -> Self {
         let block = Block {

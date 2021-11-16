@@ -17,5 +17,6 @@ mod common;
 pub use crate::{
     aggregator::BatchCertificate,
     config::{Committee, Parameters},
+    error::MempoolError,
     mempool::Mempool,
 };

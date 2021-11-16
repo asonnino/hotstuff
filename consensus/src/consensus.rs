@@ -14,7 +14,7 @@ use bytes::Bytes;
 use crypto::{Digest, PublicKey, SignatureService};
 use futures::SinkExt as _;
 use log::info;
-use mempool::ConsensusMempoolMessage;
+use mempool::{BatchCertificate, Committee as MempoolCommittee};
 use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -47,11 +47,12 @@ impl Consensus {
     pub fn spawn(
         name: PublicKey,
         committee: Committee,
+        mempool_committee: MempoolCommittee,
         parameters: Parameters,
         signature_service: SignatureService,
         store: Store,
-        rx_mempool: Receiver<Digest>,
-        tx_mempool: Sender<ConsensusMempoolMessage>,
+        rx_mempool: Receiver<BatchCertificate>,
+        tx_mempool: Sender<Vec<Digest>>,
         tx_commit: Sender<Block>,
     ) {
         // NOTE: This log entry is used to compute performance.
@@ -84,7 +85,12 @@ impl Consensus {
         let leader_elector = LeaderElector::new(committee.clone());
 
         // Make the mempool driver.
-        let mempool_driver = MempoolDriver::new(store.clone(), tx_mempool, tx_loopback.clone());
+        let mempool_driver = MempoolDriver::new(
+            mempool_committee,
+            store.clone(),
+            tx_mempool,
+            tx_loopback.clone(),
+        );
 
         // Make the synchronizer.
         let synchronizer = Synchronizer::new(

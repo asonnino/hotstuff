@@ -28,8 +28,8 @@ async fn handle_clients_transactions() {
     Mempool::spawn(
         name,
         committee.clone(),
-        signature_service,
         parameters,
+        signature_service,
         store,
         rx_consensus_to_mempool,
         tx_mempool_to_consensus,

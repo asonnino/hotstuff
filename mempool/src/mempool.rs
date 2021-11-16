@@ -47,10 +47,10 @@ impl Mempool {
         name: PublicKey,
         // The committee information.
         committee: Committee,
-        // The service signing digests.
-        signature_service: SignatureService,
         // The configuration parameters.
         parameters: Parameters,
+        // The service signing digests.
+        signature_service: SignatureService,
         // The persistent storage.
         store: Store,
         // Receives messages from consensus.

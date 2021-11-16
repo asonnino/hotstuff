@@ -1,5 +1,6 @@
 use crate::consensus::Round;
 use crypto::{CryptoError, Digest, PublicKey};
+use mempool::MempoolError;
 use store::StoreError;
 use thiserror::Error;
 
@@ -37,6 +38,9 @@ pub enum ConsensusError {
 
     #[error("Invalid signature")]
     InvalidSignature(#[from] CryptoError),
+
+    #[error(transparent)]
+    MempoolError(#[from] MempoolError),
 
     #[error("Received more than one vote from {0}")]
     AuthorityReuse(PublicKey),

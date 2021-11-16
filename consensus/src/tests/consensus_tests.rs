@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    common::{committee_with_base_port, keys},
+    common::{committee_with_base_port, keys, mempool_committee},
     config::Parameters,
 };
 use crypto::SecretKey;
@@ -41,6 +41,7 @@ fn spawn_nodes(
                 Consensus::spawn(
                     name,
                     committee,
+                    mempool_committee(),
                     parameters,
                     signature_service,
                     store,

@@ -45,8 +45,9 @@ impl Node {
         // Make a new mempool.
         Mempool::spawn(
             name,
-            committee.mempool,
+            committee.mempool.clone(),
             parameters.mempool,
+            signature_service.clone(),
             store.clone(),
             rx_consensus_to_mempool,
             tx_mempool_to_consensus,
@@ -56,6 +57,7 @@ impl Node {
         Consensus::spawn(
             name,
             committee.consensus,
+            committee.mempool,
             parameters.consensus,
             signature_service,
             store,

@@ -4,9 +4,10 @@ use crate::{
     messages::{Block, QC, TC},
 };
 use bytes::Bytes;
-use crypto::{Digest, PublicKey, SignatureService};
+use crypto::{PublicKey, SignatureService};
 use futures::stream::{futures_unordered::FuturesUnordered, StreamExt as _};
 use log::{debug, info};
+use mempool::BatchCertificate;
 use network::{CancelHandler, ReliableSender};
 use std::collections::HashSet;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -14,17 +15,17 @@ use tokio::sync::mpsc::{Receiver, Sender};
 #[derive(Debug)]
 pub enum ProposerMessage {
     Make(Round, QC, Option<TC>),
-    Cleanup(Vec<Digest>),
+    Cleanup(Vec<BatchCertificate>),
 }
 
 pub struct Proposer {
     name: PublicKey,
     committee: Committee,
     signature_service: SignatureService,
-    rx_mempool: Receiver<Digest>,
+    rx_mempool: Receiver<BatchCertificate>,
     rx_message: Receiver<ProposerMessage>,
     tx_loopback: Sender<Block>,
-    buffer: HashSet<Digest>,
+    buffer: HashSet<BatchCertificate>,
     network: ReliableSender,
 }
 
@@ -33,7 +34,7 @@ impl Proposer {
         name: PublicKey,
         committee: Committee,
         signature_service: SignatureService,
-        rx_mempool: Receiver<Digest>,
+        rx_mempool: Receiver<BatchCertificate>,
         rx_message: Receiver<ProposerMessage>,
         tx_loopback: Sender<Block>,
     ) {
@@ -53,8 +54,7 @@ impl Proposer {
         });
     }
 
-    /// Helper function. It waits for a future to complete and then delivers a
-    /// value.
+    /// Helper function. It waits for a future to complete and then delivers a value.
     async fn waiter(wait_for: CancelHandler, deliver: Stake) -> Stake {
         let _ = wait_for.await;
         deliver

@@ -10,7 +10,10 @@ use crypto::{Digest, PublicKey, Signature};
 use log::warn;
 use network::SimpleSender;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::{Hash, Hasher},
+};
 use tokio::sync::mpsc::{Receiver, Sender};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -18,6 +21,19 @@ pub struct BatchCertificate {
     pub root: Digest,
     pub author: PublicKey,
     pub votes: Vec<(PublicKey, Signature)>,
+}
+
+impl PartialEq for BatchCertificate {
+    fn eq(&self, other: &Self) -> bool {
+        self.root == other.root
+    }
+}
+impl Eq for BatchCertificate {}
+
+impl Hash for BatchCertificate {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.root.hash(state);
+    }
 }
 
 impl BatchCertificate {

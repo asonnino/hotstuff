@@ -9,21 +9,23 @@ use futures::{
     stream::{futures_unordered::FuturesUnordered, StreamExt as _},
 };
 use log::error;
-use mempool::ConsensusMempoolMessage;
+use mempool::Committee as MempoolCommittee;
 use std::collections::HashMap;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 pub struct MempoolDriver {
+    committee: MempoolCommittee,
     store: Store,
-    tx_mempool: Sender<ConsensusMempoolMessage>,
+    tx_mempool: Sender<Vec<Digest>>,
     tx_payload_waiter: Sender<PayloadWaiterMessage>,
 }
 
 impl MempoolDriver {
     pub fn new(
+        committee: MempoolCommittee,
         store: Store,
-        tx_mempool: Sender<ConsensusMempoolMessage>,
+        tx_mempool: Sender<Vec<Digest>>,
         tx_loopback: Sender<Block>,
     ) -> Self {
         let (tx_payload_waiter, rx_payload_waiter) = channel(CHANNEL_CAPACITY);
@@ -33,6 +35,7 @@ impl MempoolDriver {
 
         // Returns the mempool driver.
         Self {
+            committee,
             store,
             tx_mempool,
             tx_payload_waiter,
@@ -42,8 +45,10 @@ impl MempoolDriver {
     pub async fn verify(&mut self, block: Block) -> ConsensusResult<bool> {
         let mut missing = Vec::new();
         for x in &block.payload {
-            if self.store.read(x.to_vec()).await?.is_none() {
-                missing.push(x.clone());
+            x.verify(&self.committee)?;
+
+            if self.store.read(x.root.to_vec()).await?.is_none() {
+                missing.push(x.root.clone());
             }
         }
 
@@ -51,9 +56,8 @@ impl MempoolDriver {
             return Ok(true);
         }
 
-        let message = ConsensusMempoolMessage::Synchronize(missing.clone(), block.author);
         self.tx_mempool
-            .send(message)
+            .send(missing.clone())
             .await
             .expect("Failed to send sync message");
 
@@ -66,12 +70,6 @@ impl MempoolDriver {
     }
 
     pub async fn cleanup(&mut self, round: Round) {
-        // Cleanup the mempool.
-        self.tx_mempool
-            .send(ConsensusMempoolMessage::Cleanup(round))
-            .await
-            .expect("Failed to send cleanup message");
-
         // Cleanup the payload waiter.
         self.tx_payload_waiter
             .send(PayloadWaiterMessage::Cleanup(round))
