@@ -78,7 +78,7 @@ impl Proposer {
             #[cfg(feature = "benchmark")]
             for x in &block.payload {
                 // NOTE: This log entry is used to compute performance.
-                info!("Created {} -> {:?}", block, x);
+                info!("Created {} -> {:?}", block, x.root);
             }
         }
         debug!("Created {:?}", block);
@@ -127,9 +127,10 @@ impl Proposer {
     async fn run(&mut self) {
         loop {
             tokio::select! {
-                Some(digest) = self.rx_mempool.recv() => {
+                Some(payload) = self.rx_mempool.recv() => {
                     //if self.buffer.len() < 155 {
-                        self.buffer.insert(digest);
+                        //debug!("GOT A CERT FROM MEMPOOL");
+                        self.buffer.insert(payload);
                     //}
                 },
                 Some(message) = self.rx_message.recv() => match message {

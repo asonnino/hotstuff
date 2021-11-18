@@ -10,7 +10,7 @@ from benchmark.utils import Print, BenchError, PathMaker
 
 
 class LocalBench:
-    BASE_PORT = 7000
+    BASE_PORT = 8000
 
     def __init__(self, bench_parameters_dict, node_parameters_dict):
         try:
@@ -48,7 +48,7 @@ class LocalBench:
             # Cleanup all files.
             cmd = f'{CommandMaker.clean_logs()} ; {CommandMaker.cleanup()}'
             subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
-            sleep(0.5) # Removing the store may take time.
+            sleep(0.5)  # Removing the store may take time.
 
             # Recompile the latest code.
             cmd = CommandMaker.compile().split()

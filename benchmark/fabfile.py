@@ -26,13 +26,13 @@ def local(ctx):
         'mempool': {
             'gc_depth': 50,
             'sync_retry_delay': 5_000,
-            'sync_retry_nodes': 3,
+            'sync_nodes': 3,
             'batch_size': 15_000,
             'max_batch_delay': 10
         }
     }
     try:
-        ret = LocalBench(bench_params, node_params).run(debug=False).result()
+        ret = LocalBench(bench_params, node_params).run(debug=True).result()
         print(ret)
     except BenchError as e:
         Print.error(e)

@@ -45,9 +45,9 @@ class Committee:
         node = {}
         for n, f, m in zip(self.names, self.front, self.mempool):
             node[n] = {
-                'name': n, 
+                'name': n,
                 'stake': 1,
-                'transactions_address': f, 
+                'transactions_address': f,
                 'mempool_address': m
             }
         return {'authorities': node, 'epoch': 1}
@@ -98,7 +98,7 @@ class NodeParameters:
             inputs += [json['consensus']['sync_retry_delay']]
             inputs += [json['mempool']['gc_depth']]
             inputs += [json['mempool']['sync_retry_delay']]
-            inputs += [json['mempool']['sync_retry_nodes']]
+            inputs += [json['mempool']['sync_nodes']]
             inputs += [json['mempool']['batch_size']]
             inputs += [json['mempool']['max_batch_delay']]
         except KeyError as e:

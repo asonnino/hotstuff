@@ -146,7 +146,7 @@ impl Core {
                 #[cfg(feature = "benchmark")]
                 for x in &block.payload {
                     // NOTE: This log entry is used to compute performance.
-                    info!("Committed {} -> {:?}", block, x);
+                    info!("Committed {} -> {:?}", block, x.root);
                 }
             }
             debug!("Committed {:?}", block);
