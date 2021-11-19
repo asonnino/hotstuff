@@ -129,6 +129,7 @@ impl Proposer {
             tokio::select! {
                 Some(payload) = self.rx_mempool.recv() => {
                     //if self.buffer.len() < 155 {
+                        debug!("Received certificate {}", payload.root);
                         self.buffer.insert(payload);
                     //}
                 },

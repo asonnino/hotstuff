@@ -120,10 +120,8 @@ impl Core {
             return Ok(());
         }
 
-        let mut to_commit = VecDeque::new();
-        to_commit.push_back(block.clone());
-
         // Ensure we commit the entire chain. This is needed after view-change.
+        let mut to_commit = VecDeque::new();
         let mut parent = block.clone();
         while self.last_committed_round + 1 < parent.round {
             let ancestor = self
@@ -134,6 +132,7 @@ impl Core {
             to_commit.push_front(ancestor.clone());
             parent = ancestor;
         }
+        to_commit.push_front(block.clone());
 
         // Save the last committed block.
         self.last_committed_round = block.round;
