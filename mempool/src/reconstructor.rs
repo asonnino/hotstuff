@@ -141,9 +141,9 @@ impl Reconstructor {
 
                     // Ensure we requested this batch.
                     debug!("Received batch {}", root);
-                    match self.missing.remove(&root) {
-                        true => self.store.write(serialized_root, serialized).await,
-                        false => warn!("Received unexpected batch with root {}", root)
+                    if self.missing.remove(&root) {
+                        // NOTE: We will likely receive more shards than what we need (depending on our sync strategy).
+                        self.store.write(serialized_root, serialized).await;
                     }
                 }
             }
