@@ -145,7 +145,7 @@ impl Synchronizer {
                         {
                             continue;
                         }
-                        
+
                         // Register the missing root.
                         let now = SystemTime::now()
                             .duration_since(UNIX_EPOCH)

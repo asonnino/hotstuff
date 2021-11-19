@@ -4,7 +4,7 @@ use crate::{
     mempool::MempoolMessage,
 };
 use crypto::Digest;
-use log::{warn, debug};
+use log::{debug, warn};
 use smtree::traits::Serializable as _;
 use std::{
     collections::{HashMap, HashSet},

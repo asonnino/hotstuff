@@ -6,9 +6,9 @@ use crate::{
 };
 use bytes::Bytes;
 use crypto::{Digest, PublicKey, SignatureService};
+use log::debug;
 #[cfg(feature = "benchmark")]
 use log::info;
-use log::debug;
 use network::{CancelHandler, ReliableSender};
 use smtree::traits::Serializable as _;
 use std::{collections::HashMap, convert::TryInto as _};
@@ -134,7 +134,10 @@ impl BatchMaker {
     /// Wait until enough batches are certified and cleanup internal state.
     async fn wait(&mut self) {
         while self.batch_counter >= MAX_PENDING_BATCHES {
-            debug!("Waiting for previous batches to be certified (counter={})", self.batch_counter);
+            debug!(
+                "Waiting for previous batches to be certified (counter={})",
+                self.batch_counter
+            );
             let root = self
                 .rx_control
                 .recv()

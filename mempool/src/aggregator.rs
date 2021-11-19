@@ -7,7 +7,7 @@ use crate::{
 };
 use bytes::Bytes;
 use crypto::{Digest, PublicKey, Signature};
-use log::{warn, debug};
+use log::{debug, warn};
 use network::SimpleSender;
 use serde::{Deserialize, Serialize};
 use std::{
