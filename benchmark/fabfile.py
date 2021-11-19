@@ -97,8 +97,8 @@ def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
         'faults': 0,
-        'nodes': [10],
-        'rate': [50_000],
+        'nodes': [4],
+        'rate': [10_000],
         'tx_size': 512,
         'duration': 300,
         'runs': 1,
@@ -117,7 +117,7 @@ def remote(ctx):
         }
     }
     try:
-        Bench(ctx).run(bench_params, node_params, debug=False)
+        Bench(ctx).run(bench_params, node_params, debug=True)
     except BenchError as e:
         Print.error(e)
 

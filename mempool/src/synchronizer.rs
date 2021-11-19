@@ -147,7 +147,6 @@ impl Synchronizer {
                         }
                         
                         // Register the missing root.
-                        debug!("Registering missing batch {}", digest);
                         let now = SystemTime::now()
                             .duration_since(UNIX_EPOCH)
                             .expect("Failed to measure time")
