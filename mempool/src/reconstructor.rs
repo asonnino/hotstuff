@@ -143,6 +143,7 @@ impl Reconstructor {
                     debug!("Received batch {}", root);
                     if self.missing.remove(&root) {
                         // NOTE: We will likely receive more shards than what we need (depending on our sync strategy).
+                        self.collected_shards.remove(&root);
                         self.store.write(serialized_root, serialized).await;
                     }
                 }
