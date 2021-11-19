@@ -145,8 +145,9 @@ impl Synchronizer {
                         {
                             continue;
                         }
-
+                        
                         // Register the missing root.
+                        debug!("Registering missing batch {}", digest);
                         let now = SystemTime::now()
                             .duration_since(UNIX_EPOCH)
                             .expect("Failed to measure time")
@@ -166,6 +167,7 @@ impl Synchronizer {
                 // Stream out the futures of the `FuturesUnordered` that completed.
                 Some(digest) = waiting.next() =>{
                     // We got the batch, remove it from the pending list.
+                    debug!("Finished to sync batch {}", digest);
                     self.pending.remove(&digest);
                 },
 

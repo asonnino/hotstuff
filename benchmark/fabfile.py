@@ -57,7 +57,7 @@ def destroy(ctx):
 
 
 @task
-def start(ctx, max=6):
+def start(ctx, max=2):
     ''' Start at most `max` machines per data center '''
     try:
         InstanceManager.make().start_instances(max)
@@ -97,11 +97,11 @@ def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
         'faults': 0,
-        'nodes': [50],
-        'rate': [60_000],
+        'nodes': [10],
+        'rate': [50_000],
         'tx_size': 512,
         'duration': 300,
-        'runs': 3,
+        'runs': 1,
     }
     node_params = {
         'consensus': {
@@ -111,7 +111,7 @@ def remote(ctx):
         'mempool': {
             'gc_depth': 50,
             'sync_retry_delay': 5_000,
-            'sync_retry_nodes': 3,
+            'sync_nodes': 3,
             'batch_size': 500_000,
             'max_batch_delay': 100
         }

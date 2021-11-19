@@ -4,7 +4,7 @@ use crate::{
     mempool::MempoolMessage,
 };
 use crypto::Digest;
-use log::warn;
+use log::{warn, debug};
 use smtree::traits::Serializable as _;
 use std::{
     collections::{HashMap, HashSet},
@@ -63,9 +63,12 @@ impl Reconstructor {
         loop {
             tokio::select! {
                 Some(root) = self.rx_missing.recv() => {
+                    debug!("Registering missing batch {}", root);
                     self.missing.insert(root);
                 }
                 Some(shard) = self.rx_shard.recv() => {
+                    debug!("Received shard of {}", shard.root);
+
                     // Verify the shard.
                     let destination = match self.committee.name(shard.destination) {
                         Some(x) => x,
@@ -105,6 +108,8 @@ impl Reconstructor {
                         .filter(|x| x.is_some())
                         .count() >= data_shards
                     {
+                        debug!("Reconstructing {}", root);
+
                         // Reconstruct the batch.
                         let shards = self.collected_shards.remove(&root).unwrap();
                         let mut batch = CodedBatch::reconstruct(shards, &self.committee)
@@ -135,9 +140,10 @@ impl Reconstructor {
                     let root = Digest(serialized_root[0..32].try_into().unwrap());
 
                     // Ensure we requested this batch.
+                    debug!("Received batch {}", root);
                     match self.missing.remove(&root) {
                         true => self.store.write(serialized_root, serialized).await,
-                        false => warn!("Received unexpected shard with root {}", root)
+                        false => warn!("Received unexpected batch with root {}", root)
                     }
                 }
             }

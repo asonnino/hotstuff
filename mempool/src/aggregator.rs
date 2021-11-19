@@ -7,7 +7,7 @@ use crate::{
 };
 use bytes::Bytes;
 use crypto::{Digest, PublicKey, Signature};
-use log::warn;
+use log::{warn, debug};
 use network::SimpleSender;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -140,6 +140,7 @@ impl AggregatorService {
                             Ok(Some(certificate)) => {
                                 let root = certificate.root.clone();
                                 let _ = aggregators.remove(&root);
+                                debug!("Assembled certificate for batch {}", root);
 
                                 tx_output
                                     .send(certificate.clone())
