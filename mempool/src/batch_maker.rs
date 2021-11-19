@@ -8,6 +8,7 @@ use bytes::Bytes;
 use crypto::{Digest, PublicKey, SignatureService};
 #[cfg(feature = "benchmark")]
 use log::info;
+use log::debug;
 use network::{CancelHandler, ReliableSender};
 use smtree::traits::Serializable as _;
 use std::{collections::HashMap, convert::TryInto as _};
@@ -133,6 +134,7 @@ impl BatchMaker {
     /// Wait until enough batches are certified and cleanup internal state.
     async fn wait(&mut self) {
         while self.batch_counter >= MAX_PENDING_BATCHES {
+            debug!("Waiting for previous batches to be certified (counter={})", self.batch_counter);
             let root = self
                 .rx_control
                 .recv()
@@ -173,6 +175,7 @@ impl BatchMaker {
         let message = MempoolMessage::CodedBatch(compressed_batch);
         let value = bincode::serialize(&message).expect("Failed to serialize coded batch");
         self.store.write(serialized_root, value).await;
+        debug!("Sealed batch {}", root);
 
         // Send the root to the certificates aggregator.
         self.tx_root
