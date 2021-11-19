@@ -133,7 +133,11 @@ impl BatchMaker {
 
     /// Wait until enough batches are certified and cleanup internal state.
     async fn wait(&mut self) {
-        while self.batch_counter >= MAX_PENDING_BATCHES {
+        if self.batch_counter < MAX_PENDING_BATCHES {
+            return;
+        }
+
+        while self.batch_counter >= MAX_PENDING_BATCHES / 2 {
             debug!(
                 "Waiting for previous batches to be certified (counter={})",
                 self.batch_counter
