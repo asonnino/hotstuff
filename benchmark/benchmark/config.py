@@ -99,6 +99,7 @@ class NodeParameters:
             inputs += [json['mempool']['gc_depth']]
             inputs += [json['mempool']['sync_retry_delay']]
             inputs += [json['mempool']['sync_nodes']]
+            inputs += [json['mempool']['sync_bias']]
             inputs += [json['mempool']['batch_size']]
             inputs += [json['mempool']['max_batch_delay']]
         except KeyError as e:

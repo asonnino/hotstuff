@@ -117,6 +117,7 @@ impl Mempool {
             store,
             parameters.sync_retry_delay,
             parameters.sync_nodes,
+            parameters.sync_bias,
             /* rx_certificate */ rx_consensus,
             tx_missing,
         );

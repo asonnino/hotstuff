@@ -35,6 +35,8 @@ pub struct Synchronizer {
     sync_retry_delay: u64,
     /// Determine with how many nodes to sync when requesting coded batches.
     sync_nodes: usize,
+    /// The bias of the coin used to select the sync algorithm.
+    sync_bias: usize,
     /// Input channel to receive the digests of certificates from the consensus. We need to sync
     /// the batches of behind these digests.
     rx_digest: Receiver<Vec<Digest>>,
@@ -56,6 +58,7 @@ impl Synchronizer {
         store: Store,
         sync_retry_delay: u64,
         sync_nodes: usize,
+        sync_bias: usize,
         rx_digest: Receiver<Vec<Digest>>,
         tx_missing: Sender<Digest>,
     ) {
@@ -66,6 +69,7 @@ impl Synchronizer {
                 store,
                 sync_retry_delay,
                 sync_nodes,
+                sync_bias,
                 rx_digest,
                 tx_missing,
                 network: SimpleSender::new(),
@@ -87,12 +91,6 @@ impl Synchronizer {
     }
 
     async fn sync(&mut self, missing: Digest) {
-        //
-        let message = MempoolMessage::ShardRequest(missing, self.name);
-        let nodes = self.committee.size();
-        //
-
-        /*
         #[cfg(not(test))]
         let coin = rand::thread_rng().gen_range(0, self.committee.size());
         #[cfg(test)]
@@ -101,7 +99,7 @@ impl Synchronizer {
             false => self.committee.size(),
         };
 
-        let (message, nodes) = match coin < self.sync_nodes {
+        let (message, nodes) = match coin < self.sync_bias {
             true => (
                 MempoolMessage::ShardRequest(missing, self.name),
                 self.committee.size(),
@@ -111,7 +109,6 @@ impl Synchronizer {
                 self.sync_nodes,
             ),
         };
-        */
 
         let addresses = self
             .committee

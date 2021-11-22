@@ -126,8 +126,11 @@ class LogParser:
                 'sync_retry_delay': int(
                     search(r'mempool.* Sync retry delay .* (\d+)', log).group(1)
                 ),
-                'sync_retry_nodes': int(
-                    search(r'Sync retry nodes .* (\d+)', log).group(1)
+                'sync_nodes': int(
+                    search(r'Sync nodes .* (\d+)', log).group(1)
+                ),
+                'sync_bias': int(
+                    search(r'Sync bias .* (\d+)', log).group(1)
                 ),
                 'batch_size': int(
                     search(r'Batch size .* (\d+)', log).group(1)
@@ -189,7 +192,8 @@ class LogParser:
         consensus_sync_retry_delay = self.configs[0]['consensus']['sync_retry_delay']
         mempool_gc_depth = self.configs[0]['mempool']['gc_depth']
         mempool_sync_retry_delay = self.configs[0]['mempool']['sync_retry_delay']
-        mempool_sync_retry_nodes = self.configs[0]['mempool']['sync_retry_nodes']
+        mempool_sync_nodes = self.configs[0]['mempool']['sync_nodes']
+        mempool_bias = self.configs[0]['mempool']['sync_bias']
         mempool_batch_size = self.configs[0]['mempool']['batch_size']
         mempool_max_batch_delay = self.configs[0]['mempool']['max_batch_delay']
 
@@ -209,7 +213,8 @@ class LogParser:
             f' Consensus sync retry delay: {consensus_sync_retry_delay:,} ms\n'
             f' Mempool GC depth: {mempool_gc_depth:,} rounds\n'
             f' Mempool sync retry delay: {mempool_sync_retry_delay:,} ms\n'
-            f' Mempool sync retry nodes: {mempool_sync_retry_nodes:,} nodes\n'
+            f' Mempool sync nodes: {mempool_sync_nodes:,} nodes\n'
+            f' Mempool sync bias: {mempool_bias:,}\n'
             f' Mempool batch size: {mempool_batch_size:,} B\n'
             f' Mempool max batch delay: {mempool_max_batch_delay:,} ms\n'
             '\n'
