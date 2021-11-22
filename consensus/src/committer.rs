@@ -12,6 +12,8 @@ pub struct Committer {
     rx_ready_to_commit: Receiver<Block>,
     tx_committed: Sender<Block>,
     last_committed_round: Round,
+    #[cfg(feature = "benchmark")]
+    last_committed_round_no_payload: Round,
     pending: HashSet<Digest>,
 }
 
@@ -29,6 +31,8 @@ impl Committer {
                 rx_ready_to_commit,
                 tx_committed,
                 last_committed_round: 0,
+                #[cfg(feature = "benchmark")]
+                last_committed_round_no_payload: 0,
                 pending: HashSet::new(),
             }
             .run()
@@ -49,7 +53,7 @@ impl Committer {
             .map(|x| bincode::deserialize(&x).expect("Fail to deserialize block"))
     }
 
-    async fn commit(&mut self, block: Block, got_payload: bool) {
+    async fn commit(&mut self, block: Block) {
         if self.last_committed_round >= block.round {
             return;
         }
@@ -73,18 +77,12 @@ impl Committer {
         // Send all the newly committed blocks to the node's application layer.
         while let Some(block) = to_commit.pop_back() {
             if !block.payload.is_empty() {
-                match got_payload {
-                    true => info!("Committed {}", block),
-                    false => info!("Committed without payload {}", block),
-                }
+                info!("Committed {}", block);
 
                 #[cfg(feature = "benchmark")]
                 for x in &block.payload {
                     // NOTE: This log entry is used to compute performance.
-                    match got_payload {
-                        true => info!("Committed {} -> {:?}", block, x.root),
-                        false => info!("Committed without payload {} -> {:?}", block, x.root),
-                    }
+                    info!("Committed {} -> {:?}", block, x.root);
                 }
             }
             debug!("Committed {:?}", block);
@@ -94,10 +92,44 @@ impl Committer {
         }
     }
 
+    #[cfg(feature = "benchmark")]
+    async fn commit_no_payload(&mut self, block: Block) {
+        if self.last_committed_round_no_payload >= block.round {
+            return;
+        }
+
+        // Ensure we commit the entire chain. This is needed after view-change.
+        let mut to_commit = VecDeque::new();
+        let mut parent = block.clone();
+        while self.last_committed_round_no_payload + 1 < parent.round {
+            let ancestor = self
+                .get_parent_block(&parent)
+                .await
+                .expect("We should have all the ancestors by now");
+            to_commit.push_front(ancestor.clone());
+            parent = ancestor;
+        }
+        to_commit.push_front(block.clone());
+
+        // Save the last committed block.
+        self.last_committed_round_no_payload = block.round;
+
+        // Send all the newly committed blocks to the node's application layer.
+        while let Some(block) = to_commit.pop_back() {
+            for x in &block.payload {
+                // NOTE: This log entry is used to compute performance.
+                info!("Committed without payload {} -> {:?}", block, x.root)
+            }
+        }
+    }
+
     async fn run(&mut self) {
         loop {
             tokio::select! {
                 Some(block) = self.rx_to_commit.recv() => {
+                    #[cfg(feature = "benchmark")]
+                    self.commit_no_payload(block.clone()).await;
+
                     // Check whether we got the payload in the storage.
                     let mut got_payload = true;
                     for x in &block.payload {
@@ -116,19 +148,16 @@ impl Committer {
                     // Commit only if we got the payload. If we don't we have to wait
                     // for the mempool driver to get it and let us know.
                     if got_payload {
-                        self.commit(block, true).await;
+                        self.commit(block).await;
                     } else {
                         let digest = block.digest();
                         debug!("Processing of {} suspended: missing payload", digest);
                         self.pending.insert(digest);
-
-                        #[cfg(feature = "benchmark")]
-                        self.commit(block, false).await;
                     }
                 },
                 Some(block) = self.rx_ready_to_commit.recv() => {
                     if self.pending.remove(&block.digest()) {
-                        self.commit(block, true).await;
+                        self.commit(block).await;
                     }
                 }
             }
