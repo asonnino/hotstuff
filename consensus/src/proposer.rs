@@ -14,7 +14,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 
 /// The maximum number of batches from other nodes that we include in our block.
 /// NOTE: This parameter heavily influences performance.
-const MAX_BATCHES_FROM_OTHERS: usize = 10;
+const MAX_BATCHES_FROM_OTHERS: usize = 30;
 
 #[derive(Debug)]
 pub enum ProposerMessage {
@@ -136,6 +136,7 @@ impl Proposer {
         loop {
             tokio::select! {
                 Some(payload) = self.rx_mempool.recv() => {
+                    /*
                     if payload.author == self.name {
                         debug!("Adding our own certificate to payload {}", payload.root);
 
@@ -146,6 +147,16 @@ impl Proposer {
                         self.buffer.insert(payload);
                     } else if others_payloads < MAX_BATCHES_FROM_OTHERS  {
                         debug!("Adding others' certificate to payload {}", payload.root);
+                        self.buffer.insert(payload);
+                        others_payloads += 1;
+                    }
+                    */
+                    if payload.author == self.name {
+                        self.tx_mempool.send(payload.root.clone())
+                            .await
+                            .expect("Failed to send back digest to mempool");
+                    }
+                    if others_payloads < MAX_BATCHES_FROM_OTHERS  {
                         self.buffer.insert(payload);
                         others_payloads += 1;
                     }
