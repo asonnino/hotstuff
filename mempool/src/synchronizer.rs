@@ -87,6 +87,12 @@ impl Synchronizer {
     }
 
     async fn sync(&mut self, missing: Digest) {
+        //
+        let message = MempoolMessage::ShardRequest(missing, self.name);
+        let nodes = self.committee.size();
+        //
+
+        /*
         #[cfg(not(test))]
         let coin = rand::thread_rng().gen_range(0, self.committee.size());
         #[cfg(test)]
@@ -105,6 +111,7 @@ impl Synchronizer {
                 self.sync_nodes,
             ),
         };
+        */
 
         let addresses = self
             .committee
