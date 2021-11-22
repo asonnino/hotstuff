@@ -113,7 +113,6 @@ impl AggregatorService {
         mut rx_root: Receiver<Digest>,
         mut rx_vote: Receiver<BatchVote>,
         tx_output: Sender<BatchCertificate>,
-        tx_control: Sender<Digest>,
     ) {
         tokio::spawn(async move {
             let mut aggregators = HashMap::new();
@@ -146,10 +145,6 @@ impl AggregatorService {
                                     .send(certificate.clone())
                                     .await
                                     .expect("Failed to output certificate");
-                                tx_control
-                                    .send(root)
-                                    .await
-                                    .expect("Failed to loopback certified root");
 
                                 let addresses = committee
                                     .broadcast_addresses(&name)

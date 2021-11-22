@@ -53,8 +53,10 @@ impl Mempool {
         signature_service: SignatureService,
         // The persistent storage.
         store: Store,
-        // Receives messages from consensus.
+        // Receives sync requests from consensus.
         rx_consensus: Receiver<Vec<Digest>>,
+        // Receives from consensus the batch roots that have been added to a block.
+        rx_control: Receiver<Digest>,
         // Sends messages to consensus.
         tx_consensus: Sender<BatchCertificate>,
     ) {
@@ -82,6 +84,7 @@ impl Mempool {
             tx_consensus.clone(),
             tx_aggregator.clone(),
             rx_aggregator,
+            rx_control,
         );
         Self::handle_mempool_messages(
             name,
@@ -134,10 +137,10 @@ impl Mempool {
         tx_consensus: Sender<BatchCertificate>,
         tx_aggregator: Sender<BatchVote>,
         rx_aggregator: Receiver<BatchVote>,
+        rx_control: Receiver<Digest>,
     ) {
         let (tx_batch_maker, rx_batch_maker) = channel(CHANNEL_CAPACITY);
         let (tx_voter, rx_voter) = channel(CHANNEL_CAPACITY);
-        let (tx_control, rx_control) = channel(CHANNEL_CAPACITY);
         let (tx_root, rx_root) = channel(CHANNEL_CAPACITY);
 
         let mut address = committee
@@ -177,7 +180,6 @@ impl Mempool {
             rx_root,
             /* rx_vote */ rx_aggregator,
             /* tx_output */ tx_consensus,
-            tx_control,
         );
 
         info!("Mempool listening to client transactions on {}", address);

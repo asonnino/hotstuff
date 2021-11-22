@@ -4,13 +4,17 @@ use crate::{
     messages::{Block, QC, TC},
 };
 use bytes::Bytes;
-use crypto::{PublicKey, SignatureService};
+use crypto::{Digest, PublicKey, SignatureService};
 use futures::stream::{futures_unordered::FuturesUnordered, StreamExt as _};
 use log::{debug, info};
 use mempool::BatchCertificate;
 use network::{CancelHandler, ReliableSender};
 use std::collections::HashSet;
 use tokio::sync::mpsc::{Receiver, Sender};
+
+/// The maximum number of batches from other nodes that we include in our block.
+/// NOTE: This parameter heavily influences performance.
+const MAX_BATCHES_FROM_OTHERS: usize = 30;
 
 #[derive(Debug)]
 pub enum ProposerMessage {
@@ -25,6 +29,7 @@ pub struct Proposer {
     rx_mempool: Receiver<BatchCertificate>,
     rx_message: Receiver<ProposerMessage>,
     tx_loopback: Sender<Block>,
+    tx_mempool: Sender<Digest>,
     buffer: HashSet<BatchCertificate>,
     network: ReliableSender,
 }
@@ -37,6 +42,7 @@ impl Proposer {
         rx_mempool: Receiver<BatchCertificate>,
         rx_message: Receiver<ProposerMessage>,
         tx_loopback: Sender<Block>,
+        tx_mempool: Sender<Digest>,
     ) {
         tokio::spawn(async move {
             Self {
@@ -46,6 +52,7 @@ impl Proposer {
                 rx_mempool,
                 rx_message,
                 tx_loopback,
+                tx_mempool,
                 buffer: HashSet::new(),
                 network: ReliableSender::new(),
             }
@@ -131,8 +138,13 @@ impl Proposer {
                 Some(payload) = self.rx_mempool.recv() => {
                     if payload.author == self.name {
                         debug!("Adding our own certificate to payload {}", payload.root);
+
+                        self.tx_mempool.send(payload.root.clone())
+                            .await
+                            .expect("Failed to send back digest to mempool");
+
                         self.buffer.insert(payload);
-                    } else if others_payloads < 50  {
+                    } else if others_payloads < MAX_BATCHES_FROM_OTHERS  {
                         debug!("Adding others' certificate to payload {}", payload.root);
                         self.buffer.insert(payload);
                         others_payloads += 1;

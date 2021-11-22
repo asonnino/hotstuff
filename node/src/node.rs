@@ -23,6 +23,7 @@ impl Node {
         let (tx_commit, rx_commit) = channel(CHANNEL_CAPACITY);
         let (tx_consensus_to_mempool, rx_consensus_to_mempool) = channel(CHANNEL_CAPACITY);
         let (tx_mempool_to_consensus, rx_mempool_to_consensus) = channel(CHANNEL_CAPACITY);
+        let (tx_control, rx_control) = channel(CHANNEL_CAPACITY);
 
         // Read the committee and secret key from file.
         let committee = Committee::read(committee_file)?;
@@ -50,6 +51,7 @@ impl Node {
             signature_service.clone(),
             store.clone(),
             rx_consensus_to_mempool,
+            rx_control,
             tx_mempool_to_consensus,
         );
 
@@ -63,6 +65,7 @@ impl Node {
             store,
             rx_mempool_to_consensus,
             tx_consensus_to_mempool,
+            tx_control,
             tx_commit,
         );
 
