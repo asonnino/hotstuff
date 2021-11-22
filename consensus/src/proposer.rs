@@ -157,7 +157,9 @@ impl Proposer {
                     },
                     ProposerMessage::Cleanup(digests) => {
                         for x in &digests {
-                            self.buffer.remove(x);
+                            if self.buffer.remove(x) {
+                                others_payloads -= 1;
+                            }
                         }
                     }
                 }
