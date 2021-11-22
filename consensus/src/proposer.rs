@@ -132,7 +132,7 @@ impl Proposer {
                     if payload.author == self.name {
                         debug!("Adding our own certificate to payload {}", payload.root);
                         self.buffer.insert(payload);
-                    } else if others_payloads < 100  {
+                    } else if others_payloads < 50  {
                         debug!("Adding others' certificate to payload {}", payload.root);
                         self.buffer.insert(payload);
                         others_payloads += 1;
