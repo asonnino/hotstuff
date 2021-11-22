@@ -112,7 +112,9 @@ impl Committer {
                     if got_payload {
                         self.commit(block).await;
                     } else {
-                        self.pending.insert(block.digest());
+                        let digest = block.digest();
+                        debug!("Processing of {} suspended: missing payload", digest);
+                        self.pending.insert(digest);
                     }
                 },
                 Some(block) = self.rx_ready_to_commit.recv() => {

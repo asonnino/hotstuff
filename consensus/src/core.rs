@@ -346,12 +346,9 @@ impl Core {
             self.advance_round(tc.round).await;
         }
 
-        // Let's see if we have the block's data. If we don't, the mempool
-        // will get it and then make us resume processing this block.
-        if !self.mempool_driver.verify(block.clone()).await? {
-            debug!("Processing of {} suspended: missing payload", digest);
-            return Ok(());
-        }
+        // Let's see if the payload is correctly formed. The mempool driver also
+        // gather the payload if we are missing it.
+        self.mempool_driver.verify(block.clone()).await?;
 
         // All check pass, we can process this block.
         self.process_block(block).await
