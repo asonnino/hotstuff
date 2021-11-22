@@ -118,6 +118,12 @@ impl Committer {
                     }
                 },
                 Some(block) = self.rx_ready_to_commit.recv() => {
+                    #[cfg(feature = "benchmark")]
+                    for x in &block.payload {
+                        // NOTE: This log entry is used to compute performance.
+                        info!("Got payload {} -> {:?}", block, x.root);
+                    }
+
                     if self.pending.remove(&block.digest()) {
                         self.commit(block).await;
                     }
