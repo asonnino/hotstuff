@@ -49,7 +49,7 @@ impl Committer {
             .map(|x| bincode::deserialize(&x).expect("Fail to deserialize block"))
     }
 
-    async fn commit(&mut self, block: Block) {
+    async fn commit(&mut self, block: Block, got_payload: bool) {
         if self.last_committed_round >= block.round {
             return;
         }
@@ -73,12 +73,18 @@ impl Committer {
         // Send all the newly committed blocks to the node's application layer.
         while let Some(block) = to_commit.pop_back() {
             if !block.payload.is_empty() {
-                info!("Committed {}", block);
+                match got_payload {
+                    true => info!("Committed {}", block),
+                    false => info!("Committed without payload {}", block),
+                }
 
                 #[cfg(feature = "benchmark")]
                 for x in &block.payload {
                     // NOTE: This log entry is used to compute performance.
-                    info!("Committed {} -> {:?}", block, x.root);
+                    match got_payload {
+                        true => info!("Committed {} -> {:?}", block, x.root),
+                        false => info!("Committed without payload {} -> {:?}", block, x.root),
+                    }
                 }
             }
             debug!("Committed {:?}", block);
@@ -110,22 +116,19 @@ impl Committer {
                     // Commit only if we got the payload. If we don't we have to wait
                     // for the mempool driver to get it and let us know.
                     if got_payload {
-                        self.commit(block).await;
+                        self.commit(block, true).await;
                     } else {
                         let digest = block.digest();
                         debug!("Processing of {} suspended: missing payload", digest);
                         self.pending.insert(digest);
+
+                        #[cfg(feature = "benchmark")]
+                        self.commit(block, false).await;
                     }
                 },
                 Some(block) = self.rx_ready_to_commit.recv() => {
-                    #[cfg(feature = "benchmark")]
-                    for x in &block.payload {
-                        // NOTE: This log entry is used to compute performance.
-                        info!("Got payload {} -> {:?}", block, x.root);
-                    }
-
                     if self.pending.remove(&block.digest()) {
-                        self.commit(block).await;
+                        self.commit(block, true).await;
                     }
                 }
             }
