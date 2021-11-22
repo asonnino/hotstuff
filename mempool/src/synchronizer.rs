@@ -102,7 +102,7 @@ impl Synchronizer {
         let (message, nodes) = match coin < self.sync_bias {
             true => (
                 MempoolMessage::ShardRequest(missing, self.name),
-                self.committee.quorum_threshold() as usize,
+                self.committee.size(),
             ),
             false => (
                 MempoolMessage::BatchRequest(missing, self.name),
