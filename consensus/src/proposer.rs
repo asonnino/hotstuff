@@ -125,16 +125,24 @@ impl Proposer {
     }
 
     async fn run(&mut self) {
+        let mut others_payloads = 0;
         loop {
             tokio::select! {
                 Some(payload) = self.rx_mempool.recv() => {
-                    if self.buffer.len() < 32 || payload.author == self.name {
-                        debug!("Adding certificate to payload{}", payload.root);
+                    if payload.author == self.name {
+                        debug!("Adding our own certificate to payload {}", payload.root);
                         self.buffer.insert(payload);
+                    } else if others_payloads < 32  {
+                        debug!("Adding others' certificate to payload {}", payload.root);
+                        self.buffer.insert(payload);
+                        others_payloads += 1;
                     }
                 },
                 Some(message) = self.rx_message.recv() => match message {
-                    ProposerMessage::Make(round, qc, tc) => self.make_block(round, qc, tc).await,
+                    ProposerMessage::Make(round, qc, tc) => {
+                        self.make_block(round, qc, tc).await;
+                        others_payloads = 0;
+                    },
                     ProposerMessage::Cleanup(digests) => {
                         for x in &digests {
                             self.buffer.remove(x);
