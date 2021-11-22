@@ -66,7 +66,8 @@ impl MempoolDriver {
             .await
             .expect("Failed to send message to payload waiter");
 
-        Ok(false)
+        //Ok(false)
+        Ok(true)
     }
 
     pub async fn cleanup(&mut self, round: Round) {

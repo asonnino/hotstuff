@@ -128,10 +128,10 @@ impl Proposer {
         loop {
             tokio::select! {
                 Some(payload) = self.rx_mempool.recv() => {
-                    //if self.buffer.len() < 155 {
-                        debug!("Received certificate {}", payload.root);
+                    if self.buffer.len() < 32 || payload.author == self.name {
+                        debug!("Adding certificate to payload{}", payload.root);
                         self.buffer.insert(payload);
-                    //}
+                    }
                 },
                 Some(message) = self.rx_message.recv() => match message {
                     ProposerMessage::Make(round, qc, tc) => self.make_block(round, qc, tc).await,
