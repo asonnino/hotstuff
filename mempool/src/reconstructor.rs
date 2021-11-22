@@ -67,7 +67,7 @@ impl Reconstructor {
                     self.missing.insert(root);
                 }
                 Some(shard) = self.rx_shard.recv() => {
-                    debug!("Received shard of {}", shard.root);
+                    //debug!("Received shard of {}", shard.root);
 
                     // Verify the shard.
                     let destination = match self.committee.name(shard.destination) {
