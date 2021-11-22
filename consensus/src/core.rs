@@ -13,9 +13,9 @@ use crate::{
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use crypto::{Hash as _, PublicKey, SignatureService};
-use log::{debug, error, info, warn};
+use log::{debug, error, warn};
 use network::SimpleSender;
-use std::{cmp::max, collections::VecDeque};
+use std::cmp::max;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -34,10 +34,9 @@ pub struct Core {
     rx_message: Receiver<ConsensusMessage>,
     rx_loopback: Receiver<Block>,
     tx_proposer: Sender<ProposerMessage>,
-    tx_commit: Sender<Block>,
+    tx_committer: Sender<Block>,
     round: Round,
     last_voted_round: Round,
-    last_committed_round: Round,
     high_qc: QC,
     timer: Timer,
     aggregator: Aggregator,
@@ -58,7 +57,7 @@ impl Core {
         rx_message: Receiver<ConsensusMessage>,
         rx_loopback: Receiver<Block>,
         tx_proposer: Sender<ProposerMessage>,
-        tx_commit: Sender<Block>,
+        tx_committer: Sender<Block>,
     ) {
         tokio::spawn(async move {
             Self {
@@ -72,10 +71,9 @@ impl Core {
                 rx_message,
                 rx_loopback,
                 tx_proposer,
-                tx_commit,
+                tx_committer,
                 round: 1,
                 last_voted_round: 0,
-                last_committed_round: 0,
                 high_qc: QC::genesis(),
                 timer: Timer::new(timeout_delay),
                 aggregator: Aggregator::new(committee),
@@ -113,47 +111,6 @@ impl Core {
         self.increase_last_voted_round(block.round);
         // TODO [issue #15]: Write to storage preferred_round and last_voted_round.
         Some(Vote::new(block, self.name, self.signature_service.clone()).await)
-    }
-
-    async fn commit(&mut self, block: Block) -> ConsensusResult<()> {
-        if self.last_committed_round >= block.round {
-            return Ok(());
-        }
-
-        // Ensure we commit the entire chain. This is needed after view-change.
-        let mut to_commit = VecDeque::new();
-        let mut parent = block.clone();
-        while self.last_committed_round + 1 < parent.round {
-            let ancestor = self
-                .synchronizer
-                .get_parent_block(&parent)
-                .await?
-                .expect("We should have all the ancestors by now");
-            to_commit.push_front(ancestor.clone());
-            parent = ancestor;
-        }
-        to_commit.push_front(block.clone());
-
-        // Save the last committed block.
-        self.last_committed_round = block.round;
-
-        // Send all the newly committed blocks to the node's application layer.
-        while let Some(block) = to_commit.pop_back() {
-            if !block.payload.is_empty() {
-                info!("Committed {}", block);
-
-                #[cfg(feature = "benchmark")]
-                for x in &block.payload {
-                    // NOTE: This log entry is used to compute performance.
-                    info!("Committed {} -> {:?}", block, x.root);
-                }
-            }
-            debug!("Committed {:?}", block);
-            if let Err(e) = self.tx_commit.send(block).await {
-                warn!("Failed to send block through the commit channel: {}", e);
-            }
-        }
-        Ok(())
     }
 
     fn update_high_qc(&mut self, qc: &QC) {
@@ -332,7 +289,10 @@ impl Core {
         // Note that we commit blocks only if we have all its ancestors.
         if b0.round + 1 == b1.round {
             self.mempool_driver.cleanup(b0.round).await;
-            self.commit(b0).await?;
+            self.tx_committer
+                .send(b0)
+                .await
+                .expect("Failed to send block to committer");
         }
 
         // Ensure the block's round is as expected.

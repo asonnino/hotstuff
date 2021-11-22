@@ -1,4 +1,5 @@
 use crate::{
+    committer::Committer,
     config::{Committee, Parameters},
     core::Core,
     error::ConsensusError,
@@ -62,6 +63,8 @@ impl Consensus {
         let (tx_loopback, rx_loopback) = channel(CHANNEL_CAPACITY);
         let (tx_proposer, rx_proposer) = channel(CHANNEL_CAPACITY);
         let (tx_helper, rx_helper) = channel(CHANNEL_CAPACITY);
+        let (tx_to_commit, rx_to_commit) = channel(CHANNEL_CAPACITY);
+        let (tx_ready_to_commit, rx_ready_to_commit) = channel(CHANNEL_CAPACITY);
 
         // Spawn the network receiver.
         let mut address = committee
@@ -89,7 +92,7 @@ impl Consensus {
             mempool_committee,
             store.clone(),
             tx_mempool,
-            tx_loopback.clone(),
+            tx_ready_to_commit,
         );
 
         // Make the synchronizer.
@@ -114,7 +117,7 @@ impl Consensus {
             /* rx_message */ rx_consensus,
             rx_loopback,
             tx_proposer,
-            tx_commit,
+            tx_to_commit,
         );
 
         // Spawn the block proposer.
@@ -125,6 +128,14 @@ impl Consensus {
             rx_mempool,
             /* rx_message */ rx_proposer,
             tx_loopback,
+        );
+
+        // Spawn the committer.
+        Committer::spawn(
+            store.clone(),
+            rx_to_commit,
+            rx_ready_to_commit,
+            /* tx_committed */ tx_commit,
         );
 
         // Spawn the helper module.
