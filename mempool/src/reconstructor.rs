@@ -63,7 +63,7 @@ impl Reconstructor {
         loop {
             tokio::select! {
                 Some(root) = self.rx_missing.recv() => {
-                    debug!("Registering missing batch {}", root);
+                    //debug!("Registering missing batch {}", root);
                     self.missing.insert(root);
                 }
                 Some(shard) = self.rx_shard.recv() => {

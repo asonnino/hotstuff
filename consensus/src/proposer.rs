@@ -140,7 +140,9 @@ impl Proposer {
                     if payload.author == self.name {
                         debug!("Adding our own certificate to payload {}", payload.root);
 
-                        self.tx_mempool.send(payload.root.clone())
+                        self
+                            .tx_mempool
+                            .send(payload.root.clone())
                             .await
                             .expect("Failed to send back digest to mempool");
 
@@ -152,7 +154,9 @@ impl Proposer {
                     }
                     */
                     if payload.author == self.name {
-                        self.tx_mempool.send(payload.root.clone())
+                        self
+                            .tx_mempool
+                            .send(payload.root.clone())
                             .await
                             .expect("Failed to send back digest to mempool");
                     }
