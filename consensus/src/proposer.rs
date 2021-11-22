@@ -153,6 +153,7 @@ impl Proposer {
                         others_payloads += 1;
                     }
                     */
+
                     if payload.author == self.name {
                         self
                             .tx_mempool
@@ -160,10 +161,10 @@ impl Proposer {
                             .await
                             .expect("Failed to send back digest to mempool");
                     }
-                    if others_payloads < MAX_BATCHES_FROM_OTHERS  {
+                    //if others_payloads < MAX_BATCHES_FROM_OTHERS  {
                         self.buffer.insert(payload);
                         others_payloads += 1;
-                    }
+                    //}
                 },
                 Some(message) = self.rx_message.recv() => match message {
                     ProposerMessage::Make(round, qc, tc) => {
