@@ -43,23 +43,13 @@ impl MempoolDriver {
     }
 
     pub async fn verify(&mut self, block: Block) -> ConsensusResult<()> {
-        let mut to_sync = Vec::new();
         let mut missing = Vec::new();
         for x in &block.payload {
             x.verify(&self.committee)?;
 
-            to_sync.push((x.root.clone(), x.author));
-
             if self.store.read(x.root.to_vec()).await?.is_none() {
                 missing.push(x.root.clone());
             }
-        }
-
-        if !to_sync.is_empty() {
-            self.tx_mempool
-                .send(to_sync)
-                .await
-                .expect("Failed to send sync message");
         }
 
         if !missing.is_empty() {
@@ -71,12 +61,26 @@ impl MempoolDriver {
         Ok(())
     }
 
-    pub async fn cleanup(&mut self, round: Round) {
+    pub async fn cleanup(&mut self, block: &Block) {
+        let to_sync: Vec<_> = block
+            .payload
+            .iter()
+            .map(|x| (x.root.clone(), x.author))
+            .collect();
+        if !to_sync.is_empty() {
+            self.tx_mempool
+                .send(to_sync)
+                .await
+                .expect("Failed to send sync message");
+        }
         // Cleanup the payload waiter.
+        // TODO: This is no longer necessary (we are guarantee to get the payload).
+        /*
         self.tx_payload_waiter
             .send(PayloadWaiterMessage::Cleanup(round))
             .await
             .expect("Failed to send cleanup message");
+        */
     }
 }
 
