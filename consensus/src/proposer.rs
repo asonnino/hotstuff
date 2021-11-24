@@ -82,18 +82,10 @@ impl Proposer {
         if !block.payload.is_empty() {
             info!("Created {}", block);
 
+            #[cfg(feature = "benchmark")]
             for x in &block.payload {
-                #[cfg(feature = "benchmark")]
                 // NOTE: This log entry is used to compute performance.
                 info!("Created {} -> {:?}", block, x.root);
-
-                if x.author == self.name {
-                    self
-                        .tx_mempool
-                        .send(x.root.clone())
-                        .await
-                        .expect("Failed to send back digest to mempool");
-                }
             }
         }
         debug!("Created {:?}", block);
