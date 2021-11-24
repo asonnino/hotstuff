@@ -169,6 +169,7 @@ impl Synchronizer {
                         self.tx_missing.send(digest.clone()).await.expect("Failed to send root");
 
                         // Notify the batch maker that this batch made it to a block.
+                        debug!("TEST HERE0: {} - {}", digest, author);
                         if author == self.name {
                             feedback.push(digest.clone());
                         }
