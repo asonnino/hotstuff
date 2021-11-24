@@ -53,8 +53,7 @@ impl Consensus {
         signature_service: SignatureService,
         store: Store,
         rx_mempool: Receiver<BatchCertificate>,
-        tx_mempool: Sender<Vec<Digest>>,
-        tx_control: Sender<Vec<Digest>>,
+        tx_mempool: Sender<Vec<(Digest, PublicKey)>>,
         tx_commit: Sender<Block>,
     ) {
         // NOTE: This log entry is used to compute performance.
@@ -129,7 +128,6 @@ impl Consensus {
             rx_mempool,
             /* rx_message */ rx_proposer,
             tx_loopback,
-            /* tx_mempool */ tx_control,
         );
 
         // Spawn the committer.

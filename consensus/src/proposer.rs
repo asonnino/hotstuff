@@ -4,7 +4,7 @@ use crate::{
     messages::{Block, QC, TC},
 };
 use bytes::Bytes;
-use crypto::{Digest, PublicKey, SignatureService};
+use crypto::{PublicKey, SignatureService};
 use futures::stream::{futures_unordered::FuturesUnordered, StreamExt as _};
 use log::{debug, info};
 use mempool::BatchCertificate;
@@ -29,7 +29,6 @@ pub struct Proposer {
     rx_mempool: Receiver<BatchCertificate>,
     rx_message: Receiver<ProposerMessage>,
     tx_loopback: Sender<Block>,
-    tx_mempool: Sender<Vec<Digest>>,
     buffer: HashSet<BatchCertificate>,
     network: ReliableSender,
 }
@@ -42,7 +41,6 @@ impl Proposer {
         rx_mempool: Receiver<BatchCertificate>,
         rx_message: Receiver<ProposerMessage>,
         tx_loopback: Sender<Block>,
-        tx_mempool: Sender<Vec<Digest>>,
     ) {
         tokio::spawn(async move {
             Self {
@@ -52,7 +50,6 @@ impl Proposer {
                 rx_mempool,
                 rx_message,
                 tx_loopback,
-                tx_mempool,
                 buffer: HashSet::new(),
                 network: ReliableSender::new(),
             }
@@ -82,20 +79,11 @@ impl Proposer {
         if !block.payload.is_empty() {
             info!("Created {}", block);
 
-            let mut feedback = Vec::new();
+            #[cfg(feature = "benchmark")]
             for x in &block.payload {
-                #[cfg(feature = "benchmark")]
                 // NOTE: This log entry is used to compute performance.
                 info!("Created {} -> {:?}", block, x.root);
-
-                if x.author == self.name {
-                    feedback.push(x.root.clone());
-                }
             }
-            self.tx_mempool
-                .send(feedback)
-                .await
-                .expect("Failed to send back digest to mempool");
         }
         debug!("Created {:?}", block);
 

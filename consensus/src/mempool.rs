@@ -3,7 +3,7 @@ use crate::{
     error::{ConsensusError, ConsensusResult},
     messages::Block,
 };
-use crypto::{Digest, Hash as _};
+use crypto::{Digest, Hash as _, PublicKey};
 use futures::{
     future::try_join_all,
     stream::{futures_unordered::FuturesUnordered, StreamExt as _},
@@ -17,7 +17,7 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 pub struct MempoolDriver {
     committee: MempoolCommittee,
     store: Store,
-    tx_mempool: Sender<Vec<Digest>>,
+    tx_mempool: Sender<Vec<(Digest, PublicKey)>>,
     tx_payload_waiter: Sender<PayloadWaiterMessage>,
 }
 
@@ -25,7 +25,7 @@ impl MempoolDriver {
     pub fn new(
         committee: MempoolCommittee,
         store: Store,
-        tx_mempool: Sender<Vec<Digest>>,
+        tx_mempool: Sender<Vec<(Digest, PublicKey)>>,
         tx_loopback: Sender<Block>,
     ) -> Self {
         let (tx_payload_waiter, rx_payload_waiter) = channel(CHANNEL_CAPACITY);
@@ -44,17 +44,19 @@ impl MempoolDriver {
 
     pub async fn verify(&mut self, block: Block) -> ConsensusResult<()> {
         let mut missing = Vec::new();
+        let mut to_sync = Vec::new();
         for x in &block.payload {
             x.verify(&self.committee)?;
 
             if self.store.read(x.root.to_vec()).await?.is_none() {
                 missing.push(x.root.clone());
+                to_sync.push((x.root.clone(), x.author));
             }
         }
 
         if !missing.is_empty() {
             self.tx_mempool
-                .send(missing.clone())
+                .send(to_sync)
                 .await
                 .expect("Failed to send sync message");
 

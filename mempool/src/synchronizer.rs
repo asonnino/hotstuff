@@ -39,9 +39,11 @@ pub struct Synchronizer {
     sync_bias: usize,
     /// Input channel to receive the digests of certificates from the consensus. We need to sync
     /// the batches of behind these digests.
-    rx_digest: Receiver<Vec<Digest>>,
+    rx_digest: Receiver<Vec<(Digest, PublicKey)>>,
     /// Inform the `Reconstructor` of the missing batches.
     tx_missing: Sender<Digest>,
+    /// Inform the `BatchMaker` that one of our batches made it to a block.
+    tx_control: Sender<Vec<Digest>>,
     /// A network sender to send requests to the other mempools.
     network: SimpleSender,
     /// Keeps the root (of batches) that are waiting to be processed by the consensus. Their
@@ -59,8 +61,9 @@ impl Synchronizer {
         sync_retry_delay: u64,
         sync_nodes: usize,
         sync_bias: usize,
-        rx_digest: Receiver<Vec<Digest>>,
+        rx_digest: Receiver<Vec<(Digest, PublicKey)>>,
         tx_missing: Sender<Digest>,
+        tx_control: Sender<Vec<Digest>>,
     ) {
         tokio::spawn(async move {
             Self {
@@ -72,6 +75,7 @@ impl Synchronizer {
                 sync_bias,
                 rx_digest,
                 tx_missing,
+                tx_control,
                 network: SimpleSender::new(),
                 pending: HashMap::new(),
             }
@@ -133,7 +137,9 @@ impl Synchronizer {
             tokio::select! {
                 // Handle consensus' messages.
                 Some(digests) = self.rx_digest.recv() => {
-                    for digest in digests {
+                    let mut feedback = Vec::new();
+
+                    for (digest, author) in digests {
                         // Ensure we do not send twice the same sync request.
                         if self.pending.contains_key(&digest) {
                             continue;
@@ -162,8 +168,17 @@ impl Synchronizer {
                         // Notify the reconstructor task about this missing batch.
                         self.tx_missing.send(digest.clone()).await.expect("Failed to send root");
 
+                        // Notify the batch maker that this batch made it to a block.
+                        if author == self.name {
+                            feedback.push(digest.clone());
+                        }
+
                         // Try to sync with other nodes
                         self.sync(digest).await;
+                    }
+
+                    if !feedback.is_empty() {
+                        self.tx_control.send(feedback).await.expect("Failed to send root");
                     }
                 },
 

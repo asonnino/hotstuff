@@ -54,9 +54,7 @@ impl Mempool {
         // The persistent storage.
         store: Store,
         // Receives sync requests from consensus.
-        rx_consensus: Receiver<Vec<Digest>>,
-        // Receives from consensus the batch roots that have been added to a block.
-        rx_control: Receiver<Vec<Digest>>,
+        rx_consensus: Receiver<Vec<(Digest, PublicKey)>>,
         // Sends messages to consensus.
         tx_consensus: Sender<BatchCertificate>,
     ) {
@@ -65,6 +63,7 @@ impl Mempool {
 
         let (tx_aggregator, rx_aggregator) = channel(CHANNEL_CAPACITY);
         let (tx_missing, rx_missing) = channel(CHANNEL_CAPACITY);
+        let (tx_control, rx_control) = channel(CHANNEL_CAPACITY);
 
         // Spawn all mempool tasks.
         Self::handle_consensus_messages(
@@ -74,6 +73,7 @@ impl Mempool {
             &parameters,
             rx_consensus,
             tx_missing,
+            tx_control,
         );
         Self::handle_clients_transactions(
             name,
@@ -111,8 +111,9 @@ impl Mempool {
         committee: Committee,
         store: Store,
         parameters: &Parameters,
-        rx_consensus: Receiver<Vec<Digest>>,
+        rx_consensus: Receiver<Vec<(Digest, PublicKey)>>,
         tx_missing: Sender<Digest>,
+        tx_control: Sender<Vec<Digest>>,
     ) {
         Synchronizer::spawn(
             name,
@@ -123,6 +124,7 @@ impl Mempool {
             parameters.sync_bias,
             /* rx_certificate */ rx_consensus,
             tx_missing,
+            tx_control,
         );
     }
 
