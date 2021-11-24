@@ -82,7 +82,6 @@ impl Proposer {
         if !block.payload.is_empty() {
             info!("Created {}", block);
 
-            
             let mut feedback = Vec::new();
             for x in &block.payload {
                 #[cfg(feature = "benchmark")]
@@ -93,11 +92,10 @@ impl Proposer {
                     feedback.push(x.root.clone());
                 }
             }
-            self
-                        .tx_mempool
-                        .send(feedback)
-                        .await
-                        .expect("Failed to send back digest to mempool");
+            self.tx_mempool
+                .send(feedback)
+                .await
+                .expect("Failed to send back digest to mempool");
         }
         debug!("Created {:?}", block);
 
@@ -174,10 +172,10 @@ impl Proposer {
                             .expect("Failed to send back digest to mempool");
                     }
                     */
-                    //if others_payloads < MAX_BATCHES_FROM_OTHERS  {
+                    if others_payloads < MAX_BATCHES_FROM_OTHERS  {
                         self.buffer.insert(payload);
                         others_payloads += 1;
-                    //}
+                    }
                 },
                 Some(message) = self.rx_message.recv() => match message {
                     ProposerMessage::Make(round, qc, tc) => {
