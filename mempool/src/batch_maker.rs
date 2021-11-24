@@ -45,7 +45,7 @@ pub struct BatchMaker {
     /// Channel to receive transactions from the network.
     rx_transaction: Receiver<Transaction>,
     /// Control channel to handle congestions.
-    rx_control: Receiver<Digest>,
+    rx_control: Receiver<Vec<Digest>>,
     /// Output channel to deliver shards of transactions batches.
     tx_authenticated_shard: Sender<(AuthenticatedShard, SerializedShard)>,
     /// Send the roots for which we are trying to assemble a certificate.
@@ -72,7 +72,7 @@ impl BatchMaker {
         batch_size: usize,
         max_batch_delay: u64,
         rx_transaction: Receiver<Transaction>,
-        rx_control: Receiver<Digest>,
+        rx_control: Receiver<Vec<Digest>>,
         tx_authenticated_shard: Sender<(AuthenticatedShard, SerializedShard)>,
         tx_root: Sender<Digest>,
     ) {
@@ -142,13 +142,15 @@ impl BatchMaker {
                 "Waiting for previous batches to be certified (counter={})",
                 self.batch_counter
             );
-            let root = self
+            let roots = self
                 .rx_control
                 .recv()
                 .await
                 .expect("Control channel dropped");
-            let _ = self.pending.remove(&root);
-            self.batch_counter -= 1;
+            for root in roots {
+                let _ = self.pending.remove(&root);
+                self.batch_counter -= 1;
+            }
         }
     }
 

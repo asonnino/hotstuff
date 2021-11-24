@@ -29,7 +29,7 @@ pub struct Proposer {
     rx_mempool: Receiver<BatchCertificate>,
     rx_message: Receiver<ProposerMessage>,
     tx_loopback: Sender<Block>,
-    tx_mempool: Sender<Digest>,
+    tx_mempool: Sender<Vec<Digest>>,
     buffer: HashSet<BatchCertificate>,
     network: ReliableSender,
 }
@@ -42,7 +42,7 @@ impl Proposer {
         rx_mempool: Receiver<BatchCertificate>,
         rx_message: Receiver<ProposerMessage>,
         tx_loopback: Sender<Block>,
-        tx_mempool: Sender<Digest>,
+        tx_mempool: Sender<Vec<Digest>>,
     ) {
         tokio::spawn(async move {
             Self {
@@ -82,11 +82,22 @@ impl Proposer {
         if !block.payload.is_empty() {
             info!("Created {}", block);
 
-            #[cfg(feature = "benchmark")]
+            
+            let mut feedback = Vec::new();
             for x in &block.payload {
+                #[cfg(feature = "benchmark")]
                 // NOTE: This log entry is used to compute performance.
                 info!("Created {} -> {:?}", block, x.root);
+
+                if x.author == self.name {
+                    feedback.push(x.root.clone());
+                }
             }
+            self
+                        .tx_mempool
+                        .send(feedback)
+                        .await
+                        .expect("Failed to send back digest to mempool");
         }
         debug!("Created {:?}", block);
 

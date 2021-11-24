@@ -54,7 +54,7 @@ impl Consensus {
         store: Store,
         rx_mempool: Receiver<BatchCertificate>,
         tx_mempool: Sender<Vec<Digest>>,
-        tx_control: Sender<Digest>,
+        tx_control: Sender<Vec<Digest>>,
         tx_commit: Sender<Block>,
     ) {
         // NOTE: This log entry is used to compute performance.

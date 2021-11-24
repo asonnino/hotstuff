@@ -56,7 +56,7 @@ impl Mempool {
         // Receives sync requests from consensus.
         rx_consensus: Receiver<Vec<Digest>>,
         // Receives from consensus the batch roots that have been added to a block.
-        rx_control: Receiver<Digest>,
+        rx_control: Receiver<Vec<Digest>>,
         // Sends messages to consensus.
         tx_consensus: Sender<BatchCertificate>,
     ) {
@@ -137,7 +137,7 @@ impl Mempool {
         tx_consensus: Sender<BatchCertificate>,
         tx_aggregator: Sender<BatchVote>,
         rx_aggregator: Receiver<BatchVote>,
-        rx_control: Receiver<Digest>,
+        rx_control: Receiver<Vec<Digest>>,
     ) {
         let (tx_batch_maker, rx_batch_maker) = channel(CHANNEL_CAPACITY);
         let (tx_voter, rx_voter) = channel(CHANNEL_CAPACITY);
