@@ -43,23 +43,26 @@ impl MempoolDriver {
     }
 
     pub async fn verify(&mut self, block: Block) -> ConsensusResult<()> {
-        let mut missing = Vec::new();
         let mut to_sync = Vec::new();
+        let mut missing = Vec::new();
         for x in &block.payload {
             x.verify(&self.committee)?;
 
+            to_sync.push((x.root.clone(), x.author));
+
             if self.store.read(x.root.to_vec()).await?.is_none() {
                 missing.push(x.root.clone());
-                to_sync.push((x.root.clone(), x.author));
             }
         }
 
-        if !missing.is_empty() {
+        if !to_sync.is_empty() {
             self.tx_mempool
                 .send(to_sync)
                 .await
                 .expect("Failed to send sync message");
+        }
 
+        if !missing.is_empty() {
             self.tx_payload_waiter
                 .send(PayloadWaiterMessage::Wait(missing, block))
                 .await
