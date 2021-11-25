@@ -71,7 +71,7 @@ impl MempoolDriver {
             for (x, y) in &to_sync {
                 log::debug!("TEST HERE1: {} - {}", x, y);
             }
-           
+
             self.tx_mempool
                 .send(to_sync)
                 .await

@@ -173,6 +173,8 @@ impl Synchronizer {
                         if author == self.name {
                             debug!("TEST HERE0.1: {} - {}", digest, author);
                             feedback.push(digest.clone());
+                        } else {
+                            debug!("My name is {}, not {}", self.name, author);
                         }
 
                         // Try to sync with other nodes
