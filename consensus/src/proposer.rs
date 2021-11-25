@@ -142,7 +142,7 @@ impl Proposer {
                         self.buffer.insert(payload);
                         others_payloads += 1;
                     } else {
-                        debug!("Certificate dropped (block full");
+                        debug!("Certificate dropped (block full)");
                     }
 
                     /* THE OPTION BELOW GIVES
