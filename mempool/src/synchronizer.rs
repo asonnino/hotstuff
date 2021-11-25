@@ -140,6 +140,15 @@ impl Synchronizer {
                     let mut feedback = Vec::new();
 
                     for (digest, author) in digests {
+                        // Notify the batch maker that this batch made it to a block.
+                        debug!("TEST HERE0: {} - {}", digest, author);
+                        if author == self.name {
+                            debug!("TEST HERE0.1: {} - {}", digest, author);
+                            feedback.push(digest.clone());
+                        } else {
+                            debug!("My name is {}, not {}", self.name, author);
+                        }
+                        
                         // Ensure we do not send twice the same sync request.
                         if self.pending.contains_key(&digest) {
                             continue;
@@ -167,15 +176,6 @@ impl Synchronizer {
 
                         // Notify the reconstructor task about this missing batch.
                         self.tx_missing.send(digest.clone()).await.expect("Failed to send root");
-
-                        // Notify the batch maker that this batch made it to a block.
-                        debug!("TEST HERE0: {} - {}", digest, author);
-                        if author == self.name {
-                            debug!("TEST HERE0.1: {} - {}", digest, author);
-                            feedback.push(digest.clone());
-                        } else {
-                            debug!("My name is {}, not {}", self.name, author);
-                        }
 
                         // Try to sync with other nodes
                         self.sync(digest).await;
