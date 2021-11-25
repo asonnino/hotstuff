@@ -68,7 +68,10 @@ impl MempoolDriver {
             .map(|x| (x.root.clone(), x.author))
             .collect();
         if !to_sync.is_empty() {
-            log::debug!("TEST HERE1: {}", to_sync.len());
+            for (x, y) in &to_sync {
+                log::debug!("TEST HERE1: {} - {}", x, y);
+            }
+           
             self.tx_mempool
                 .send(to_sync)
                 .await

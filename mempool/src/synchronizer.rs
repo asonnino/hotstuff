@@ -171,6 +171,7 @@ impl Synchronizer {
                         // Notify the batch maker that this batch made it to a block.
                         debug!("TEST HERE0: {} - {}", digest, author);
                         if author == self.name {
+                            debug!("TEST HERE0.1: {} - {}", digest, author);
                             feedback.push(digest.clone());
                         }
 
