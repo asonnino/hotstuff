@@ -134,7 +134,6 @@ impl Proposer {
             tokio::select! {
                 Some(payload) = self.rx_mempool.recv() => {
                     debug!("Received payload from mempool");
-                    /*
                     if payload.author == self.name {
                         debug!("Adding our own certificate to payload {}", payload.root);
                         self.buffer.insert(payload);
@@ -145,7 +144,6 @@ impl Proposer {
                     } else {
                         debug!("Certificate dropped (block full)");
                     }
-                    */
 
                     /* THE OPTION BELOW GIVES
                         + CONFIG:
@@ -176,13 +174,14 @@ impl Proposer {
                         Commit without payload TPS: 45,794 tx/s
                         Commit without payload BPS: 23,291,088 B/s
                         Commit without payload latency: 2,287 ms
-                    */
                     
+
                     if others_payloads < MAX_BATCHES_FROM_OTHERS  {
                         self.buffer.insert(payload);
                         others_payloads += 1;
                     }
-                    
+                    */
+
                 },
                 Some(message) = self.rx_message.recv() => match message {
                     ProposerMessage::Make(round, qc, tc) => {

@@ -144,7 +144,7 @@ impl Synchronizer {
                         if author == self.name {
                             feedback.push(digest.clone());
                         }
-                        
+
                         // Ensure we do not send twice the same sync request.
                         if self.pending.contains_key(&digest) {
                             continue;
