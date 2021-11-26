@@ -14,7 +14,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 
 /// The maximum number of batches from other nodes that we include in our block.
 /// NOTE: This parameter heavily influences performance.
-const MAX_BATCHES_FROM_OTHERS: usize = 30;
+const MAX_BATCHES_FROM_OTHERS: usize = 50;
 
 #[derive(Debug)]
 pub enum ProposerMessage {
@@ -174,7 +174,7 @@ impl Proposer {
                         Commit without payload TPS: 45,794 tx/s
                         Commit without payload BPS: 23,291,088 B/s
                         Commit without payload latency: 2,287 ms
-                    
+
 
                     if others_payloads < MAX_BATCHES_FROM_OTHERS  {
                         self.buffer.insert(payload);
