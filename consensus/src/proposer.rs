@@ -144,37 +144,7 @@ impl Proposer {
                         debug!("Certificate dropped (block full): {}", payload.root);
                     }
 
-                    /* THE OPTION BELOW GIVES
-                        + CONFIG:
-                        Faults: ? nodes
-                        Committee size: ? nodes
-                        Input rate: 50,000 tx/s
-                        Transaction size: 512 B
-                        Execution time: 300 s
-
-                        Consensus timeout delay: 5,000 ms
-                        Consensus sync retry delay: 5,000 ms
-                        Mempool GC depth: 50 rounds
-                        Mempool sync retry delay: 5,000 ms
-                        Mempool sync nodes: 3 nodes
-                        Mempool sync bias: 11
-                        Mempool batch size: 500,000 B
-                        Mempool max batch delay: 100 ms
-
-                        + RESULTS:
-                        Consensus TPS: 45,961 tx/s
-                        Consensus BPS: 23,531,781 B/s
-                        Consensus latency: 2,023 ms
-
-                        End-to-end TPS: 45,490 tx/s
-                        End-to-end BPS: 23,446,389 B/s
-                        End-to-end latency: 3,628 ms
-
-                        Commit without payload TPS: 45,794 tx/s
-                        Commit without payload BPS: 23,291,088 B/s
-                        Commit without payload latency: 2,287 ms
-
-
+                    /* 
                     if others_payloads < MAX_BATCHES_FROM_OTHERS  {
                         self.buffer.insert(payload);
                         others_payloads += 1;
