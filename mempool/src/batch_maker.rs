@@ -151,6 +151,7 @@ impl BatchMaker {
                 let _ = self.pending.remove(&root);
                 self.batch_counter -= 1;
             }
+            tokio::task::yield_now().await;
         }
     }
 
