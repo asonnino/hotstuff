@@ -228,6 +228,8 @@ impl BatchMaker {
                     .push(handle);
             }
         }
+
+        self.wait().await;
     }
 
     #[cfg(feature = "benchmark")]
