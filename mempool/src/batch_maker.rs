@@ -137,7 +137,7 @@ impl BatchMaker {
             return;
         }
 
-        while self.batch_counter >= MAX_PENDING_BATCHES / 2 {
+        while self.batch_counter >= MAX_PENDING_BATCHES * 3 / 4 {
             debug!(
                 "Waiting for previous batches to be certified (counter={})",
                 self.batch_counter

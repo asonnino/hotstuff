@@ -183,7 +183,7 @@ impl Synchronizer {
                 },
 
                 // Stream out the futures of the `FuturesUnordered` that completed.
-                Some(digest) = waiting.next() =>{
+                Some(digest) = waiting.next() => {
                     // We got the batch, remove it from the pending list.
                     debug!("Finished to sync batch {}", digest);
                     self.pending.remove(&digest);
