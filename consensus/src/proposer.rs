@@ -144,7 +144,7 @@ impl Proposer {
                         debug!("Certificate dropped (block full): {}", payload.root);
                     }
 
-                    /* 
+                    /*
                     if others_payloads < MAX_BATCHES_FROM_OTHERS  {
                         self.buffer.insert(payload);
                         others_payloads += 1;

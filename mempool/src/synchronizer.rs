@@ -178,7 +178,7 @@ impl Synchronizer {
                     }
 
                     if !feedback.is_empty() {
-                        self.tx_control.send(feedback).await.expect("Failed to send root");
+                        //self.tx_control.send(feedback).await.expect("Failed to send root");
                     }
                 },
 
