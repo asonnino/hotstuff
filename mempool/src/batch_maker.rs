@@ -26,7 +26,7 @@ pub type Transaction = Vec<u8>;
 pub type Batch = Vec<Transaction>;
 
 /// The maximum number of batches that have been created but are not yet certified.
-const MAX_PENDING_BATCHES: usize = 10;
+const MAX_PENDING_BATCHES: usize = 50;
 
 /// Assemble clients transactions into batches.
 pub struct BatchMaker {
@@ -127,7 +127,7 @@ impl BatchMaker {
 
             // Give the change to schedule other tasks.
             tokio::task::yield_now().await;
-            //self.wait().await;
+            self.wait().await;
         }
     }
 
