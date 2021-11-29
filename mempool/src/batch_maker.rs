@@ -229,8 +229,8 @@ impl BatchMaker {
             }
         }
 
-        self.wait().await;
-        //sleep(Duration::from_millis(100)).await;
+        //self.wait().await;
+        sleep(Duration::from_millis(100)).await;
     }
 
     #[cfg(feature = "benchmark")]
