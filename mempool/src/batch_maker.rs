@@ -127,7 +127,7 @@ impl BatchMaker {
 
             // Give the change to schedule other tasks.
             tokio::task::yield_now().await;
-            self.wait().await;
+            //self.wait().await;
         }
     }
 
