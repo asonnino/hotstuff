@@ -114,7 +114,7 @@ def remote(ctx):
             'sync_nodes': 3,
             'sync_bias': 11,
             'batch_size': 1_000_000,
-            'max_batch_delay': 100
+            'max_batch_delay': 500
         }
     }
     try:
