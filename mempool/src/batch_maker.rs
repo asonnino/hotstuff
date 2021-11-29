@@ -133,6 +133,8 @@ impl BatchMaker {
 
     /// Wait until enough batches are certified and cleanup internal state.
     async fn wait(&mut self) {
+        sleep(Duration::from_millis(100)).await;
+
         if self.batch_counter < MAX_PENDING_BATCHES {
             return;
         }
