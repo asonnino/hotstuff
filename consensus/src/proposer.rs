@@ -133,6 +133,7 @@ impl Proposer {
         loop {
             tokio::select! {
                 Some(payload) = self.rx_mempool.recv() => {
+                    /*
                     if payload.author == self.name {
                         debug!("Adding our own certificate to payload {}", payload.root);
                         self.buffer.insert(payload);
@@ -143,13 +144,14 @@ impl Proposer {
                     } else {
                         debug!("Certificate dropped (block full): {}", payload.root);
                     }
+                    */
 
-                    /*
+                    
                     if others_payloads < MAX_BATCHES_FROM_OTHERS  {
                         self.buffer.insert(payload);
                         others_payloads += 1;
                     }
-                    */
+                    
 
 
                 },
