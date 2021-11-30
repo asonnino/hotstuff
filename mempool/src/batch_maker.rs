@@ -230,7 +230,7 @@ impl BatchMaker {
             }
         }
 
-        self.wait().await;
+        //self.wait().await;
         //sleep(Duration::from_millis(100)).await;
     }
 
