@@ -140,11 +140,13 @@ impl Proposer {
         loop {
             tokio::select! {
                 Some(payload) = self.rx_mempool.recv() => {
+                    /*
                     let now = SystemTime::now()
                             .duration_since(UNIX_EPOCH)
                             .expect("Failed to measure time")
                             .as_millis();
                     timeout = now - last_block_time > 5_000;
+                    */
 
                     if payload.author == self.name {
                         debug!("Adding our own certificate to payload {}", payload.root);
@@ -163,14 +165,18 @@ impl Proposer {
                 },
                 Some(message) = self.rx_message.recv() => match message {
                     ProposerMessage::Make(round, qc, tc) => {
+                        timeout = tc.is_some();
                         self.make_block(round, qc, tc).await;
                         others_payloads = 0;
 
+                        /*
                         let now = SystemTime::now()
                             .duration_since(UNIX_EPOCH)
                             .expect("Failed to measure time")
                             .as_millis();
                         last_block_time = now;
+                        */
+
                     },
                     ProposerMessage::Cleanup(digests) => {
                         for x in &digests {
