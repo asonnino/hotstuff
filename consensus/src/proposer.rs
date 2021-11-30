@@ -10,11 +10,12 @@ use log::{debug, info};
 use mempool::BatchCertificate;
 use network::{CancelHandler, ReliableSender};
 use std::collections::HashSet;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::{Receiver, Sender};
 
 /// The maximum number of batches from other nodes that we include in our block.
 /// NOTE: This parameter heavily influences performance.
-const MAX_BATCHES_FROM_OTHERS: usize = 10_000;
+const MAX_BATCHES_FROM_OTHERS: usize = 50;
 
 #[derive(Debug)]
 pub enum ProposerMessage {
@@ -130,28 +131,41 @@ impl Proposer {
 
     async fn run(&mut self) {
         let mut others_payloads = 0;
+        let mut timeout = false;
+        let mut last_block_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Failed to measure time")
+            .as_millis();
+
         loop {
             tokio::select! {
                 Some(payload) = self.rx_mempool.recv() => {
                     if payload.author == self.name {
                         debug!("Adding our own certificate to payload {}", payload.root);
-                        //self.buffer.insert(payload);
-                    } else if others_payloads < MAX_BATCHES_FROM_OTHERS  {
+                        self.buffer.insert(payload);
+                    } else if others_payloads < MAX_BATCHES_FROM_OTHERS || timeout {
                         debug!("Adding others' certificate to payload {}", payload.root);
-                        //self.buffer.insert(payload);
+                        self.buffer.insert(payload);
                         others_payloads += 1;
                     } else {
                         debug!("Certificate dropped (block full): {}", payload.root);
                     }
-                    
 
-                    self.buffer.insert(payload);
+
+                    //self.buffer.insert(payload);
                     //others_payloads += 1;
                 },
                 Some(message) = self.rx_message.recv() => match message {
                     ProposerMessage::Make(round, qc, tc) => {
                         self.make_block(round, qc, tc).await;
                         others_payloads = 0;
+
+                        let now = SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .expect("Failed to measure time")
+                            .as_millis();
+                        timeout = now - last_block_time > 5_000;
+                        last_block_time = now;
                     },
                     ProposerMessage::Cleanup(digests) => {
                         for x in &digests {
