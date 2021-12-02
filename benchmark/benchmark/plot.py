@@ -102,34 +102,37 @@ class Ploter:
         return f'Max latency: {float(x) / 1000:,.1f} s {faults}'
 
     @classmethod
-    def plot_robustness(cls, files):
+    def plot_robustness(cls, files, end_to_end=True):
         assert isinstance(files, list)
         assert all(isinstance(x, str) for x in files)
         z_axis = cls.nodes
         x_label = 'Input rate (tx/s)'
         y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
         ploter = cls(files)
-        ploter._plot(x_label, y_label, ploter._tps, z_axis, 'robustness')
+        name = 'robustness' if end_to_end else 'robustness-nopayload'
+        ploter._plot(x_label, y_label, ploter._tps, z_axis, name)
 
     @classmethod
-    def plot_latency(cls, files):
+    def plot_latency(cls, files, end_to_end=True):
         assert isinstance(files, list)
         assert all(isinstance(x, str) for x in files)
         z_axis = cls.nodes
         x_label = 'Throughput (tx/s)'
         y_label = ['Latency (ms)']
         ploter = cls(files)
-        ploter._plot(x_label, y_label, ploter._latency, z_axis, 'latency')
+        name = 'latency' if end_to_end else 'latency-nopayload'
+        ploter._plot(x_label, y_label, ploter._latency, z_axis, name)
 
     @classmethod
-    def plot_tps(cls, files):
+    def plot_tps(cls, files, end_to_end=True):
         assert isinstance(files, list)
         assert all(isinstance(x, str) for x in files)
         z_axis = cls.max_latency
         x_label = 'Committee size'
         y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
         ploter = cls(files)
-        ploter._plot(x_label, y_label, ploter._tps, z_axis, 'tps')
+        name = 'tps' if end_to_end else 'tps-nopayload'
+        ploter._plot(x_label, y_label, ploter._tps, z_axis, name)
 
     @classmethod
     def plot(cls, params_dict):
@@ -139,26 +142,31 @@ class Ploter:
             raise PlotError('Invalid nodes or bench parameters', e)
 
         # Aggregate the logs.
-        LogAggregator(params.max_latency).print()
+        for end_to_end in [True, False]:
+            LogAggregator(params.max_latency, end_to_end).print()
 
-        # Load the aggregated log files.
-        robustness_files, latency_files, tps_files = [], [], []
-        tx_size = params.tx_size
-        
-        for f in params.faults:
-            for n in params.nodes:
-                robustness_files += glob(
-                    PathMaker.agg_file('robustness', f, n, 'x', tx_size, 'any')
-                )
-                latency_files += glob(
-                    PathMaker.agg_file('latency', f, n, 'any', tx_size, 'any')
-                )
-            for l in params.max_latency:
-                tps_files += glob(
-                    PathMaker.agg_file('tps', f, 'x', 'any', tx_size, l)
-                )
+            # Load the aggregated log files.
+            robustness_files, latency_files, tps_files = [], [], []
+            tx_size = params.tx_size
 
-        # Make the plots.
-        cls.plot_robustness(robustness_files)
-        cls.plot_latency(latency_files)
-        cls.plot_tps(tps_files)
+            for f in params.faults:
+                for n in params.nodes:
+                    name = 'robustness' if end_to_end else 'robustness-nopayload'
+                    robustness_files += glob(
+                        PathMaker.agg_file(name, f, n, 'x', tx_size, 'any')
+                    )
+
+                    name = 'latency' if end_to_end else 'latency-nopayload'
+                    latency_files += glob(
+                        PathMaker.agg_file(name, f, n, 'any', tx_size, 'any')
+                    )
+                for l in params.max_latency:
+                    name = 'tps' if end_to_end else 'tps-nopayload'
+                    tps_files += glob(
+                        PathMaker.agg_file(name, f, 'x', 'any', tx_size, l)
+                    )
+
+            # Make the plots.
+            cls.plot_robustness(robustness_files, end_to_end)
+            cls.plot_latency(latency_files, end_to_end)
+            cls.plot_tps(tps_files, end_to_end)

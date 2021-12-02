@@ -55,9 +55,15 @@ class Result:
         )
 
     @classmethod
-    def from_str(cls, raw):
-        tps = int(search(r'.* End-to-end TPS: (\d+)', raw).group(1))
-        latency = int(search(r'.* End-to-end latency: (\d+)', raw).group(1))
+    def from_str(cls, raw, end_to_end=True):
+        if end_to_end:
+            prefix = 'End-to-end'
+        else:
+            prefix = 'Commit without payload'
+
+        tps = int(search(rf'.* {prefix} TPS: (\d+)', raw).group(1))
+        latency = int(
+            search(rf'.* {prefix} latency: (\d+)', raw).group(1))
         return cls(tps, latency)
 
     @classmethod
@@ -73,11 +79,12 @@ class Result:
 
 
 class LogAggregator:
-    def __init__(self, max_latencies):
+    def __init__(self, max_latencies, end_to_end=True):
         assert isinstance(max_latencies, list)
         assert all(isinstance(x, int) for x in max_latencies)
 
         self.max_latencies = max_latencies
+        self.end_to_end = end_to_end
 
         data = ''
         for filename in glob(join(PathMaker.results_path(), '*.txt')):
@@ -87,7 +94,8 @@ class LogAggregator:
         records = defaultdict(list)
         for chunk in data.replace(',', '').split('SUMMARY')[1:]:
             if chunk:
-                records[Setup.from_str(chunk)] += [Result.from_str(chunk)]
+                records[Setup.from_str(chunk)
+                        ] += [Result.from_str(chunk, end_to_end)]
 
         self.records = {k: Result.aggregate(v) for k, v in records.items()}
 
@@ -113,12 +121,13 @@ class LogAggregator:
                     f'{data}'
                     '-----------------------------------------\n'
                 )
+
                 filename = PathMaker.agg_file(
-                    name,
+                    name if self.end_to_end else f'{name}-nopayload',
                     setup.faults,
-                    setup.nodes, 
-                    setup.rate, 
-                    setup.tx_size, 
+                    setup.nodes,
+                    setup.rate,
+                    setup.tx_size,
                     max_latency=setup.max_latency
                 )
                 with open(filename, 'w') as f:
