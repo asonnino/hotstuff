@@ -170,8 +170,12 @@ async fn commit_block() {
 
     // Ensure the core commits the head.
     match rx_commit.recv().await {
+        Some(b) => assert_eq!(b, Block::genesis()),
+        _ => panic!("Channel dropped"),
+    }
+    match rx_commit.recv().await {
         Some(b) => assert_eq!(b, committed),
-        _ => assert!(false),
+        _ => panic!("Channel dropped"),
     }
 }
 

@@ -10,7 +10,6 @@ use log::{debug, info};
 use mempool::BatchCertificate;
 use network::{CancelHandler, ReliableSender};
 use std::collections::HashSet;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::{Receiver, Sender};
 
 /// The maximum number of batches from other nodes that we include in our block.
@@ -132,10 +131,6 @@ impl Proposer {
     async fn run(&mut self) {
         let mut others_payloads = 0;
         let mut timeout = false;
-        let mut last_block_time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Failed to measure time")
-            .as_millis();
 
         loop {
             tokio::select! {

@@ -6,7 +6,6 @@ use tokio::sync::mpsc::channel;
 #[tokio::test]
 async fn make_batch() {
     let (tx_transaction, rx_transaction) = channel(1);
-    let (_tx_control, rx_control) = channel(1);
     let (tx_authenticated_shard, mut rx_authenticated_shard) = channel(1);
     let (tx_root, mut rx_root) = channel(1);
 
@@ -28,7 +27,6 @@ async fn make_batch() {
         /* max_batch_size */ 200,
         /* max_batch_delay */ 1_000_000, // Ensure the timer is not triggered.
         rx_transaction,
-        rx_control,
         tx_authenticated_shard,
         tx_root,
     );
@@ -82,7 +80,6 @@ async fn make_batch() {
 #[tokio::test]
 async fn batch_timeout() {
     let (tx_transaction, rx_transaction) = channel(1);
-    let (_tx_control, rx_control) = channel(1);
     let (tx_authenticated_shard, _rx_authenticated_shard) = channel(1);
     let (tx_root, mut rx_root) = channel(1);
 
@@ -102,7 +99,6 @@ async fn batch_timeout() {
         /* max_batch_size */ 200,
         /* max_batch_delay */ 50, // Ensure the timer is triggered.
         rx_transaction,
-        rx_control,
         tx_authenticated_shard,
         tx_root,
     );

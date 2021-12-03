@@ -46,12 +46,8 @@ impl CodedBatch {
             _ => batch_size / data_shards + 1,
         };
 
-        // Fill with zeros: it is important that the batch size is divisible by
-        // 'data_shards'.
-        let filler = match remainder {
-            0 => Vec::default(),
-            remainder => vec![0u8; remainder],
-        };
+        // Fill with zeros: it is important that the batch size is divisible by data_shards'.
+        let filler = vec![0u8; data_shards * symbols_length - batch_size];
 
         // make the parity shards.
         let parity = vec![0u8; symbols_length * parity_shards];

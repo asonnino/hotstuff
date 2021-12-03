@@ -1,5 +1,5 @@
 use crate::{
-    consensus::{Round, CHANNEL_CAPACITY},
+    consensus::CHANNEL_CAPACITY,
     error::{ConsensusError, ConsensusResult},
     messages::Block,
 };
@@ -87,7 +87,7 @@ impl MempoolDriver {
 #[derive(Debug)]
 enum PayloadWaiterMessage {
     Wait(Vec<Digest>, Block),
-    Cleanup(Round),
+    //Cleanup(Round),
 }
 
 struct PayloadWaiter {
@@ -151,6 +151,7 @@ impl PayloadWaiter {
                         let fut = Self::waiter(wait_for, block, rx_cancel);
                         waiting.push(fut);
                     },
+                    /*
                     PayloadWaiterMessage::Cleanup(mut round) => {
                         for (r, handler) in pending.values() {
                             if r <= &round {
@@ -159,6 +160,7 @@ impl PayloadWaiter {
                         }
                         pending.retain(|_, (r, _)| r > &mut round);
                     }
+                    */
                 },
                 Some(result) = waiting.next() => {
                     match result {

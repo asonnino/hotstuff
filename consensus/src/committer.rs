@@ -1,5 +1,7 @@
-use crate::consensus::Round;
-use crate::messages::{Block, QC};
+use crate::{
+    consensus::Round,
+    messages::{Block, QC},
+};
 use crypto::{Digest, Hash as _};
 use log::{debug, info, warn};
 use std::collections::{HashSet, VecDeque};

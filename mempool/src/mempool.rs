@@ -63,7 +63,6 @@ impl Mempool {
 
         let (tx_aggregator, rx_aggregator) = channel(CHANNEL_CAPACITY);
         let (tx_missing, rx_missing) = channel(CHANNEL_CAPACITY);
-        let (tx_control, rx_control) = channel(CHANNEL_CAPACITY);
 
         // Spawn all mempool tasks.
         Self::handle_consensus_messages(
@@ -73,7 +72,6 @@ impl Mempool {
             &parameters,
             rx_consensus,
             tx_missing,
-            tx_control,
         );
         Self::handle_clients_transactions(
             name,
@@ -84,7 +82,6 @@ impl Mempool {
             tx_consensus.clone(),
             tx_aggregator.clone(),
             rx_aggregator,
-            rx_control,
         );
         Self::handle_mempool_messages(
             name,
@@ -113,7 +110,6 @@ impl Mempool {
         parameters: &Parameters,
         rx_consensus: Receiver<Vec<(Digest, PublicKey)>>,
         tx_missing: Sender<Digest>,
-        tx_control: Sender<Vec<Digest>>,
     ) {
         Synchronizer::spawn(
             name,
@@ -124,7 +120,6 @@ impl Mempool {
             parameters.sync_bias,
             /* rx_certificate */ rx_consensus,
             tx_missing,
-            tx_control,
         );
     }
 
@@ -139,7 +134,6 @@ impl Mempool {
         tx_consensus: Sender<BatchCertificate>,
         tx_aggregator: Sender<BatchVote>,
         rx_aggregator: Receiver<BatchVote>,
-        rx_control: Receiver<Vec<Digest>>,
     ) {
         let (tx_batch_maker, rx_batch_maker) = channel(CHANNEL_CAPACITY);
         let (tx_voter, rx_voter) = channel(CHANNEL_CAPACITY);
@@ -162,7 +156,6 @@ impl Mempool {
             parameters.batch_size,
             parameters.max_batch_delay,
             /* rx_transaction */ rx_batch_maker,
-            rx_control,
             /* tx_authenticated_shard */ tx_voter,
             tx_root,
         );

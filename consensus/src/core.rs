@@ -284,7 +284,7 @@ impl Core {
         self.store_block(block).await;
 
         self.cleanup_proposer(&b0, &b1, block).await;
-        self.mempool_driver.cleanup(&block).await;
+        self.mempool_driver.cleanup(block).await;
 
         // Check if we can commit the head of the 2-chain.
         // Note that we commit blocks only if we have all its ancestors.

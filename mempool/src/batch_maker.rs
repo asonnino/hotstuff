@@ -25,9 +25,6 @@ pub mod batch_maker_tests;
 pub type Transaction = Vec<u8>;
 pub type Batch = Vec<Transaction>;
 
-/// The maximum number of batches that have been created but are not yet certified.
-const MAX_PENDING_BATCHES: usize = 1_000;
-
 /// Assemble clients transactions into batches.
 pub struct BatchMaker {
     /// The public key of this authority.
@@ -44,8 +41,6 @@ pub struct BatchMaker {
     max_batch_delay: u64,
     /// Channel to receive transactions from the network.
     rx_transaction: Receiver<Transaction>,
-    /// Control channel to handle congestions.
-    rx_control: Receiver<Vec<Digest>>,
     /// Output channel to deliver shards of transactions batches.
     tx_authenticated_shard: Sender<(AuthenticatedShard, SerializedShard)>,
     /// Send the roots for which we are trying to assemble a certificate.
@@ -72,7 +67,6 @@ impl BatchMaker {
         batch_size: usize,
         max_batch_delay: u64,
         rx_transaction: Receiver<Transaction>,
-        rx_control: Receiver<Vec<Digest>>,
         tx_authenticated_shard: Sender<(AuthenticatedShard, SerializedShard)>,
         tx_root: Sender<Digest>,
     ) {
@@ -85,7 +79,6 @@ impl BatchMaker {
                 batch_size,
                 max_batch_delay,
                 rx_transaction,
-                rx_control,
                 tx_authenticated_shard,
                 tx_root,
                 current_batch: Batch::with_capacity(batch_size * 2),
@@ -126,32 +119,6 @@ impl BatchMaker {
             }
 
             // Give the change to schedule other tasks.
-            tokio::task::yield_now().await;
-            //self.wait().await;
-        }
-    }
-
-    /// Wait until enough batches are certified and cleanup internal state.
-    async fn wait(&mut self) {
-        if self.batch_counter < MAX_PENDING_BATCHES {
-            return;
-        }
-
-        // while self.batch_counter >= MAX_PENDING_BATCHES * 3 / 4 {
-        while false {
-            debug!(
-                "Waiting for previous batches to be certified (counter={})",
-                self.batch_counter
-            );
-            let roots = self
-                .rx_control
-                .recv()
-                .await
-                .expect("Control channel dropped");
-            for root in roots {
-                let _ = self.pending.remove(&root);
-                self.batch_counter -= 1;
-            }
             tokio::task::yield_now().await;
         }
     }
@@ -229,9 +196,6 @@ impl BatchMaker {
                     .push(handle);
             }
         }
-
-        //self.wait().await;
-        //sleep(Duration::from_millis(100)).await;
     }
 
     #[cfg(feature = "benchmark")]
