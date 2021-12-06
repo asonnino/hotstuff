@@ -14,7 +14,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 
 /// The maximum number of batches from other nodes that we include in our block.
 /// NOTE: This parameter heavily influences performance.
-const MAX_BATCHES_FROM_OTHERS: usize = 30;
+const MAX_BATCHES_FROM_OTHERS: usize = 50;
 
 #[derive(Debug)]
 pub enum ProposerMessage {
