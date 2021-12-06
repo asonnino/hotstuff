@@ -146,7 +146,7 @@ impl Proposer {
                     if payload.author == self.name {
                         debug!("Adding our own certificate to payload {}", payload.root);
                         self.buffer.insert(payload);
-                    } else if others_payloads < MAX_BATCHES_FROM_OTHERS {
+                    } else if others_payloads < MAX_BATCHES_FROM_OTHERS || timeout {
                         debug!("Adding others' certificate to payload {}", payload.root);
                         self.buffer.insert(payload);
                         others_payloads += 1;
