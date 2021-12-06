@@ -196,8 +196,6 @@ impl BatchMaker {
                     .push(handle);
             }
         }
-
-        sleep(Duration::from_millis(100)).await;
     }
 
     #[cfg(feature = "benchmark")]
