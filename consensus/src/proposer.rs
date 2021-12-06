@@ -143,6 +143,7 @@ impl Proposer {
                     timeout = now - last_block_time > 5_000;
                     */
 
+                    /*
                     if payload.author == self.name {
                         debug!("Adding our own certificate to payload {}", payload.root);
                         self.buffer.insert(payload);
@@ -153,10 +154,11 @@ impl Proposer {
                     } else {
                         debug!("Certificate dropped (block full): {}", payload.root);
                     }
+                    */
 
 
-                    //self.buffer.insert(payload);
-                    //others_payloads += 1;
+                    self.buffer.insert(payload);
+                    others_payloads += 1;
                 },
                 Some(message) = self.rx_message.recv() => match message {
                     ProposerMessage::Make(round, qc, tc) => {
