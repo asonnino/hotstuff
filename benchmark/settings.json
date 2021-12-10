@@ -12,7 +12,7 @@
     "repo": {
         "name": "hotstuff",
         "url": "https://github.com/asonnino/hotstuff.git",
-        "branch": "new-control"
+        "branch": "lazy-dolphin"
     },
     "instances": {
         "type": "m5d.8xlarge",
