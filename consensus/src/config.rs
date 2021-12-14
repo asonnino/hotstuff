@@ -1,5 +1,5 @@
-use crate::error::{ConsensusError, ConsensusResult};
 use crypto::PublicKey;
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -11,24 +11,27 @@ pub type EpochNumber = u128;
 pub struct Parameters {
     pub timeout_delay: u64,
     pub sync_retry_delay: u64,
-    pub max_payload_size: usize,
-    pub min_block_delay: u64,
 }
 
 impl Default for Parameters {
     fn default() -> Self {
         Self {
-            timeout_delay: 5000,
+            timeout_delay: 5_000,
             sync_retry_delay: 10_000,
-            max_payload_size: 500,
-            min_block_delay: 100,
         }
+    }
+}
+
+impl Parameters {
+    pub fn log(&self) {
+        // NOTE: These log entries are used to compute performance.
+        info!("Timeout delay set to {} rounds", self.timeout_delay);
+        info!("Sync retry delay set to {} ms", self.sync_retry_delay);
     }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Authority {
-    pub name: PublicKey,
     pub stake: Stake,
     pub address: SocketAddr,
 }
@@ -45,11 +48,7 @@ impl Committee {
             authorities: info
                 .into_iter()
                 .map(|(name, stake, address)| {
-                    let authority = Authority {
-                        name,
-                        stake,
-                        address,
-                    };
+                    let authority = Authority { stake, address };
                     (name, authority)
                 })
                 .collect(),
@@ -72,18 +71,15 @@ impl Committee {
         2 * total_votes / 3 + 1
     }
 
-    pub fn address(&self, name: &PublicKey) -> ConsensusResult<SocketAddr> {
-        self.authorities
-            .get(name)
-            .map(|x| x.address)
-            .ok_or_else(|| ConsensusError::NotInCommittee(*name))
+    pub fn address(&self, name: &PublicKey) -> Option<SocketAddr> {
+        self.authorities.get(name).map(|x| x.address)
     }
 
-    pub fn broadcast_addresses(&self, myself: &PublicKey) -> Vec<SocketAddr> {
+    pub fn broadcast_addresses(&self, myself: &PublicKey) -> Vec<(PublicKey, SocketAddr)> {
         self.authorities
-            .values()
-            .filter(|x| x.name != *myself)
-            .map(|x| x.address)
+            .iter()
+            .filter(|(name, _)| name != &myself)
+            .map(|(name, x)| (*name, x.address))
             .collect()
     }
 }

@@ -1,5 +1,5 @@
 use super::*;
-use crate::common::{block, chain, committee, keys};
+use crate::common::{block, chain, committee, committee_with_base_port, keys, listener};
 use std::fs;
 
 #[tokio::test]
@@ -18,17 +18,14 @@ async fn get_existing_parent_block() {
 
     // Make a new synchronizer.
     let (name, _) = keys().pop().unwrap();
-    let (tx_network, _) = channel(10);
-    let (tx_core, _) = channel(10);
+    let (tx_loopback, _) = channel(10);
     let mut synchronizer = Synchronizer::new(
         name,
         committee(),
         store,
-        tx_network,
-        tx_core,
+        tx_loopback,
         /* sync_retry_delay */ 10_000,
-    )
-    .await;
+    );
 
     // Ask the predecessor of 'block' to the synchronizer.
     match synchronizer.get_parent_block(&block).await {
@@ -44,17 +41,14 @@ async fn get_genesis_parent_block() {
     let _ = fs::remove_dir_all(path);
     let store = Store::new(path).unwrap();
     let (name, _) = keys().pop().unwrap();
-    let (tx_network, _) = channel(1);
-    let (tx_core, _) = channel(1);
+    let (tx_loopback, _) = channel(1);
     let mut synchronizer = Synchronizer::new(
         name,
         committee(),
         store,
-        tx_network,
-        tx_core,
+        tx_loopback,
         /* sync_retry_delay */ 10_000,
-    )
-    .await;
+    );
 
     // Ask the predecessor of 'block' to the synchronizer.
     match synchronizer.get_parent_block(&block()).await {
@@ -65,6 +59,7 @@ async fn get_genesis_parent_block() {
 
 #[tokio::test]
 async fn get_missing_parent_block() {
+    let committee = committee_with_base_port(12_000);
     let mut chain = chain(keys());
     let block = chain.pop().unwrap();
     let parent_block = chain.pop().unwrap();
@@ -74,49 +69,33 @@ async fn get_missing_parent_block() {
     let _ = fs::remove_dir_all(path);
     let mut store = Store::new(path).unwrap();
     let (name, _) = keys().pop().unwrap();
-    let (tx_network, mut rx_network) = channel(1);
-    let (tx_core, mut rx_core) = channel(1);
+    let (tx_loopback, mut rx_loopback) = channel(1);
     let mut synchronizer = Synchronizer::new(
         name,
-        committee(),
+        committee.clone(),
         store.clone(),
-        tx_network,
-        tx_core,
+        tx_loopback,
         /* sync_retry_delay */ 10_000,
-    )
-    .await;
+    );
 
-    // Ask for the parent of a block to the synchronizer.
-    // The store does not have the parent yet.
+    // Spawn a listener to receive our sync request.
+    let address = committee.address(&block.author).unwrap();
+    let message = ConsensusMessage::SyncRequest(parent_block.digest(), name);
+    let expected = Bytes::from(bincode::serialize(&message).unwrap());
+    let listener_handle = listener(address, Some(expected.clone()));
+
+    // Ask for the parent of a block to the synchronizer. The store does not have the parent yet.
     let copy = block.clone();
     let handle = tokio::spawn(async move {
-        match synchronizer.get_parent_block(&copy).await {
-            Ok(None) => assert!(true),
-            _ => assert!(false),
-        }
+        let ret = synchronizer.get_parent_block(&copy).await;
+        assert!(ret.is_ok());
+        assert!(ret.unwrap().is_none());
     });
 
-    // Ensure the synchronizer sends a sync request
-    // asking for the parent block.
-    match rx_network.recv().await {
-        Some(NetMessage(bytes, mut recipients)) => {
-            match bincode::deserialize(&bytes).unwrap() {
-                ConsensusMessage::SyncRequest(b, s) => {
-                    assert_eq!(b, parent_block.digest());
-                    assert_eq!(s, name);
-                }
-                _ => assert!(false),
-            }
-            let mut addresses = committee().broadcast_addresses(&name);
-            addresses.sort();
-            recipients.sort();
-            assert_eq!(recipients, addresses);
-        }
-        _ => assert!(false),
-    }
+    // Ensure the other listeners correctly received the sync request.
+    assert!(listener_handle.await.is_ok());
 
-    // Ensure the synchronizer returns None, thus suspending
-    // the processing of the block.
+    // Ensure the synchronizer returns None, thus suspending the processing of the block.
     assert!(handle.await.is_ok());
 
     // Add the parent to the store.
@@ -124,10 +103,8 @@ async fn get_missing_parent_block() {
     let value = bincode::serialize(&parent_block).unwrap();
     let _ = store.write(key, value).await;
 
-    // Now that we have the parent, ensure the synchronizer
-    // loops back the block to the core to resume processing.
-    match rx_core.recv().await {
-        Some(ConsensusMessage::LoopBack(b)) => assert_eq!(b, block.clone()),
-        _ => assert!(false),
-    }
+    // Now that we have the parent, ensure the synchronizer loops back the block to the core
+    // to resume processing.
+    let delivered = rx_loopback.recv().await.unwrap();
+    assert_eq!(delivered, block.clone());
 }

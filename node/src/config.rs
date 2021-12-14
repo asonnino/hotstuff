@@ -1,4 +1,3 @@
-use crate::node::NodeError;
 use consensus::{Committee as ConsensusCommittee, Parameters as ConsensusParameters};
 use crypto::{generate_keypair, generate_production_keypair, PublicKey, SecretKey};
 use mempool::{Committee as MempoolCommittee, Parameters as MempoolParameters};
@@ -9,20 +8,30 @@ use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::BufWriter;
 use std::io::Write as _;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum ConfigError {
+    #[error("Failed to read config file '{file}': {message}")]
+    ReadError { file: String, message: String },
+
+    #[error("Failed to write config file '{file}': {message}")]
+    WriteError { file: String, message: String },
+}
 
 pub trait Export: Serialize + DeserializeOwned {
-    fn read(path: &str) -> Result<Self, NodeError> {
+    fn read(path: &str) -> Result<Self, ConfigError> {
         let reader = || -> Result<Self, std::io::Error> {
             let data = fs::read(path)?;
             Ok(serde_json::from_slice(data.as_slice())?)
         };
-        reader().map_err(|e| NodeError::ReadError {
+        reader().map_err(|e| ConfigError::ReadError {
             file: path.to_string(),
             message: e.to_string(),
         })
     }
 
-    fn write(&self, path: &str) -> Result<(), NodeError> {
+    fn write(&self, path: &str) -> Result<(), ConfigError> {
         let writer = || -> Result<(), std::io::Error> {
             let file = OpenOptions::new().create(true).write(true).open(path)?;
             let mut writer = BufWriter::new(file);
@@ -31,7 +40,7 @@ pub trait Export: Serialize + DeserializeOwned {
             writer.write_all(b"\n")?;
             Ok(())
         };
-        writer().map_err(|e| NodeError::WriteError {
+        writer().map_err(|e| ConfigError::WriteError {
             file: path.to_string(),
             message: e.to_string(),
         })

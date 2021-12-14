@@ -1,13 +1,17 @@
 use crate::config::Committee;
-use crate::core::RoundNumber;
-use crate::mempool::{ConsensusMempoolMessage, PayloadStatus};
+use crate::consensus::Round;
 use crate::messages::{Block, Timeout, Vote, QC};
+use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{generate_keypair, Digest, PublicKey, SecretKey, Signature};
+use futures::sink::SinkExt as _;
+use futures::stream::StreamExt as _;
 use rand::rngs::StdRng;
-use rand::RngCore as _;
 use rand::SeedableRng as _;
-use tokio::sync::mpsc::Receiver;
+use std::net::SocketAddr;
+use tokio::net::TcpListener;
+use tokio::task::JoinHandle;
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 // Fixture.
 pub fn keys() -> Vec<(PublicKey, SecretKey)> {
@@ -27,24 +31,25 @@ pub fn committee() -> Committee {
                 (name, stake, address)
             })
             .collect(),
-        /* epoch */ 1,
+        /* epoch */ 100,
     )
 }
 
-impl Committee {
-    pub fn increment_base_port(&mut self, base_port: u16) {
-        for authority in self.authorities.values_mut() {
-            let port = authority.address.port();
-            authority.address.set_port(base_port + port);
-        }
+// Fixture.
+pub fn committee_with_base_port(base_port: u16) -> Committee {
+    let mut committee = committee();
+    for authority in committee.authorities.values_mut() {
+        let port = authority.address.port();
+        authority.address.set_port(base_port + port);
     }
+    committee
 }
 
 impl Block {
     pub fn new_from_key(
         qc: QC,
         author: PublicKey,
-        round: RoundNumber,
+        round: Round,
         payload: Vec<Digest>,
         secret: &SecretKey,
     ) -> Self {
@@ -68,12 +73,7 @@ impl PartialEq for Block {
 }
 
 impl Vote {
-    pub fn new_from_key(
-        hash: Digest,
-        round: RoundNumber,
-        author: PublicKey,
-        secret: &SecretKey,
-    ) -> Self {
+    pub fn new_from_key(hash: Digest, round: Round, author: PublicKey, secret: &SecretKey) -> Self {
         let vote = Self {
             hash,
             round,
@@ -92,12 +92,7 @@ impl PartialEq for Vote {
 }
 
 impl Timeout {
-    pub fn new_from_key(
-        high_qc: QC,
-        round: RoundNumber,
-        author: PublicKey,
-        secret: &SecretKey,
-    ) -> Self {
+    pub fn new_from_key(high_qc: QC, round: Round, author: PublicKey, secret: &SecretKey) -> Self {
         let timeout = Self {
             high_qc,
             round,
@@ -159,7 +154,7 @@ pub fn chain(keys: Vec<(PublicKey, SecretKey)>) -> Vec<Block> {
             let block = Block::new_from_key(
                 latest_qc.clone(),
                 *public_key,
-                1 + i as RoundNumber,
+                1 + i as Round,
                 Vec::new(),
                 secret_key,
             );
@@ -184,25 +179,20 @@ pub fn chain(keys: Vec<(PublicKey, SecretKey)>) -> Vec<Block> {
 }
 
 // Fixture
-pub struct MockMempool;
-
-impl MockMempool {
-    pub fn run(mut consensus_mempool_channel: Receiver<ConsensusMempoolMessage>) {
-        tokio::spawn(async move {
-            while let Some(message) = consensus_mempool_channel.recv().await {
-                match message {
-                    ConsensusMempoolMessage::Get(_max, sender) => {
-                        let mut rng = StdRng::from_seed([0; 32]);
-                        let mut payload = [0u8; 32];
-                        rng.fill_bytes(&mut payload);
-                        sender.send(vec![Digest(payload)]).unwrap();
-                    }
-                    ConsensusMempoolMessage::Verify(_block, sender) => {
-                        sender.send(PayloadStatus::Accept).unwrap()
-                    }
-                    ConsensusMempoolMessage::Cleanup(_digests, _round) => (),
+pub fn listener(address: SocketAddr, expected: Option<Bytes>) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let listener = TcpListener::bind(&address).await.unwrap();
+        let (socket, _) = listener.accept().await.unwrap();
+        let transport = Framed::new(socket, LengthDelimitedCodec::new());
+        let (mut writer, mut reader) = transport.split();
+        match reader.next().await {
+            Some(Ok(received)) => {
+                writer.send(Bytes::from("Ack")).await.unwrap();
+                if let Some(expected) = expected {
+                    assert_eq!(received.freeze(), expected);
                 }
             }
-        });
-    }
+            _ => panic!("Failed to receive network message"),
+        }
+    })
 }

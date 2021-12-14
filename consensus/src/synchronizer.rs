@@ -1,5 +1,5 @@
 use crate::config::Committee;
-use crate::core::ConsensusMessage;
+use crate::consensus::{ConsensusMessage, CHANNEL_CAPACITY};
 use crate::error::ConsensusResult;
 use crate::messages::{Block, QC};
 use bytes::Bytes;
@@ -8,7 +8,7 @@ use crypto::{Digest, PublicKey};
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
 use log::{debug, error};
-use network::NetMessage;
+use network::SimpleSender;
 use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 use store::Store;
@@ -27,15 +27,15 @@ pub struct Synchronizer {
 }
 
 impl Synchronizer {
-    pub async fn new(
+    pub fn new(
         name: PublicKey,
         committee: Committee,
         store: Store,
-        network_channel: Sender<NetMessage>,
-        core_channel: Sender<ConsensusMessage>,
+        tx_loopback: Sender<Block>,
         sync_retry_delay: u64,
     ) -> Self {
-        let (tx_inner, mut rx_inner): (_, Receiver<Block>) = channel(1000);
+        let mut network = SimpleSender::new();
+        let (tx_inner, mut rx_inner): (_, Receiver<Block>) = channel(CHANNEL_CAPACITY);
 
         let store_copy = store.clone();
         tokio::spawn(async move {
@@ -50,6 +50,7 @@ impl Synchronizer {
                     Some(block) = rx_inner.recv() => {
                         if pending.insert(block.digest()) {
                             let parent = block.parent().clone();
+                            let author = block.author;
                             let fut = Self::waiter(store_copy.clone(), parent.clone(), block);
                             waiting.push(fut);
 
@@ -60,8 +61,13 @@ impl Synchronizer {
                                     .expect("Failed to measure time")
                                     .as_millis();
                                 requests.insert(parent.clone(), now);
+                                let address = committee
+                                    .address(&author)
+                                    .expect("Author of valid block is not in the committee");
                                 let message = ConsensusMessage::SyncRequest(parent, name);
-                                Self::transmit(&message, &name, None, &network_channel, &committee).await.unwrap();
+                                let message = bincode::serialize(&message)
+                                    .expect("Failed to serialize sync request");
+                                network.send(address, Bytes::from(message)).await;
                             }
                         }
                     },
@@ -69,8 +75,7 @@ impl Synchronizer {
                         Ok(block) => {
                             let _ = pending.remove(&block.digest());
                             let _ = requests.remove(&block.parent());
-                            let message = ConsensusMessage::LoopBack(block);
-                            if let Err(e) = core_channel.send(message).await {
+                            if let Err(e) = tx_loopback.send(block).await {
                                 panic!("Failed to send message through core channel: {}", e);
                             }
                         },
@@ -85,13 +90,19 @@ impl Synchronizer {
                                 .as_millis();
                             if timestamp + (sync_retry_delay as u128) < now {
                                 debug!("Requesting sync for block {} (retry)", digest);
+                                let addresses = committee
+                                    .broadcast_addresses(&name)
+                                    .into_iter()
+                                    .map(|(_, x)| x)
+                                    .collect();
                                 let message = ConsensusMessage::SyncRequest(digest.clone(), name);
-                                Self::transmit(&message, &name, None, &network_channel, &committee).await.unwrap();
+                                let message = bincode::serialize(&message)
+                                    .expect("Failed to serialize sync request");
+                                network.broadcast(addresses, Bytes::from(message)).await;
                             }
                         }
                         timer.as_mut().reset(Instant::now() + Duration::from_millis(TIMER_ACCURACY));
-                    },
-                    else => break,
+                    }
                 }
             }
         });
@@ -104,28 +115,6 @@ impl Synchronizer {
     async fn waiter(mut store: Store, wait_on: Digest, deliver: Block) -> ConsensusResult<Block> {
         let _ = store.notify_read(wait_on.to_vec()).await?;
         Ok(deliver)
-    }
-
-    pub async fn transmit(
-        message: &ConsensusMessage,
-        from: &PublicKey,
-        to: Option<&PublicKey>,
-        network_channel: &Sender<NetMessage>,
-        committee: &Committee,
-    ) -> ConsensusResult<()> {
-        let addresses = if let Some(to) = to {
-            debug!("Sending {:?} to {}", message, to);
-            vec![committee.address(to)?]
-        } else {
-            debug!("Broadcasting {:?}", message);
-            committee.broadcast_addresses(from)
-        };
-        let bytes = bincode::serialize(message).expect("Failed to serialize core message");
-        let message = NetMessage(Bytes::from(bytes), addresses);
-        if let Err(e) = network_channel.send(message).await {
-            panic!("Failed to send block through network channel: {}", e);
-        }
-        Ok(())
     }
 
     pub async fn get_parent_block(&mut self, block: &Block) -> ConsensusResult<Option<Block>> {

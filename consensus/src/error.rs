@@ -1,4 +1,4 @@
-use crate::core::RoundNumber;
+use crate::consensus::Round;
 use crypto::{CryptoError, Digest, PublicKey};
 use store::StoreError;
 use thiserror::Error;
@@ -57,7 +57,7 @@ pub enum ConsensusError {
     WrongLeader {
         digest: Digest,
         leader: PublicKey,
-        round: RoundNumber,
+        round: Round,
     },
 
     #[error("Invalid payload")]

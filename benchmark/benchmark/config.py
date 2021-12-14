@@ -19,15 +19,15 @@ class Key:
 
 
 class Committee:
-    def __init__(self, names, consensus_addr, front_addr, mempool_addr):
-        inputs = [names, consensus_addr, front_addr, mempool_addr]
+    def __init__(self, names, consensus_addr, transactions_addr, mempool_addr):
+        inputs = [names, consensus_addr, transactions_addr, mempool_addr]
         assert all(isinstance(x, list) for x in inputs)
         assert all(isinstance(x, str) for y in inputs for x in y)
         assert len({len(x) for x in inputs}) == 1
 
         self.names = names
         self.consensus = consensus_addr
-        self.front = front_addr
+        self.front = transactions_addr
         self.mempool = mempool_addr
 
         self.json = {
@@ -44,7 +44,12 @@ class Committee:
     def _build_mempool(self):
         node = {}
         for n, f, m in zip(self.names, self.front, self.mempool):
-            node[n] = {'name': n, 'front_address': f, 'mempool_address': m}
+            node[n] = {
+                'name': n, 
+                'stake': 1,
+                'transactions_address': f, 
+                'mempool_address': m
+            }
         return {'authorities': node, 'epoch': 1}
 
     def print(self, filename):
@@ -66,14 +71,17 @@ class Committee:
 
         names = [x['name'] for x in consensus_authorities]
         consensus_addr = [x['address'] for x in consensus_authorities]
-        front_addr = [x['front_address'] for x in mempool_authorities]
+        transactions_addr = [
+            x['transactions_address'] for x in mempool_authorities
+        ]
         mempool_addr = [x['mempool_address'] for x in mempool_authorities]
-        return cls(names, consensus_addr, front_addr, mempool_addr)
+        return cls(names, consensus_addr, transactions_addr, mempool_addr)
 
 
 class LocalCommittee(Committee):
     def __init__(self, names, port):
-        assert isinstance(names, list) and all(isinstance(x, str) for x in names)
+        assert isinstance(names, list) and all(
+            isinstance(x, str) for x in names)
         assert isinstance(port, int)
         size = len(names)
         consensus = [f'127.0.0.1:{port + i}' for i in range(size)]
@@ -88,19 +96,18 @@ class NodeParameters:
         try:
             inputs += [json['consensus']['timeout_delay']]
             inputs += [json['consensus']['sync_retry_delay']]
-            inputs += [json['consensus']['max_payload_size']]
-            inputs += [json['consensus']['min_block_delay']]
-            inputs += [json['mempool']['queue_capacity']]
-            inputs += [json['consensus']['sync_retry_delay']]
-            inputs += [json['mempool']['max_payload_size']]
-            inputs += [json['mempool']['min_block_delay']]
+            inputs += [json['mempool']['gc_depth']]
+            inputs += [json['mempool']['sync_retry_delay']]
+            inputs += [json['mempool']['sync_retry_nodes']]
+            inputs += [json['mempool']['batch_size']]
+            inputs += [json['mempool']['max_batch_delay']]
         except KeyError as e:
             raise ConfigError(f'Malformed parameters: missing key {e}')
 
         if not all(isinstance(x, int) for x in inputs):
             raise ConfigError('Invalid parameters type')
 
-        self.timeout_delay = json['consensus']['timeout_delay'] 
+        self.timeout_delay = json['consensus']['timeout_delay']
         self.json = json
 
     def print(self, filename):
@@ -112,12 +119,12 @@ class NodeParameters:
 class BenchParameters:
     def __init__(self, json):
         try:
-            nodes = json['nodes'] 
+            nodes = json['nodes']
             nodes = nodes if isinstance(nodes, list) else [nodes]
             if not nodes or any(x <= 1 for x in nodes):
                 raise ConfigError('Missing or invalid number of nodes')
 
-            rate = json['rate'] 
+            rate = json['rate']
             rate = rate if isinstance(rate, list) else [rate]
             if not rate:
                 raise ConfigError('Missing input rate')
@@ -141,7 +148,7 @@ class BenchParameters:
 class PlotParameters:
     def __init__(self, json):
         try:
-            nodes = json['nodes'] 
+            nodes = json['nodes']
             nodes = nodes if isinstance(nodes, list) else [nodes]
             if not nodes:
                 raise ConfigError('Missing number of nodes')
@@ -149,11 +156,11 @@ class PlotParameters:
 
             self.tx_size = int(json['tx_size'])
 
-            faults = json['faults'] 
+            faults = json['faults']
             faults = faults if isinstance(faults, list) else [faults]
             self.faults = [int(x) for x in faults] if faults else [0]
 
-            max_lat = json['max_latency'] 
+            max_lat = json['max_latency']
             max_lat = max_lat if isinstance(max_lat, list) else [max_lat]
             if not max_lat:
                 raise ConfigError('Missing max latency')
@@ -164,4 +171,3 @@ class PlotParameters:
 
         except ValueError:
             raise ConfigError('Invalid parameters type')
-

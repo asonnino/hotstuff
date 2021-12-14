@@ -1,13 +1,21 @@
 use crate::config::{Committee, Parameters};
-use crate::core::{ConsensusMessage, Core};
-use crate::error::ConsensusResult;
+use crate::core::Core;
+use crate::error::ConsensusError;
+use crate::helper::Helper;
 use crate::leader::LeaderElector;
-use crate::mempool::{ConsensusMempoolMessage, MempoolDriver};
-use crate::messages::Block;
+use crate::mempool::MempoolDriver;
+use crate::messages::{Block, Timeout, Vote, TC};
+use crate::proposer::Proposer;
 use crate::synchronizer::Synchronizer;
-use crypto::{PublicKey, SignatureService};
+use async_trait::async_trait;
+use bytes::Bytes;
+use crypto::{Digest, PublicKey, SignatureService};
+use futures::SinkExt as _;
 use log::info;
-use network::{NetReceiver, NetSender};
+use mempool::ConsensusMempoolMessage;
+use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
+use serde::{Deserialize, Serialize};
+use std::error::Error;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
@@ -15,91 +23,140 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 #[path = "tests/consensus_tests.rs"]
 pub mod consensus_tests;
 
+/// The default channel capacity for each channel of the consensus.
+pub const CHANNEL_CAPACITY: usize = 1_000;
+
+/// The consensus round number.
+pub type Round = u64;
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum ConsensusMessage {
+    Propose(Block),
+    Vote(Vote),
+    Timeout(Timeout),
+    TC(TC),
+    SyncRequest(Digest, PublicKey),
+}
+
 pub struct Consensus;
 
 impl Consensus {
     #[allow(clippy::too_many_arguments)]
-    pub async fn run(
+    pub fn spawn(
         name: PublicKey,
         committee: Committee,
         parameters: Parameters,
-        store: Store,
         signature_service: SignatureService,
-        tx_core: Sender<ConsensusMessage>,
-        rx_core: Receiver<ConsensusMessage>,
-        tx_consensus_mempool: Sender<ConsensusMempoolMessage>,
+        store: Store,
+        rx_mempool: Receiver<Digest>,
+        tx_mempool: Sender<ConsensusMempoolMessage>,
         tx_commit: Sender<Block>,
-    ) -> ConsensusResult<()> {
-        // NOTE: The following log entries are used to compute performance.
-        info!(
-            "Consensus timeout delay set to {} ms",
-            parameters.timeout_delay
+    ) {
+        // NOTE: This log entry is used to compute performance.
+        parameters.log();
+
+        let (tx_consensus, rx_consensus) = channel(CHANNEL_CAPACITY);
+        let (tx_loopback, rx_loopback) = channel(CHANNEL_CAPACITY);
+        let (tx_proposer, rx_proposer) = channel(CHANNEL_CAPACITY);
+        let (tx_helper, rx_helper) = channel(CHANNEL_CAPACITY);
+
+        // Spawn the network receiver.
+        let mut address = committee
+            .address(&name)
+            .expect("Our public key is not in the committee");
+        address.set_ip("0.0.0.0".parse().unwrap());
+        NetworkReceiver::spawn(
+            address,
+            /* handler */
+            ConsensusReceiverHandler {
+                tx_consensus,
+                tx_helper,
+            },
         );
         info!(
-            "Consensus synchronizer retry delay set to {} ms",
-            parameters.sync_retry_delay
-        );
-        info!(
-            "Consensus max payload size set to {} B",
-            parameters.max_payload_size
-        );
-        info!(
-            "Consensus min block delay set to {} ms",
-            parameters.min_block_delay
+            "Node {} listening to consensus messages on {}",
+            name, address
         );
 
-        let (tx_network, rx_network) = channel(1000);
-
-        // Make the network sender and receiver.
-        let address = committee.address(&name).map(|mut x| {
-            x.set_ip("0.0.0.0".parse().unwrap());
-            x
-        })?;
-        let network_receiver = NetReceiver::new(address, tx_core.clone());
-        tokio::spawn(async move {
-            network_receiver.run().await;
-        });
-
-        let mut network_sender = NetSender::new(rx_network);
-        tokio::spawn(async move {
-            network_sender.run().await;
-        });
-
-        // The leader elector algorithm.
+        // Make the leader election module.
         let leader_elector = LeaderElector::new(committee.clone());
 
-        // Make the mempool driver which will mediate our requests to the mempool.
-        let mempool_driver = MempoolDriver::new(tx_consensus_mempool);
+        // Make the mempool driver.
+        let mempool_driver = MempoolDriver::new(store.clone(), tx_mempool, tx_loopback.clone());
 
-        // Make the synchronizer. This instance runs in a background thread
-        // and asks other nodes for any block that we may be missing.
+        // Make the synchronizer.
         let synchronizer = Synchronizer::new(
             name,
             committee.clone(),
             store.clone(),
-            /* network_channel */ tx_network.clone(),
-            /* core_channel */ tx_core,
+            tx_loopback.clone(),
             parameters.sync_retry_delay,
-        )
-        .await;
+        );
 
-        let mut core = Core::new(
+        // Spawn the consensus core.
+        Core::spawn(
             name,
-            committee,
-            parameters,
-            signature_service,
-            store,
+            committee.clone(),
+            signature_service.clone(),
+            store.clone(),
             leader_elector,
             mempool_driver,
             synchronizer,
-            /* core_channel */ rx_core,
-            /* network_channel */ tx_network,
-            /* commit_channel */ tx_commit,
+            parameters.timeout_delay,
+            /* rx_message */ rx_consensus,
+            rx_loopback,
+            tx_proposer,
+            tx_commit,
         );
-        tokio::spawn(async move {
-            core.run().await;
-        });
 
+        // Spawn the block proposer.
+        Proposer::spawn(
+            name,
+            committee.clone(),
+            signature_service,
+            rx_mempool,
+            /* rx_message */ rx_proposer,
+            tx_loopback,
+        );
+
+        // Spawn the helper module.
+        Helper::spawn(committee, store, /* rx_requests */ rx_helper);
+    }
+}
+
+/// Defines how the network receiver handles incoming primary messages.
+#[derive(Clone)]
+struct ConsensusReceiverHandler {
+    tx_consensus: Sender<ConsensusMessage>,
+    tx_helper: Sender<(Digest, PublicKey)>,
+}
+
+#[async_trait]
+impl MessageHandler for ConsensusReceiverHandler {
+    async fn dispatch(&self, writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
+        // Deserialize and parse the message.
+        match bincode::deserialize(&serialized).map_err(ConsensusError::SerializationError)? {
+            ConsensusMessage::SyncRequest(missing, origin) => self
+                .tx_helper
+                .send((missing, origin))
+                .await
+                .expect("Failed to send consensus message"),
+            message @ ConsensusMessage::Propose(..) => {
+                // Reply with an ACK.
+                let _ = writer.send(Bytes::from("Ack")).await;
+
+                // Pass the message to the consensus core.
+                self.tx_consensus
+                    .send(message)
+                    .await
+                    .expect("Failed to consensus message")
+            }
+            message => self
+                .tx_consensus
+                .send(message)
+                .await
+                .expect("Failed to consensus message"),
+        }
         Ok(())
     }
 }

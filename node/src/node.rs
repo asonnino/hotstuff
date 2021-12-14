@@ -1,30 +1,14 @@
 use crate::config::Export as _;
-use crate::config::{Committee, Parameters, Secret};
-use consensus::{Block, Consensus, ConsensusError};
+use crate::config::{Committee, ConfigError, Parameters, Secret};
+use consensus::{Block, Consensus};
 use crypto::SignatureService;
 use log::info;
-use mempool::{Mempool, MempoolError};
-use store::{Store, StoreError};
-use thiserror::Error;
+use mempool::Mempool;
+use store::Store;
 use tokio::sync::mpsc::{channel, Receiver};
 
-#[derive(Error, Debug)]
-pub enum NodeError {
-    #[error("Failed to read config file '{file}': {message}")]
-    ReadError { file: String, message: String },
-
-    #[error("Failed to write config file '{file}': {message}")]
-    WriteError { file: String, message: String },
-
-    #[error("Store error: {0}")]
-    StoreError(#[from] StoreError),
-
-    #[error(transparent)]
-    ConsensusError(#[from] ConsensusError),
-
-    #[error(transparent)]
-    MempoolError(#[from] MempoolError),
-}
+/// The default channel capacity for this module.
+pub const CHANNEL_CAPACITY: usize = 1_000;
 
 pub struct Node {
     pub commit: Receiver<Block>,
@@ -36,10 +20,10 @@ impl Node {
         key_file: &str,
         store_path: &str,
         parameters: Option<&str>,
-    ) -> Result<Self, NodeError> {
-        let (tx_commit, rx_commit) = channel(1000);
-        let (tx_consensus, rx_consensus) = channel(1000);
-        let (tx_consensus_mempool, rx_consensus_mempool) = channel(1000);
+    ) -> Result<Self, ConfigError> {
+        let (tx_commit, rx_commit) = channel(CHANNEL_CAPACITY);
+        let (tx_consensus_to_mempool, rx_consensus_to_mempool) = channel(CHANNEL_CAPACITY);
+        let (tx_mempool_to_consensus, rx_mempool_to_consensus) = channel(CHANNEL_CAPACITY);
 
         // Read the committee and secret key from file.
         let committee = Committee::read(committee_file)?;
@@ -54,41 +38,38 @@ impl Node {
         };
 
         // Make the data store.
-        let store = Store::new(store_path)?;
+        let store = Store::new(store_path).expect("Failed to create store");
 
         // Run the signature service.
         let signature_service = SignatureService::new(secret_key);
 
         // Make a new mempool.
-        Mempool::run(
+        Mempool::spawn(
             name,
             committee.mempool,
             parameters.mempool,
             store.clone(),
-            signature_service.clone(),
-            tx_consensus.clone(),
-            rx_consensus_mempool,
-        )?;
+            rx_consensus_to_mempool,
+            tx_mempool_to_consensus,
+        );
 
         // Run the consensus core.
-        Consensus::run(
+        Consensus::spawn(
             name,
             committee.consensus,
             parameters.consensus,
-            store.clone(),
             signature_service,
-            tx_consensus,
-            rx_consensus,
-            tx_consensus_mempool,
+            store,
+            rx_mempool_to_consensus,
+            tx_consensus_to_mempool,
             tx_commit,
-        )
-        .await?;
+        );
 
         info!("Node {} successfully booted", name);
         Ok(Self { commit: rx_commit })
     }
 
-    pub fn print_key_file(filename: &str) -> Result<(), NodeError> {
+    pub fn print_key_file(filename: &str) -> Result<(), ConfigError> {
         Secret::new().write(filename)
     }
 
