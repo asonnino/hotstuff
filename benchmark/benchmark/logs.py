@@ -89,7 +89,7 @@ class LogParser:
 
     def _parse_nodes(self, log):
         if search(r'panic', log) is not None:
-            raise ParseError('Client(s) panicked')
+            raise ParseError('Node(s) panicked')
 
         tmp = findall(r'\[(.*Z) .* Created B\d+ -> ([^ ]+=)', log)
         tmp = [(d, self._to_posix(t)) for t, d in tmp]
