@@ -61,7 +61,7 @@ impl Committee {
     }
 
     pub fn stake(&self, name: &PublicKey) -> Stake {
-        self.authorities.get(&name).map_or_else(|| 0, |x| x.stake)
+        self.authorities.get(name).map_or_else(|| 0, |x| x.stake)
     }
 
     pub fn quorum_threshold(&self) -> Stake {
