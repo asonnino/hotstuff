@@ -1,5 +1,3 @@
-> **Note to readers:** This branch implements a [2-chain variant of the HotStuff consensus protocol](https://arxiv.org/abs/2106.10362). You may be interested in the [3-chain branch](https://github.com/asonnino/hotstuff/tree/3-chain) that implements the classic HotStuff protocol.
-
 # HotStuff
 
 [![build status](https://img.shields.io/github/workflow/status/asonnino/hotstuff/Rust/main?style=flat-square&logo=github)](https://github.com/asonnino/hotstuff/actions)
