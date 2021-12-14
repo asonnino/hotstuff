@@ -83,7 +83,7 @@ impl Committee {
 
     /// Return the stake of a specific authority.
     pub fn stake(&self, name: &PublicKey) -> Stake {
-        self.authorities.get(&name).map_or_else(|| 0, |x| x.stake)
+        self.authorities.get(name).map_or_else(|| 0, |x| x.stake)
     }
 
     /// Returns the stake required to reach a quorum (2f+1).

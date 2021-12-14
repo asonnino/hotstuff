@@ -309,7 +309,7 @@ impl TC {
             hasher.update(self.round.to_le_bytes());
             hasher.update(high_qc_round.to_le_bytes());
             let digest = Digest(hasher.finalize().as_slice()[..32].try_into().unwrap());
-            signature.verify(&digest, &author)?;
+            signature.verify(&digest, author)?;
         }
         Ok(())
     }

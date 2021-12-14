@@ -130,10 +130,14 @@ async fn generate_proposal() {
     }
 
     // Ensure the core sends a new block.
-    let ProposerMessage(round, qc, tc) = rx_proposer.recv().await.unwrap();
-    assert_eq!(round, 2);
-    assert_eq!(qc, hight_qc);
-    assert!(tc.is_none());
+    match rx_proposer.recv().await.unwrap() {
+        ProposerMessage::Make(round, qc, tc) => {
+            assert_eq!(round, 2);
+            assert_eq!(qc, hight_qc);
+            assert!(tc.is_none());
+        }
+        _ => panic!("Unexpected protocol message"),
+    }
 }
 
 #[tokio::test]
@@ -145,7 +149,7 @@ async fn commit_block() {
     // Run a core instance.
     let store_path = ".db_test_commit_block";
     let (public_key, secret_key) = keys().pop().unwrap();
-    let (tx_core, _rx_proposer, mut rx_commit) =
+    let (tx_core, mut rx_proposer, mut rx_commit) =
         core(public_key, secret_key, committee(), store_path);
 
     // Send a the blocks to the core.
@@ -153,6 +157,8 @@ async fn commit_block() {
     for block in chain {
         let message = ConsensusMessage::Propose(block);
         tx_core.send(message).await.unwrap();
+
+        let _ = rx_proposer.recv().await.unwrap();
     }
 
     // Ensure the core commits the head.
@@ -180,7 +186,7 @@ async fn local_timeout_round() {
     let handles: Vec<_> = committee
         .broadcast_addresses(&public_key)
         .into_iter()
-        .map(|address| listener(address, Some(Bytes::from(expected.clone()))))
+        .map(|(_, address)| listener(address, Some(Bytes::from(expected.clone()))))
         .collect();
     assert!(try_join_all(handles).await.is_ok());
 }
