@@ -1,0 +1,22 @@
+
+-----------------------------------------
+ RESULTS:
+-----------------------------------------
+ Faults: 0 nodes
+ Committee size: x nodes
+ Input rate: any tx/s
+ Transaction size: 512 B
+ Max latency: 5000 ms
+
+ Variable value: X=10
+ TPS: 100720 +/- 7638 tx/s
+ Latency: 4588 +/- 751 ms
+
+ Variable value: X=20
+ TPS: 124911 +/- 2556 tx/s
+ Latency: 2347 +/- 1017 ms
+
+ Variable value: X=50
+ TPS: 88367 +/- 1521 tx/s
+ Latency: 2539 +/- 1912 ms
+-----------------------------------------
