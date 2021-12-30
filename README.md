@@ -1,3 +1,5 @@
+> **Note to readers:** This codebase is useful to get started with BFT consensus and as baseline for your new protocols. If you are looking for state-of-the-art protocols, I recommend [Tusk](https://github.com/asonnino/narwhal) (asynchronous) and [Bullshark](https://github.com/asonnino/narwhal/tree/bullshark) (partially-synchronous) that provide superior performance and robustness. 
+
 # HotStuff
 
 [![build status](https://img.shields.io/github/workflow/status/asonnino/hotstuff/Rust/main?style=flat-square&logo=github)](https://github.com/asonnino/hotstuff/actions)
