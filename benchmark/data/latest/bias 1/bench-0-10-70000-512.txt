@@ -1,0 +1,99 @@
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Faults: 0 nodes
+ Committee size: 10 nodes
+ Input rate: 70,000 tx/s
+ Transaction size: 512 B
+ Execution time: 301 s
+
+ Consensus timeout delay: 5,000 ms
+ Consensus sync retry delay: 5,000 ms
+ Mempool GC depth: 50 rounds
+ Mempool sync retry delay: 5,000 ms
+ Mempool sync nodes: 3 nodes
+ Mempool sync bias: 11
+ Mempool batch size: 500,000 B
+ Mempool max batch delay: 500 ms
+
+ + RESULTS:
+ Consensus TPS: 69,876 tx/s
+ Consensus BPS: 35,776,388 B/s
+ Consensus latency: 1,492 ms
+
+ End-to-end TPS: 69,586 tx/s
+ End-to-end BPS: 35,665,229 B/s
+ End-to-end latency: 2,424 ms
+
+ Commit without payload TPS: 69,659 tx/s
+ Commit without payload BPS: 35,627,817 B/s
+ Commit without payload latency: 1,559 ms
+-----------------------------------------
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Faults: 0 nodes
+ Committee size: 10 nodes
+ Input rate: 70,000 tx/s
+ Transaction size: 512 B
+ Execution time: 301 s
+
+ Consensus timeout delay: 5,000 ms
+ Consensus sync retry delay: 5,000 ms
+ Mempool GC depth: 50 rounds
+ Mempool sync retry delay: 5,000 ms
+ Mempool sync nodes: 3 nodes
+ Mempool sync bias: 11
+ Mempool batch size: 500,000 B
+ Mempool max batch delay: 500 ms
+
+ + RESULTS:
+ Consensus TPS: 69,702 tx/s
+ Consensus BPS: 35,687,440 B/s
+ Consensus latency: 1,602 ms
+
+ End-to-end TPS: 69,420 tx/s
+ End-to-end BPS: 35,569,767 B/s
+ End-to-end latency: 2,510 ms
+
+ Commit without payload TPS: 69,472 tx/s
+ Commit without payload BPS: 35,543,094 B/s
+ Commit without payload latency: 1,562 ms
+-----------------------------------------
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Faults: 0 nodes
+ Committee size: 10 nodes
+ Input rate: 70,000 tx/s
+ Transaction size: 512 B
+ Execution time: 301 s
+
+ Consensus timeout delay: 5,000 ms
+ Consensus sync retry delay: 5,000 ms
+ Mempool GC depth: 50 rounds
+ Mempool sync retry delay: 5,000 ms
+ Mempool sync nodes: 3 nodes
+ Mempool sync bias: 11
+ Mempool batch size: 500,000 B
+ Mempool max batch delay: 500 ms
+
+ + RESULTS:
+ Consensus TPS: 69,390 tx/s
+ Consensus BPS: 35,527,540 B/s
+ Consensus latency: 2,111 ms
+
+ End-to-end TPS: 69,040 tx/s
+ End-to-end BPS: 35,408,542 B/s
+ End-to-end latency: 3,447 ms
+
+ Commit without payload TPS: 69,157 tx/s
+ Commit without payload BPS: 35,348,638 B/s
+ Commit without payload latency: 2,220 ms
+-----------------------------------------
