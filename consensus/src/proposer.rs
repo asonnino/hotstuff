@@ -154,10 +154,8 @@ impl Proposer {
                     },
                     ProposerMessage::Cleanup(digests) => {
                         for x in &digests {
-                            if self.buffer.remove(x) {
-                                if others_payloads > 0 {
+                            if self.buffer.remove(x) && others_payloads > 0 {
                                     others_payloads -= 1;
-                                }
                             }
                         }
                     }
