@@ -326,7 +326,7 @@ class Ploter:
         if 'baseline' in system:
             return 'Baseline-HotStuff'
 
-        return system.replace('sqrt', 'Lazy Dolphin').replace('-no-payload', ' (no payload)')
+        return system.replace('sqrt', 'Layered-SMR').replace('-no-payload', ' (no payload)')
 
     def plot_latency(self, system, faults, nodes, workers, tx_size):
         assert isinstance(system, str)
