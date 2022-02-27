@@ -100,12 +100,14 @@ impl Core {
         // Check if we can vote for this block.
         let safety_rule_1 = block.round > self.last_voted_round;
         let mut safety_rule_2 = block.qc.round + 1 == block.round;
+        let mut safety_rule_3 = !block.payload.is_empty();
         if let Some(ref tc) = block.tc {
             let mut can_extend = tc.round + 1 == block.round;
             can_extend &= block.qc.round >= *tc.high_qc_rounds().iter().max().expect("Empty TC");
             safety_rule_2 |= can_extend;
+            safety_rule_3 |= can_extend;
         }
-        if !(safety_rule_1 && safety_rule_2) {
+        if !(safety_rule_1 && safety_rule_2 && safety_rule_3) {
             return None;
         }
 
@@ -218,6 +220,7 @@ impl Core {
 
             // Make a new block if we are the next leader.
             if self.name == self.leader_elector.get_leader(self.round) {
+                warn!("OBSIDO 1, {}", self.name);
                 self.generate_proposal(None).await;
             }
         }
@@ -347,6 +350,7 @@ impl Core {
             debug!("Created {:?}", vote);
             let next_leader = self.leader_elector.get_leader(self.round + 1);
             if next_leader == self.name {
+                info!("111111");
                 self.handle_vote(&vote).await?;
             } else {
                 debug!("Sending {:?} to {}", vote, next_leader);
@@ -419,7 +423,10 @@ impl Core {
             let result = tokio::select! {
                 Some(message) = self.rx_message.recv() => match message {
                     ConsensusMessage::Propose(block) => self.handle_proposal(&block).await,
-                    ConsensusMessage::Vote(vote) => self.handle_vote(&vote).await,
+                    ConsensusMessage::Vote(vote) => {
+                        info!("222222");
+                        self.handle_vote(&vote).await
+                    },
                     ConsensusMessage::Timeout(timeout) => self.handle_timeout(&timeout).await,
                     ConsensusMessage::TC(tc) => self.handle_tc(tc).await,
                     _ => panic!("Unexpected protocol message")
