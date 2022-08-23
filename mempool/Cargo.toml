@@ -19,7 +19,7 @@ store = { path = "../store" }
 network = { path = "../network" }
 
 [dev-dependencies]
-tokio-util = { version = "0.6.2", features= ["codec"] }
+tokio-util = { version = "0.7.3", features= ["codec"] }
 rand = "0.7.3"
 
 [features]

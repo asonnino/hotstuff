@@ -4,7 +4,7 @@ mod node;
 use crate::config::Export as _;
 use crate::config::{Committee, Secret};
 use crate::node::Node;
-use clap::{crate_name, crate_version, App, AppSettings, SubCommand};
+use clap::{Parser, Subcommand};
 use consensus::Committee as ConsensusCommittee;
 use env_logger::Env;
 use futures::future::join_all;
@@ -13,34 +13,52 @@ use mempool::Committee as MempoolCommittee;
 use std::fs;
 use tokio::task::JoinHandle;
 
+#[derive(Parser)]
+#[clap(author, version, about, long_about = None)]
+struct Cli {
+    /// Turn debugging information on.
+    #[clap(short, long, action = clap::ArgAction::Count)]
+    verbose: u8,
+    /// The command to execute.
+    #[clap(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Generate a new keypair.
+    Keys {
+        /// The file where to print the new key pair.
+        #[clap(short, long, value_parser, value_name = "FILE")]
+        filename: String,
+    },
+    /// Run a single node.
+    Run {
+        /// The file containing the node keys.
+        #[clap(short, long, value_parser, value_name = "FILE")]
+        keys: String,
+        /// The file containing committee information.
+        #[clap(short, long, value_parser, value_name = "FILE")]
+        committee: String,
+        /// Optional file containing the node parameters.
+        #[clap(short, long, value_parser, value_name = "FILE")]
+        parameters: Option<String>,
+        /// The path where to create the data store.
+        #[clap(short, long, value_parser, value_name = "PATH")]
+        store: String,
+    },
+    /// Deploy a local testbed with the specified number of nodes.
+    Deploy {
+        #[clap(short, long, value_parser = clap::value_parser!(u16).range(4..))]
+        nodes: u16,
+    },
+}
+
 #[tokio::main]
 async fn main() {
-    let matches = App::new(crate_name!())
-        .version(crate_version!())
-        .about("A research implementation of the HostStuff protocol.")
-        .args_from_usage("-v... 'Sets the level of verbosity'")
-        .subcommand(
-            SubCommand::with_name("keys")
-                .about("Print a fresh key pair to file")
-                .args_from_usage("--filename=<FILE> 'The file where to print the new key pair'"),
-        )
-        .subcommand(
-            SubCommand::with_name("run")
-                .about("Runs a single node")
-                .args_from_usage("--keys=<FILE> 'The file containing the node keys'")
-                .args_from_usage("--committee=<FILE> 'The file containing committee information'")
-                .args_from_usage("--parameters=[FILE] 'The file containing the node parameters'")
-                .args_from_usage("--store=<PATH> 'The path where to create the data store'"),
-        )
-        .subcommand(
-            SubCommand::with_name("deploy")
-                .about("Deploys a network of nodes locally")
-                .args_from_usage("--nodes=<INT> 'The number of nodes to deploy'"),
-        )
-        .setting(AppSettings::SubcommandRequiredElseHelp)
-        .get_matches();
+    let cli = Cli::parse();
 
-    let log_level = match matches.occurrences_of("v") {
+    let log_level = match cli.verbose {
         0 => "error",
         1 => "warn",
         2 => "info",
@@ -52,46 +70,37 @@ async fn main() {
     logger.format_timestamp_millis();
     logger.init();
 
-    match matches.subcommand() {
-        ("keys", Some(subm)) => {
-            let filename = subm.value_of("filename").unwrap();
-            if let Err(e) = Node::print_key_file(filename) {
+    match cli.command {
+        Command::Keys { filename } => {
+            if let Err(e) = Node::print_key_file(&filename) {
                 error!("{}", e);
             }
         }
-        ("run", Some(subm)) => {
-            let key_file = subm.value_of("keys").unwrap();
-            let committee_file = subm.value_of("committee").unwrap();
-            let parameters_file = subm.value_of("parameters");
-            let store_path = subm.value_of("store").unwrap();
-            match Node::new(committee_file, key_file, store_path, parameters_file).await {
-                Ok(mut node) => {
-                    tokio::spawn(async move {
-                        node.analyze_block().await;
-                    })
-                    .await
-                    .expect("Failed to analyze committed blocks");
-                }
-                Err(e) => error!("{}", e),
+        Command::Run {
+            keys,
+            committee,
+            parameters,
+            store,
+        } => match Node::new(&committee, &keys, &store, parameters).await {
+            Ok(mut node) => {
+                tokio::spawn(async move {
+                    node.analyze_block().await;
+                })
+                .await
+                .expect("Failed to analyze committed blocks");
             }
-        }
-        ("deploy", Some(subm)) => {
-            let nodes = subm.value_of("nodes").unwrap();
-            match nodes.parse::<usize>() {
-                Ok(nodes) if nodes > 1 => match deploy_testbed(nodes) {
-                    Ok(handles) => {
-                        let _ = join_all(handles).await;
-                    }
-                    Err(e) => error!("Failed to deploy testbed: {}", e),
-                },
-                _ => error!("The number of nodes must be a positive integer"),
+            Err(e) => error!("{}", e),
+        },
+        Command::Deploy { nodes } => match deploy_testbed(nodes) {
+            Ok(handles) => {
+                let _ = join_all(handles).await;
             }
-        }
-        _ => unreachable!(),
+            Err(e) => error!("Failed to deploy testbed: {}", e),
+        },
     }
 }
 
-fn deploy_testbed(nodes: usize) -> Result<Vec<JoinHandle<()>>, Box<dyn std::error::Error>> {
+fn deploy_testbed(nodes: u16) -> Result<Vec<JoinHandle<()>>, Box<dyn std::error::Error>> {
     let keys: Vec<_> = (0..nodes).map(|_| Secret::new()).collect();
 
     // Print the committee file.

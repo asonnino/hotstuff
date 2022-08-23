@@ -19,7 +19,7 @@ impl Node {
         committee_file: &str,
         key_file: &str,
         store_path: &str,
-        parameters: Option<&str>,
+        parameters: Option<String>,
     ) -> Result<Self, ConfigError> {
         let (tx_commit, rx_commit) = channel(CHANNEL_CAPACITY);
         let (tx_consensus_to_mempool, rx_consensus_to_mempool) = channel(CHANNEL_CAPACITY);
@@ -33,7 +33,7 @@ impl Node {
 
         // Load default parameters if none are specified.
         let parameters = match parameters {
-            Some(filename) => Parameters::read(filename)?,
+            Some(filename) => Parameters::read(&filename)?,
             None => Parameters::default(),
         };
 

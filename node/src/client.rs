@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use bytes::BufMut as _;
 use bytes::BytesMut;
-use clap::{crate_name, crate_version, App, AppSettings};
+use clap::Parser;
 use env_logger::Env;
 use futures::future::join_all;
 use futures::sink::SinkExt as _;
@@ -12,60 +12,48 @@ use tokio::net::TcpStream;
 use tokio::time::{interval, sleep, Duration, Instant};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
+#[derive(Parser)]
+#[clap(
+    author,
+    version,
+    about,
+    long_about = "Benchmark client for HotStuff nodes."
+)]
+struct Cli {
+    /// The network address of the node where to send txs.
+    #[clap(value_parser, value_name = "ADDR")]
+    target: SocketAddr,
+    /// The nodes timeout value.
+    #[clap(short, long, value_parser, value_name = "INT")]
+    timeout: u64,
+    /// The size of each transaction in bytes.
+    #[clap(short, long, value_parser, value_name = "INT")]
+    size: usize,
+    /// The rate (txs/s) at which to send the transactions.
+    #[clap(short, long, value_parser, value_name = "INT")]
+    rate: u64,
+    /// Network addresses that must be reachable before starting the benchmark.
+    #[clap(short, long, value_parser, value_name = "[Addr]")]
+    nodes: Vec<SocketAddr>,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    let matches = App::new(crate_name!())
-        .version(crate_version!())
-        .about("Benchmark client for HotStuff nodes.")
-        .args_from_usage("<ADDR> 'The network address of the node where to send txs'")
-        .args_from_usage("--timeout=<INT> 'The nodes timeout value'")
-        .args_from_usage("--size=<INT> 'The size of each transaction in bytes'")
-        .args_from_usage("--rate=<INT> 'The rate (txs/s) at which to send the transactions'")
-        .args_from_usage("--nodes=[ADDR]... 'Network addresses that must be reachable before starting the benchmark.'")
-        .setting(AppSettings::ArgRequiredElseHelp)
-        .get_matches();
+    let cli = Cli::parse();
 
     env_logger::Builder::from_env(Env::default().default_filter_or("info"))
         .format_timestamp_millis()
         .init();
 
-    let target = matches
-        .value_of("ADDR")
-        .unwrap()
-        .parse::<SocketAddr>()
-        .context("Invalid socket address format")?;
-    let size = matches
-        .value_of("size")
-        .unwrap()
-        .parse::<usize>()
-        .context("The size of transactions must be a non-negative integer")?;
-    let rate = matches
-        .value_of("rate")
-        .unwrap()
-        .parse::<u64>()
-        .context("The rate of transactions must be a non-negative integer")?;
-    let timeout = matches
-        .value_of("timeout")
-        .unwrap()
-        .parse::<u64>()
-        .context("The timeout value must be a non-negative integer")?;
-    let nodes = matches
-        .values_of("nodes")
-        .unwrap_or_default()
-        .into_iter()
-        .map(|x| x.parse::<SocketAddr>())
-        .collect::<Result<Vec<_>, _>>()
-        .context("Invalid socket address format")?;
-
-    info!("Node address: {}", target);
-    info!("Transactions size: {} B", size);
-    info!("Transactions rate: {} tx/s", rate);
+    info!("Node address: {}", cli.target);
+    info!("Transactions size: {} B", cli.size);
+    info!("Transactions rate: {} tx/s", cli.rate);
     let client = Client {
-        target,
-        size,
-        rate,
-        timeout,
-        nodes,
+        target: cli.target,
+        size: cli.size,
+        rate: cli.rate,
+        timeout: cli.timeout,
+        nodes: cli.nodes,
     };
 
     // Wait for all nodes to be online and synchronized.
@@ -89,7 +77,7 @@ impl Client {
         const BURST_DURATION: u64 = 1000 / PRECISION;
 
         // The transaction size must be at least 16 bytes to ensure all txs are different.
-        if self.size < 9 {
+        if self.size < 16 {
             return Err(anyhow::Error::msg(
                 "Transaction size must be at least 9 bytes",
             ));
