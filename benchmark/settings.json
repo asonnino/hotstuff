@@ -1,8 +1,8 @@
 {
     "testbed": "hotstuff",
     "key": {
-        "name": "aws",
-        "path": "/absolute/ssh/key/path"
+        "name": "id_ed25519",
+        "path": "/Users/alberto/.ssh/id_ed25519"
     },
     "ports": {
         "consensus": 8000,
@@ -12,7 +12,7 @@
     "repo": {
         "name": "hotstuff",
         "url": "https://github.com/asonnino/hotstuff.git",
-        "branch": "main"
+        "branch": "oracle"
     },
     "instances": {
         "type": "m5d.8xlarge",

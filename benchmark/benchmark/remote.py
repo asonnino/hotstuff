@@ -1,11 +1,10 @@
 from fabric import Connection, ThreadingGroup as Group
 from fabric.exceptions import GroupException
-from paramiko import RSAKey
+import paramiko
 from paramiko.ssh_exception import PasswordRequiredException, SSHException
 from os.path import basename, splitext
 from time import sleep
 from math import ceil
-from os.path import join
 import subprocess
 
 from benchmark.config import Committee, Key, NodeParameters, BenchParameters, ConfigError
@@ -32,8 +31,11 @@ class Bench:
     def __init__(self, ctx):
         self.manager = InstanceManager.make()
         self.settings = self.manager.settings
+        self.ssh_user = self.manager.ssh_user
+        self.package_manager = self.manager.package_manager
+
         try:
-            ctx.connect_kwargs.pkey = RSAKey.from_private_key_file(
+            ctx.connect_kwargs.pkey = paramiko.Ed25519Key.from_private_key_file(
                 self.manager.settings.key_path
             )
             self.connect = ctx.connect_kwargs
@@ -51,29 +53,34 @@ class Bench:
 
     def install(self):
         Print.info('Installing rust and cloning the repo...')
+        if self.package_manager == 'apt-get':
+            dev_tool = f'sudo {self.package_manager} -y install build-essential'
+        elif self.package_manager == 'yum':
+            dev_tool = f'sudo {self.package_manager} -y groupinstall "Development Tools"'
+
         cmd = [
-            'sudo apt-get update',
-            'sudo apt-get -y upgrade',
-            'sudo apt-get -y autoremove',
+            f'sudo {self.package_manager} update',
+            f'sudo {self.package_manager} -y upgrade',
+            # f'sudo {self.package_manager} -y autoremove',
 
-            # The following dependencies prevent the error: [error: linker `cc` not found].
-            'sudo apt-get -y install build-essential',
-            'sudo apt-get -y install cmake',
+            # # The following dependencies prevent the error: [error: linker `cc` not found].
+            # dev_tool,
+            # f'sudo {self.package_manager} -y install cmake',
 
-            # Install rust (non-interactive).
-            'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y',
-            'source $HOME/.cargo/env',
-            'rustup default stable',
+            # # Install rust (non-interactive).
+            # 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y',
+            # 'source $HOME/.cargo/env',
+            # 'rustup default stable',
 
-            # This is missing from the Rocksdb installer (needed for Rocksdb).
-            'sudo apt-get install -y clang',
+            # # This is missing from the Rocksdb installer (needed for Rocksdb).
+            # f'sudo {self.package_manager} install -y clang',
 
-            # Clone the repo.
-            f'(git clone {self.settings.repo_url} || (cd {self.settings.repo_name} ; git pull))'
+            # # Clone the repo.
+            # f'(git clone {self.settings.repo_url} || (cd {self.settings.repo_name} ; git pull))'
         ]
         hosts = self.manager.hosts(flat=True)
         try:
-            g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect)
+            g = Group(*hosts, user=self.ssh_user, connect_kwargs=self.connect)
             g.run(' && '.join(cmd), hide=True)
             Print.heading(f'Initialized testbed of {len(hosts)} nodes')
         except (GroupException, ExecutionError) as e:
@@ -87,7 +94,7 @@ class Bench:
         delete_logs = CommandMaker.clean_logs() if delete_logs else 'true'
         cmd = [delete_logs, f'({CommandMaker.kill()} || true)']
         try:
-            g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect)
+            g = Group(*hosts, user=self.ssh_user, connect_kwargs=self.connect)
             g.run(' && '.join(cmd), hide=True)
         except GroupException as e:
             raise BenchError('Failed to kill nodes', FabricError(e))
@@ -108,7 +115,7 @@ class Bench:
     def _background_run(self, host, command, log_file):
         name = splitext(basename(log_file))[0]
         cmd = f'tmux new -d -s "{name}" "{command} |& tee {log_file}"'
-        c = Connection(host, user='ubuntu', connect_kwargs=self.connect)
+        c = Connection(host, user=self.ssh_user, connect_kwargs=self.connect)
         output = c.run(cmd, hide=True)
         self._check_stderr(output)
 
@@ -126,7 +133,7 @@ class Bench:
                 f'./{self.settings.repo_name}/target/release/'
             )
         ]
-        g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect)
+        g = Group(*hosts, user=self.ssh_user, connect_kwargs=self.connect)
         g.run(' && '.join(cmd), hide=True)
 
     def _config(self, hosts, node_parameters):
@@ -163,13 +170,14 @@ class Bench:
 
         # Cleanup all nodes.
         cmd = f'{CommandMaker.cleanup()} || true'
-        g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect)
+        g = Group(*hosts, user=self.ssh_user, connect_kwargs=self.connect)
         g.run(cmd, hide=True)
 
         # Upload configuration files.
         progress = progress_bar(hosts, prefix='Uploading config files:')
         for i, host in enumerate(progress):
-            c = Connection(host, user='ubuntu', connect_kwargs=self.connect)
+            c = Connection(host, user=self.ssh_user,
+                           connect_kwargs=self.connect)
             c.put(PathMaker.committee_file(), '.')
             c.put(PathMaker.key_file(i), '.')
             c.put(PathMaker.parameters_file(), '.')
@@ -232,7 +240,8 @@ class Bench:
         # Download log files.
         progress = progress_bar(hosts, prefix='Downloading logs:')
         for i, host in enumerate(progress):
-            c = Connection(host, user='ubuntu', connect_kwargs=self.connect)
+            c = Connection(host, user=self.ssh_user,
+                           connect_kwargs=self.connect)
             c.get(PathMaker.node_log_file(i), local=PathMaker.node_log_file(i))
             c.get(
                 PathMaker.client_log_file(i), local=PathMaker.client_log_file(i)
