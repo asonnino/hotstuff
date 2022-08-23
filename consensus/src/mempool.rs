@@ -56,7 +56,7 @@ impl MempoolDriver {
             .expect("Failed to send sync message");
 
         self.tx_payload_waiter
-            .send(PayloadWaiterMessage::Wait(missing, block))
+            .send(PayloadWaiterMessage::Wait(missing, Box::new(block)))
             .await
             .expect("Failed to send message to payload waiter");
 
@@ -80,7 +80,7 @@ impl MempoolDriver {
 
 #[derive(Debug)]
 enum PayloadWaiterMessage {
-    Wait(Vec<Digest>, Block),
+    Wait(Vec<Digest>, Box<Block>),
     Cleanup(Round),
 }
 
@@ -109,9 +109,9 @@ impl PayloadWaiter {
 
     async fn waiter(
         mut missing: Vec<(Digest, Store)>,
-        deliver: Block,
+        deliver: Box<Block>,
         mut handler: Receiver<()>,
-    ) -> ConsensusResult<Option<Block>> {
+    ) -> ConsensusResult<Option<Box<Block>>> {
         let waiting: Vec<_> = missing
             .iter_mut()
             .map(|(x, y)| y.notify_read(x.to_vec()))
@@ -158,7 +158,7 @@ impl PayloadWaiter {
                     match result {
                         Ok(Some(block)) => {
                             let _ = pending.remove(&block.digest());
-                            self.tx_loopback.send(block).await.expect("Failed to send consensus message");
+                            self.tx_loopback.send(*block).await.expect("Failed to send consensus message");
                         },
                         Ok(None) => (),
                         Err(e) => error!("{}", e)
