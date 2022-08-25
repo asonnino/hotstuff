@@ -9,6 +9,28 @@ from benchmark.remote import Bench, BenchError
 
 
 @task
+def test(ctx):
+    import oci
+    from oci.config import from_file, validate_config
+    import os
+    # config = from_file()
+    # print(config)
+    compartment_id = "ocid1.tenancy.oc1..aaaaaaaak5urycwdhjmdgdkfgu3q7wzamv63w6qa6pf4o5ry2dulte6aos4q"
+    config = {
+        "user": "ocid1.user.oc1..aaaaaaaakturkk3huvbnt6bk64cpi2ffr7t5emxoff2h4xai2unghk33tlra",
+        "key_file": "/Users/alberto/.ssh/oci.pem",
+        "fingerprint": "52:70:92:d1:e4:a9:e9:8d:65:c6:97:53:8a:f0:50:3f",
+        "tenancy": compartment_id,
+        "region": "us-sanjose-1"
+    }
+    validate_config(config)
+    compute_client = oci.core.ComputeClient(config)
+    result = compute_client.list_instances(
+        compartment_id, availability_domain="us-sanjose-1")
+    print(result)
+
+
+@task
 def local(ctx):
     ''' Run benchmarks on localhost '''
     bench_params = {
@@ -97,11 +119,11 @@ def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
         'faults': 0,
-        'nodes': [10, 20],
-        'rate': [10_000, 30_000],
+        'nodes': [4],
+        'rate': [10_000],
         'tx_size': 512,
-        'duration': 300,
-        'runs': 5,
+        'duration': 30,
+        'runs': 1,
     }
     node_params = {
         'consensus': {

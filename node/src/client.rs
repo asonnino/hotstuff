@@ -21,7 +21,7 @@ use tokio_util::codec::{Framed, LengthDelimitedCodec};
 )]
 struct Cli {
     /// The network address of the node where to send txs.
-    #[clap(value_parser, value_name = "ADDR")]
+    #[clap(long, value_parser, value_name = "ADDR")]
     target: SocketAddr,
     /// The nodes timeout value.
     #[clap(short, long, value_parser, value_name = "INT")]
@@ -33,7 +33,7 @@ struct Cli {
     #[clap(short, long, value_parser, value_name = "INT")]
     rate: u64,
     /// Network addresses that must be reachable before starting the benchmark.
-    #[clap(short, long, value_parser, value_name = "[Addr]")]
+    #[clap(value_parser, last = true)]
     nodes: Vec<SocketAddr>,
 }
 

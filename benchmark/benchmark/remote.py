@@ -59,13 +59,16 @@ class Bench:
             dev_tool = f'sudo {self.package_manager} -y groupinstall "Development Tools"'
 
         cmd = [
-            f'sudo {self.package_manager} update',
+            # f'sudo {self.package_manager} update',
             f'sudo {self.package_manager} -y upgrade',
             # f'sudo {self.package_manager} -y autoremove',
 
             # # The following dependencies prevent the error: [error: linker `cc` not found].
             # dev_tool,
             # f'sudo {self.package_manager} -y install cmake',
+
+            # # Install tmux to run nodes and clients separately.
+            # f'sudo {self.package_manager} -y install tmux',
 
             # # Install rust (non-interactive).
             # 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y',
@@ -206,6 +209,7 @@ class Bench:
                 timeout,
                 nodes=addresses
             )
+            print(cmd)
             self._background_run(host, cmd, log_file)
 
         # Run the nodes.

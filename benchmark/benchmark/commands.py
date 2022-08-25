@@ -41,8 +41,8 @@ class CommandMaker:
         assert isinstance(rate, int) and rate >= 0
         assert isinstance(nodes, list)
         assert all(isinstance(x, str) for x in nodes)
-        nodes = f'--nodes {" ".join(nodes)}' if nodes else ''
-        return (f'./client {address} --size {size} '
+        nodes = f'-- {" ".join(nodes)}' if nodes else ''
+        return (f'./client --target {address} --size {size} '
                 f'--rate {rate} --timeout {timeout} {nodes}')
 
     @staticmethod
