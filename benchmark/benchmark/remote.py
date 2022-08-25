@@ -59,27 +59,27 @@ class Bench:
             dev_tool = f'sudo {self.package_manager} -y groupinstall "Development Tools"'
 
         cmd = [
-            # f'sudo {self.package_manager} update',
-            f'sudo {self.package_manager} -y upgrade',
-            # f'sudo {self.package_manager} -y autoremove',
+            f'sudo {self.package_manager} update',
+            # f'sudo {self.package_manager} -y upgrade',
+            f'sudo {self.package_manager} -y autoremove',
 
-            # # The following dependencies prevent the error: [error: linker `cc` not found].
-            # dev_tool,
-            # f'sudo {self.package_manager} -y install cmake',
+            # The following dependencies prevent the error: [error: linker `cc` not found].
+            dev_tool,
+            f'sudo {self.package_manager} -y install cmake',
 
-            # # Install tmux to run nodes and clients separately.
-            # f'sudo {self.package_manager} -y install tmux',
+            # Install tmux to run nodes and clients separately.
+            f'sudo {self.package_manager} -y install tmux',
 
-            # # Install rust (non-interactive).
-            # 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y',
-            # 'source $HOME/.cargo/env',
-            # 'rustup default stable',
+            # Install rust (non-interactive).
+            'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y',
+            'source $HOME/.cargo/env',
+            'rustup default stable',
 
-            # # This is missing from the Rocksdb installer (needed for Rocksdb).
-            # f'sudo {self.package_manager} install -y clang',
+            # This is missing from the Rocksdb installer (needed for Rocksdb).
+            f'sudo {self.package_manager} install -y clang',
 
-            # # Clone the repo.
-            # f'(git clone {self.settings.repo_url} || (cd {self.settings.repo_name} ; git pull))'
+            # Clone the repo.
+            f'(git clone {self.settings.repo_url} || (cd {self.settings.repo_name} ; git pull))'
         ]
         hosts = self.manager.hosts(flat=True)
         try:
