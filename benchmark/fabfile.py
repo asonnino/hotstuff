@@ -24,21 +24,13 @@ def test(ctx):
         "region": "us-sanjose-1"
     }
     validate_config(config)
-    # compute_client = oci.core.ComputeClient(config)
-    # result = compute_client.list_instances(
-    #     compartment_id, availability_domain="us-sanjose-1")
-    # print(result)
-
-    # identity = oci.identity.IdentityClient(config)
-    # user = identity.get_user(config["user"]).data
-    # print(user)
-
     pool_id = "ocid1.instancepool.oc1.us-sanjose-1.aaaaaaaafmhldzoruib5q4fva5zzcsfk2hg7slggjuinuunt6ekapkolihnq"
     client = oci.core.ComputeManagementClient(config)
-    result = client.get_instance_pool(pool_id)
-    print(result.data)
-    client.stop_instance_pool(pool_id)
-    print(result.data)
+    result = client.list_instance_pools(compartment_id)
+    # print(result.data)
+
+    result = InstanceManager.make().private_hosts()
+    print(result)
 
 
 @task
@@ -130,7 +122,7 @@ def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
         'faults': 0,
-        'nodes': [16],
+        'nodes': [4],
         'rate': [10_000],
         'tx_size': 512,
         'duration': 30,

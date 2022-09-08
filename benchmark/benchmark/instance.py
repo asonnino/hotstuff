@@ -1,5 +1,7 @@
 from collections import defaultdict, OrderedDict
 from time import sleep
+from oci.config import validate_config
+from oci.core import ComputeManagementClient, ComputeClient, VirtualNetworkClient
 
 from benchmark.utils import Print, BenchError, progress_bar
 from benchmark.settings import Settings, SettingsError
@@ -22,6 +24,18 @@ class InstanceManager:
         # self.clients = OrderedDict()
         # for region in settings.aws_regions:
         #     self.clients[region] = boto3.client('ec2', region_name=region)
+
+        self.compartment_id = "ocid1.tenancy.oc1..aaaaaaaak5urycwdhjmdgdkfgu3q7wzamv63w6qa6pf4o5ry2dulte6aos4q"
+        config = {
+            "user": "ocid1.user.oc1..aaaaaaaakturkk3huvbnt6bk64cpi2ffr7t5emxoff2h4xai2unghk33tlra",
+            "key_file": "/Users/alberto/.ssh/oci-2.pem",
+            "fingerprint": "01:3f:f7:e0:ab:32:06:d8:74:2c:39:d0:bb:81:be:0f",
+            "tenancy": self.compartment_id,
+            "region": "us-sanjose-1"
+        }
+        validate_config(config)
+        self.config = config
+        self.pool_id = "ocid1.instancepool.oc1.us-sanjose-1.aaaaaaaafmhldzoruib5q4fva5zzcsfk2hg7slggjuinuunt6ekapkolihnq"
 
     @classmethod
     def make(cls, settings_file='settings.json'):
@@ -228,7 +242,22 @@ class InstanceManager:
         #         Print.heading(f'Starting {size} instances')
         #     except ClientError as e:
         #         raise BenchError('Failed to start instances', AWSError(e))
-        raise NotImplementedError
+        client = ComputeManagementClient(self.config)
+
+        result = client.get_instance_pool(self.pool_id)
+        if result.data.lifecycle_state == 'RUNNING':
+            Print.heading(f'All {result.data.size} instances already started')
+            return
+
+        Print.heading('Starting instances')
+        client.start_instance_pool(self.pool_id)
+        while True:
+            sleep(1)
+            result = client.get_instance_pool(self.pool_id)
+            if result.data.lifecycle_state == 'RUNNING':
+                size = result.data.size
+                Print.heading(f'Successfully started {size} instances')
+                break
 
     def stop_instances(self):
         #     try:
@@ -240,56 +269,76 @@ class InstanceManager:
         #         Print.heading(f'Stopping {size} instances')
         #     except ClientError as e:
         #         raise BenchError(AWSError(e))
-        raise NotImplementedError
+        client = ComputeManagementClient(self.config)
+
+        Print.heading('Stopping instances')
+        client.stop_instance_pool(self.pool_id)
+        while True:
+            sleep(1)
+            result = client.get_instance_pool(self.pool_id)
+            if result.data.lifecycle_state == 'STOPPED':
+                size = result.data.size
+                Print.heading(f'Successfully stopped {size} instances')
+                break
+
+    def _get_instance_ids(self):
+        client = ComputeManagementClient(self.config)
+        result = client.list_instance_pool_instances(
+            self.compartment_id, self.pool_id
+        )
+        return [x.id for x in result.data]
 
     def hosts(self, flat=False):
-        # 4 Isolated nodes:
-        ips = {'AD-1': ['192.9.249.45', '129.159.42.19',
-                        '192.9.147.19', '138.2.234.97']}
-
-        # 16 nodes in 'hotstuff-pool'.
-        ips = {'AD-1': [
-            '192.9.234.191',
-            '138.2.229.113',
-            '192.9.130.156',
-            '192.18.129.86',
-            '192.9.146.219',
-            '192.9.146.176',
-            '138.2.233.236',
-            '155.248.215.106',
-            '155.248.202.199',
-            '192.9.242.186',
-            '138.2.231.231',
-            '155.248.212.126',
-            '192.18.140.43',
-            '152.67.225.17',
-            '138.2.231.70',
-            '150.230.35.49',
-        ]}
+        # # 16 nodes in 'hotstuff-pool'.
         # ips = {'AD-1': [
-        #     '10.1.0.56',
-        #     '10.1.0.88',
-        #     '10.1.0.139',
-        #     '10.1.0.137',
-        #     '10.1.0.9',
-        #     '10.1.0.106',
-        #     '10.1.0.218',
-        #     '10.1.0.111',
-        #     '10.1.0.211',
-        #     '10.1.0.212',
-        #     '10.1.0.84',
-        #     '10.1.0.45',
-        #     '10.1.0.28',
-        #     '10.1.0.221',
-        #     '10.1.0.101',
-        #     '10.1.0.196',
+        #     '192.9.234.191',
+        #     '138.2.229.113',
+        #     '192.9.130.156',
+        #     '192.18.129.86',
+        #     '192.9.146.219',
+        #     '192.9.146.176',
+        #     '138.2.233.236',
+        #     '155.248.215.106',
+        #     '155.248.202.199',
+        #     '192.9.242.186',
+        #     '138.2.231.231',
+        #     '155.248.212.126',
+        #     '192.18.140.43',
+        #     '152.67.225.17',
+        #     '138.2.231.70',
+        #     '150.230.35.49',
         # ]}
+
+        compute_client = ComputeClient(self.config)
+        network_client = VirtualNetworkClient(self.config)
+
+        ips = defaultdict(list)
+        for id in self._get_instance_ids():
+            vnic_id = compute_client.list_vnic_attachments(
+                self.compartment_id, instance_id=id
+            )
+            result = network_client.get_vnic(vnic_id.data[0].vnic_id)
+            region = result.data.availability_domain
+            ip = result.data.public_ip
+            ips[region] += [ip]
+
         return [x for y in ips.values() for x in y] if flat else ips
-        # try:
-        #     _, ips = self._get(['pending', 'running'])
-        #     return [x for y in ips.values() for x in y] if flat else ips
-        # except ClientError as e:
-        #     raise BenchError('Failed to gather instances IPs', AWSError(e))
+
+    def private_hosts(self, flat=False):
+        compute_client = ComputeClient(self.config)
+        network_client = VirtualNetworkClient(self.config)
+
+        ips = defaultdict(list)
+        for id in self._get_instance_ids():
+            vnic_id = compute_client.list_vnic_attachments(
+                self.compartment_id, instance_id=id
+            )
+            result = network_client.get_vnic(vnic_id.data[0].vnic_id)
+            region = result.data.availability_domain
+            ip = result.data.private_ip
+            ips[region] += [ip]
+
+        return [x for y in ips.values() for x in y] if flat else ips
 
     def print_info(self):
         hosts = self.hosts()
