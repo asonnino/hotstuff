@@ -18,16 +18,27 @@ def test(ctx):
     compartment_id = "ocid1.tenancy.oc1..aaaaaaaak5urycwdhjmdgdkfgu3q7wzamv63w6qa6pf4o5ry2dulte6aos4q"
     config = {
         "user": "ocid1.user.oc1..aaaaaaaakturkk3huvbnt6bk64cpi2ffr7t5emxoff2h4xai2unghk33tlra",
-        "key_file": "/Users/alberto/.ssh/oci.pem",
-        "fingerprint": "52:70:92:d1:e4:a9:e9:8d:65:c6:97:53:8a:f0:50:3f",
+        "key_file": "/Users/alberto/.ssh/oci-2.pem",
+        "fingerprint": "01:3f:f7:e0:ab:32:06:d8:74:2c:39:d0:bb:81:be:0f",
         "tenancy": compartment_id,
         "region": "us-sanjose-1"
     }
     validate_config(config)
-    compute_client = oci.core.ComputeClient(config)
-    result = compute_client.list_instances(
-        compartment_id, availability_domain="us-sanjose-1")
-    print(result)
+    # compute_client = oci.core.ComputeClient(config)
+    # result = compute_client.list_instances(
+    #     compartment_id, availability_domain="us-sanjose-1")
+    # print(result)
+
+    # identity = oci.identity.IdentityClient(config)
+    # user = identity.get_user(config["user"]).data
+    # print(user)
+
+    pool_id = "ocid1.instancepool.oc1.us-sanjose-1.aaaaaaaafmhldzoruib5q4fva5zzcsfk2hg7slggjuinuunt6ekapkolihnq"
+    client = oci.core.ComputeManagementClient(config)
+    result = client.get_instance_pool(pool_id)
+    print(result.data)
+    client.stop_instance_pool(pool_id)
+    print(result.data)
 
 
 @task
@@ -119,7 +130,7 @@ def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
         'faults': 0,
-        'nodes': [4],
+        'nodes': [16],
         'rate': [10_000],
         'tx_size': 512,
         'duration': 30,

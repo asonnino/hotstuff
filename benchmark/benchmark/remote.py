@@ -59,8 +59,8 @@ class Bench:
             dev_tool = f'sudo {self.package_manager} -y groupinstall "Development Tools"'
 
         cmd = [
-            f'sudo {self.package_manager} update',
-            # f'sudo {self.package_manager} -y upgrade',
+            f'sudo {self.package_manager} -y update',
+            f'sudo {self.package_manager} -y upgrade',
             f'sudo {self.package_manager} -y autoremove',
 
             # The following dependencies prevent the error: [error: linker `cc` not found].
@@ -81,6 +81,7 @@ class Bench:
             # Clone the repo.
             f'(git clone {self.settings.repo_url} || (cd {self.settings.repo_name} ; git pull))'
         ]
+        print(' && '.join(cmd))
         hosts = self.manager.hosts(flat=True)
         try:
             g = Group(*hosts, user=self.ssh_user, connect_kwargs=self.connect)

@@ -143,6 +143,7 @@ impl Client {
                 while TcpStream::connect(address).await.is_err() {
                     sleep(Duration::from_millis(10)).await;
                 }
+                info!("Connected to {address}!");
             })
         }))
         .await;
