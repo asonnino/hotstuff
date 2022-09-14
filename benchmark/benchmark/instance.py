@@ -19,8 +19,8 @@ class InstanceManager:
     def __init__(self, settings):
         assert isinstance(settings, Settings)
         self.settings = settings
-        self.ssh_user = 'opc'
-        self.package_manager = 'yum'
+        self.ssh_user = 'ubuntu'
+        self.package_manager = 'apt-get'
         # self.clients = OrderedDict()
         # for region in settings.aws_regions:
         #     self.clients[region] = boto3.client('ec2', region_name=region)
@@ -35,7 +35,8 @@ class InstanceManager:
         }
         validate_config(config)
         self.config = config
-        self.pool_id = "ocid1.instancepool.oc1.us-sanjose-1.aaaaaaaafmhldzoruib5q4fva5zzcsfk2hg7slggjuinuunt6ekapkolihnq"
+        pool_2 = 'ocid1.instancepool.oc1.us-sanjose-1.aaaaaaaatjtnweiagxswuivz44c6ptivbtb4wl2sllwfjtm6codn5s6vfwoq'
+        self.pool_id = pool_2
 
     @classmethod
     def make(cls, settings_file='settings.json'):
