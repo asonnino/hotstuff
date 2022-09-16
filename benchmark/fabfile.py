@@ -122,8 +122,8 @@ def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
         'faults': 0,
-        'nodes': [16],
-        'rate': [800_000],
+        'nodes': [32],
+        'rate': [700_000],
         'tx_size': 30,
         'duration': 60,
         'runs': 2,
