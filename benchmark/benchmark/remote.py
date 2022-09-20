@@ -59,7 +59,7 @@ class Bench:
             dev_tool = f'sudo {self.package_manager} -y groupinstall "Development Tools"'
 
         cmd = [
-            # 'sudo rm -rf node',
+            '(sudo rm -rf node || true)',
             f'sudo {self.package_manager} -y update',
             f'sudo {self.package_manager} -y upgrade',
             f'sudo {self.package_manager} -y autoremove',
@@ -115,6 +115,7 @@ class Bench:
         # Select the hosts in different data centers.
         ordered = zip(*hosts.values())
         ordered = [x for y in ordered for x in y]
+        # print(len(ordered))
         return ordered[:nodes]
 
     def _background_run(self, host, command, log_file):

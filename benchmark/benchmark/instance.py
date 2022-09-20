@@ -287,58 +287,154 @@ class InstanceManager:
         result = client.list_instance_pool_instances(
             self.compartment_id, self.pool_id
         )
+        # [print(i, x.display_name) for i, x in enumerate(result.data)]
         return [x.id for x in result.data]
 
     def hosts(self, flat=False):
-        # # 16 nodes in 'hotstuff-pool'.
-        # ips = {'AD-1': [
-        #     '192.9.234.191',
-        #     '138.2.229.113',
-        #     '192.9.130.156',
-        #     '192.18.129.86',
-        #     '192.9.146.219',
-        #     '192.9.146.176',
-        #     '138.2.233.236',
-        #     '155.248.215.106',
-        #     '155.248.202.199',
-        #     '192.9.242.186',
-        #     '138.2.231.231',
-        #     '155.248.212.126',
-        #     '192.18.140.43',
-        #     '152.67.225.17',
-        #     '138.2.231.70',
-        #     '150.230.35.49',
-        # ]}
+        # compute_client = ComputeClient(self.config)
+        # network_client = VirtualNetworkClient(self.config)
 
-        compute_client = ComputeClient(self.config)
-        network_client = VirtualNetworkClient(self.config)
+        # last_region = None
+        # ips = defaultdict(set)
+        # for id in self._get_instance_ids():
+        #     vnic_id = compute_client.list_vnic_attachments(
+        #         self.compartment_id, instance_id=id
+        #     )
+        #     result = network_client.get_vnic(vnic_id.data[0].vnic_id)
+        #     region = result.data.availability_domain
+        #     ip = result.data.public_ip
+        #     ips[region].add(ip)
+        #     last_region = region
 
-        ips = defaultdict(list)
-        for id in self._get_instance_ids():
-            vnic_id = compute_client.list_vnic_attachments(
-                self.compartment_id, instance_id=id
-            )
-            result = network_client.get_vnic(vnic_id.data[0].vnic_id)
-            region = result.data.availability_domain
-            ip = result.data.public_ip
-            ips[region] += [ip]
+        # Hack: There seems to be a non-deterministic bug in the OCI API making
+        # it `forget` the last x machines.
+        last_region = 'gDlt:US-SANJOSE-1-AD-1'
+        ips = defaultdict(set)
+        ips[last_region] = {
+            '192.9.226.6',
+            '192.18.143.75',
+            '192.9.238.175',
+            '152.67.234.2',
+            '152.70.121.179',
+            '192.9.234.154',
+            '155.248.195.160',
+            '150.230.46.24',
+            '152.67.226.37',
+            '192.9.151.192',
+            '192.9.156.60',
+            '152.67.224.87',
+            '129.159.42.1',
+            '192.9.147.253',
+            '152.70.123.18',
+            '192.9.128.243',
+            '152.67.254.117',
+            '138.2.234.97',
+            '152.67.248.190',
+            '192.9.153.160',
+            '192.9.156.86',
+            '150.230.40.128',
+            '192.9.133.25',
+            '192.9.133.246',
+            '150.230.35.49',
+            '192.18.141.164',
+            '192.9.153.110',
+            '155.248.210.54',
+            '150.230.44.43',
+            '192.18.128.119',
+            '192.18.133.61',
+            '138.2.227.228',
+            '129.159.33.176',
+            '192.9.128.25',
+            '152.67.233.149',
+            '192.9.137.18',
+            '192.18.131.93',
+            '192.9.151.75',
+            '192.9.155.208',
+            '192.9.132.231',
+            '152.67.250.181',
+            '138.2.237.19',
+            '192.9.133.56',
+            '192.9.247.107',
+            '192.9.148.216',
+            '192.9.245.233',
+            '192.9.149.116',
+            '192.9.234.87',
+            '192.9.131.23',
+            '152.70.113.174',
+            '192.18.128.15',
+            '192.18.136.127',
+            '155.248.211.158',
+            '192.18.130.128',
+            '155.248.199.187',
+            '152.67.235.205',
+            '138.2.226.204',
+            '192.9.129.209',
+            '150.230.34.143',
+            '192.9.132.155',
+            '129.159.40.179',
+            '192.9.244.78',
+            '192.9.142.208',
+            '192.9.132.156',
+            '192.9.134.252',
+            '152.67.251.41',
+            '192.9.238.236',
+            '152.70.115.77',
+            '155.248.194.136',
+            '138.2.229.24',
+            '192.9.232.210',
+            '138.2.224.128',
+            '192.9.228.101',
+            '152.70.117.199',
+            '152.67.226.112',
+            '138.2.233.250',
+            '192.9.240.32',
+            '150.230.38.178',
+            '129.159.33.175',
+            '152.67.252.63',
+            '152.70.126.160',
+            '138.2.236.94',
+            '152.67.229.197',
+            '192.9.250.220',
+            '150.230.33.37',
+            '192.18.136.225',
+            '192.9.241.108',
+            '192.18.128.134',
+            '129.159.37.17',
+            '192.18.140.117',
+            '138.2.235.200',
+            '192.18.137.208',
+            '155.248.214.62',
+            '152.67.230.120',
+            '138.2.239.232',
+            '155.248.198.29',
+            '192.18.128.38',
+            '152.67.252.101',
+            '192.9.148.151',
+            '155.248.204.7',
 
-        return [x for y in ips.values() for x in y] if flat else ips
-
-    def private_hosts(self, flat=False):
-        compute_client = ComputeClient(self.config)
-        network_client = VirtualNetworkClient(self.config)
-
-        ips = defaultdict(list)
-        for id in self._get_instance_ids():
-            vnic_id = compute_client.list_vnic_attachments(
-                self.compartment_id, instance_id=id
-            )
-            result = network_client.get_vnic(vnic_id.data[0].vnic_id)
-            region = result.data.availability_domain
-            ip = result.data.private_ip
-            ips[region] += [ip]
-
+            '192.9.138.130',
+            '192.9.157.81',
+            '152.70.116.123',
+            '152.70.118.29',
+            '192.9.233.244',
+            '192.18.133.34',
+            '129.159.42.123',
+            '192.18.142.15',
+            '150.230.46.58',
+            '192.9.158.71',
+            '192.9.230.221',
+            '192.9.231.82',
+            '129.159.37.111',
+            '150.230.36.123',
+            '192.9.155.117',
+            '138.2.238.67',
+            '152.67.231.179',
+            '138.2.230.14',
+            '192.18.140.15',
+            '192.9.144.58'
+        }
+        ips[last_region] = list(ips[last_region])
+        # print(len(ips[last_region]))
         return [x for y in ips.values() for x in y] if flat else ips
 
     def print_info(self):
@@ -350,6 +446,8 @@ class InstanceManager:
             for i, ip in enumerate(ips):
                 new_line = '\n' if (i+1) % 6 == 0 else ''
                 text += f'{new_line} {i}\tssh -i {key} {self.ssh_user}@{ip}\n'
+                # print(f'\'{ip}\',')
+
         print(
             '\n'
             '----------------------------------------------------------------\n'
