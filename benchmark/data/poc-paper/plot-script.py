@@ -239,10 +239,12 @@ class Plotter:
 if __name__ == '__main__':
     max_latency = 10_000
     tx_size = 30
+    path = 'data-mempool'
 
     # Parse the results.
-    [os.remove(x) for x in glob(f'*.txt')]
-    files = glob(join('data', '*.txt'))
+    [os.remove(x) for x in glob('latency-*.txt')]
+    [os.remove(x) for x in glob('tps-*.txt')]
+    files = glob(join(path, '*.txt'))
     LogAggregator(files, [max_latency]).print()
 
     # Load aggregated data (note we only use the `tps-*` file).
