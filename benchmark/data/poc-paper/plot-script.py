@@ -237,7 +237,7 @@ class Plotter:
 
 
 if __name__ == '__main__':
-    max_latency = 5_000
+    max_latency = 10_000
     tx_size = 30
 
     # Parse the results.
