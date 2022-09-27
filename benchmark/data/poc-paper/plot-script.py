@@ -239,7 +239,7 @@ class Plotter:
 if __name__ == '__main__':
     max_latency = 10_000
     tx_size = 30
-    path = 'data-mempool'
+    path = 'data-no-mempool'
 
     # Parse the results.
     [os.remove(x) for x in glob('latency-*.txt')]

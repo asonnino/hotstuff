@@ -8,7 +8,7 @@
  Transaction size: 30 B
  Max latency: any ms
 
- Variable value: X=298484
- TPS: 298484 +/- 58254 tx/s
- Latency: 2192 +/- 1092 ms
+ Variable value: X=2858
+ TPS: 2858 +/- 630 tx/s
+ Latency: 1231 +/- 354 ms
 -----------------------------------------
