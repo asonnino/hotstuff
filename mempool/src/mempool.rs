@@ -238,10 +238,9 @@ impl MessageHandler for MempoolReceiverHandler {
         match bincode::deserialize(&serialized) {
             Ok(MempoolMessage::Batch(..)) => {
                 // Send the batch to the digest processor.
-                let batch = bincode::deserialize(&serialized)?;
                 let digest = Digest::hash(&serialized);
                 self.tx_processor
-                    .send((batch, digest))
+                    .send((serialized.to_vec(), digest))
                     .await
                     .expect("Failed to send batch");
             }

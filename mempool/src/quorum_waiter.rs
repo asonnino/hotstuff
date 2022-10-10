@@ -92,12 +92,6 @@ impl QuorumWaiter {
                     }
                 };
             }
-            info!(
-                "QuorumWaiter: Batch {} delivered to {} authorities on {}",
-                digest,
-                total_stake,
-                self.committee.quorum_threshold()
-            );
 
             self.tx_batch
                 .send((batch, digest))
