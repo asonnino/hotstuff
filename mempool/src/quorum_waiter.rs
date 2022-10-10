@@ -3,7 +3,7 @@ use crate::processor::SerializedBatchMessage;
 use crypto::{Digest, PublicKey};
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
-use log::debug;
+use log::info;
 use network::CancelHandler;
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -79,6 +79,7 @@ impl QuorumWaiter {
             // the dag). This should reduce the amount of synching.
             let mut total_stake = self.stake;
             while total_stake < self.committee.quorum_threshold() {
+                info!("QuorumWaiter: Looping batch {}", digest);
                 tokio::select! {
                     Some(stake) = wait_for_quorum.next() => {
                         total_stake += stake;
@@ -91,7 +92,7 @@ impl QuorumWaiter {
                     }
                 };
             }
-            debug!(
+            info!(
                 "QuorumWaiter: Batch {} delivered to {} authorities on {}",
                 digest,
                 total_stake,

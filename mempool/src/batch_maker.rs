@@ -142,7 +142,6 @@ impl BatchMaker {
         // Broadcast the batch through the network.
         let (names, addresses): (Vec<_>, _) = self.mempool_addresses.iter().cloned().unzip();
         let bytes = Bytes::from(serialized.clone());
-        // TODO : Broadcast only to children
         let handlers = self.network.broadcast(addresses, bytes).await;
 
         // Send the batch through the deliver channel for further processing.
