@@ -1,8 +1,9 @@
 use crate::config::{Committee, Stake};
 use crate::processor::SerializedBatchMessage;
-use crypto::PublicKey;
+use crypto::{Digest, PublicKey};
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
+use log::debug;
 use network::CancelHandler;
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -27,7 +28,9 @@ pub struct QuorumWaiter {
     /// Input Channel to receive commands.
     rx_message: Receiver<QuorumWaiterMessage>,
     /// Channel to deliver batches for which we have enough acknowledgements.
-    tx_batch: Sender<SerializedBatchMessage>,
+    tx_batch: Sender<(SerializedBatchMessage, Digest)>,
+    /// Channel to receive acknowledgements from the network.
+    rx_ack: Receiver<(PublicKey, Digest)>,
 }
 
 impl QuorumWaiter {
@@ -36,7 +39,8 @@ impl QuorumWaiter {
         committee: Committee,
         stake: Stake,
         rx_message: Receiver<QuorumWaiterMessage>,
-        tx_batch: Sender<Vec<u8>>,
+        tx_batch: Sender<(SerializedBatchMessage, Digest)>,
+        rx_ack: Receiver<(PublicKey, Digest)>,
     ) {
         tokio::spawn(async move {
             Self {
@@ -44,6 +48,7 @@ impl QuorumWaiter {
                 stake,
                 rx_message,
                 tx_batch,
+                rx_ack,
             }
             .run()
             .await;
@@ -59,6 +64,8 @@ impl QuorumWaiter {
     /// Main loop.
     async fn run(&mut self) {
         while let Some(QuorumWaiterMessage { batch, handlers }) = self.rx_message.recv().await {
+            let digest = Digest::hash(&batch);
+
             let mut wait_for_quorum: FuturesUnordered<_> = handlers
                 .into_iter()
                 .map(|(name, handler)| {
@@ -71,16 +78,30 @@ impl QuorumWaiter {
             // delivered and we send its digest to the consensus (that will include it into
             // the dag). This should reduce the amount of synching.
             let mut total_stake = self.stake;
-            while let Some(stake) = wait_for_quorum.next().await {
-                total_stake += stake;
-                if total_stake >= self.committee.quorum_threshold() {
-                    self.tx_batch
-                        .send(batch)
-                        .await
-                        .expect("Failed to deliver batch");
-                    break;
-                }
+            while total_stake < self.committee.quorum_threshold() {
+                tokio::select! {
+                    Some(stake) = wait_for_quorum.next() => {
+                        total_stake += stake;
+                    }
+                    Some((name, received_digest)) = self.rx_ack.recv() => {
+                        if received_digest == digest {
+                            let stake = self.committee.stake(&name);
+                            total_stake += stake;
+                        }
+                    }
+                };
             }
+            debug!(
+                "QuorumWaiter: Batch {} delivered to {} authorities on {}",
+                digest,
+                total_stake,
+                self.committee.quorum_threshold()
+            );
+
+            self.tx_batch
+                .send((batch, digest))
+                .await
+                .expect("Failed to deliver batch");
         }
     }
 }

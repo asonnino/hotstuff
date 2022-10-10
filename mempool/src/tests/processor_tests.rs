@@ -20,14 +20,14 @@ async fn hash_and_store() {
     // Send a batch to the `Processor`.
     let message = MempoolMessage::Batch(batch());
     let serialized = bincode::serialize(&message).unwrap();
-    tx_batch.send(serialized.clone()).await.unwrap();
+    let digest = Digest::hash(&serialized);
+
+    tx_batch
+        .send((serialized.clone(), digest.clone()))
+        .await
+        .unwrap();
 
     // Ensure the `Processor` outputs the batch's digest.
-    let digest = Digest(
-        Sha512::digest(&serialized).as_slice()[..32]
-            .try_into()
-            .unwrap(),
-    );
     let received = rx_digest.recv().await.unwrap();
     assert_eq!(digest.clone(), received);
 
