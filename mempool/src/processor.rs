@@ -31,7 +31,7 @@ pub trait Processor {
         mut rx_batch: Receiver<SerializedBatchMessage>,
         // Output channel to send out batches' digests.
         tx_digest: Sender<Digest>,
-    ) -> () {
+    ) {
         tokio::spawn(async move {
             while let Some(batch) = rx_batch.recv().await {
                 Self::process(batch, store.clone(), tx_digest.clone()).await
