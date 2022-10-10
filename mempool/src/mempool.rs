@@ -1,4 +1,4 @@
-use crate::batch_maker::{Batch, BatchMaker, Transaction};
+use crate::batch_maker::{BatchMaker, BatchWithSender, Transaction};
 use crate::config::{Committee, Parameters};
 use crate::helper::Helper;
 use crate::processor::{DigestProcessor, Processor, SerializedBatchMessage};
@@ -29,7 +29,8 @@ pub type Round = u64;
 /// The message exchanged between the nodes' mempool.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum MempoolMessage {
-    Batch(Batch),
+    Ack(Digest),
+    Batch(BatchWithSender),
     BatchRequest(Vec<Digest>, /* origin */ PublicKey),
 }
 
@@ -132,12 +133,12 @@ impl<T: Topology> Mempool<T> {
         // (in a reliable manner) the batches to all other mempools that share the same `id` as us. Finally,
         // it gathers the 'cancel handlers' of the messages and send them to the `QuorumWaiter`.
         BatchMaker::spawn(
+            self.name,
             self.parameters.batch_size,
             self.parameters.max_batch_delay,
             /* rx_transaction */ rx_batch_maker,
             /* tx_message */ tx_quorum_waiter,
-            /* mempool_addresses */
-            self.topology.broadcast_peers(&self.name).to_vec(),
+            /* mempool_addresses */ self.topology.broadcast_peers(&self.name).to_vec(),
         );
 
         // The `QuorumWaiter` waits for 2f authorities to acknowledge reception of the batch. It then forwards
@@ -147,7 +148,7 @@ impl<T: Topology> Mempool<T> {
             /* stake */ self.committee.stake(&self.name),
             /* rx_message */ rx_quorum_waiter,
             /* tx_batch */ tx_processor,
-            rx_ack,
+            /* rx_ack */ rx_ack,
         );
 
         // The `DigestProcessor` hashes and stores the batch. It then forwards the batch's digest to the consensus.
@@ -207,7 +208,6 @@ struct TxReceiverHandler {
 
 #[async_trait]
 impl MessageHandler for TxReceiverHandler {
-    // TODO - Streaming : Find a solution to add a transaction to an existing block
     async fn dispatch(&self, _writer: &mut Writer, message: Bytes) -> Result<(), Box<dyn Error>> {
         // Send the transaction to the batch maker.
         self.tx_batch_maker
@@ -249,6 +249,9 @@ impl MessageHandler for MempoolReceiverHandler {
                 .send((missing, requestor))
                 .await
                 .expect("Failed to send batch request"),
+            Ok(MempoolMessage::Ack(..)) => {
+                todo!()
+            }
             Err(e) => warn!("Serialization error: {}", e),
         }
         Ok(())

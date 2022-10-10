@@ -35,7 +35,7 @@ impl Digest {
 
     pub fn hash(data: &[u8]) -> Self {
         Self(
-            Sha512::digest(&data).as_slice()[..32]
+            Sha512::digest(data).as_slice()[..32]
                 .try_into()
                 .expect("digest size is 32 bytes"),
         )

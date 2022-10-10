@@ -1,4 +1,4 @@
-use crate::batch_maker::{Batch, Transaction};
+use crate::batch_maker::{BatchWithSender, Transaction};
 use crate::config::Committee;
 use crate::mempool::MempoolMessage;
 use bytes::Bytes;
@@ -57,8 +57,11 @@ pub fn transaction() -> Transaction {
 }
 
 // Fixture
-pub fn batch() -> Batch {
-    vec![transaction(), transaction()]
+pub fn batch() -> BatchWithSender {
+    BatchWithSender {
+        batch: vec![transaction(), transaction()],
+        sender: keys()[0].0,
+    }
 }
 
 // Fixture

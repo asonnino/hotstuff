@@ -9,6 +9,7 @@ use ed25519_dalek::{Digest as _, Sha512};
 #[cfg(feature = "benchmark")]
 use log::info;
 use network::ReliableSender;
+use serde::{Deserialize, Serialize};
 #[cfg(feature = "benchmark")]
 use std::convert::TryInto as _;
 use std::net::SocketAddr;
@@ -22,8 +23,17 @@ pub mod batch_maker_tests;
 pub type Transaction = Vec<u8>;
 pub type Batch = Vec<Transaction>;
 
+/// BatchWithSender stores the batch and the sender of the batch.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BatchWithSender {
+    pub batch: Batch,
+    pub sender: PublicKey,
+}
+
 /// Assemble clients transactions into batches.
 pub struct BatchMaker {
+    /// Self name.
+    name: PublicKey,
     /// The preferred batch size (in bytes).
     batch_size: usize,
     /// The maximum delay after which to seal the batch (in ms).
@@ -44,6 +54,7 @@ pub struct BatchMaker {
 
 impl BatchMaker {
     pub fn spawn(
+        name: PublicKey,
         batch_size: usize,
         max_batch_delay: u64,
         rx_transaction: Receiver<Transaction>,
@@ -52,6 +63,7 @@ impl BatchMaker {
     ) {
         tokio::spawn(async move {
             Self {
+                name,
                 batch_size,
                 max_batch_delay,
                 rx_transaction,
@@ -113,7 +125,11 @@ impl BatchMaker {
 
         // Serialize the batch.
         self.current_batch_size = 0;
-        let batch: Vec<_> = self.current_batch.drain(..).collect();
+
+        let batch = BatchWithSender {
+            batch: self.current_batch.drain(..).collect(),
+            sender: self.name,
+        };
         let message = MempoolMessage::Batch(batch); // Costly operation.
         let serialized = bincode::serialize(&message).expect("Failed to serialize our own batch");
 
