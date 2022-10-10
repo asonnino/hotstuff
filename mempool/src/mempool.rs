@@ -1,9 +1,10 @@
 use crate::batch_maker::{Batch, BatchMaker, Transaction};
 use crate::config::{Committee, Parameters};
 use crate::helper::Helper;
-use crate::processor::{Processor, SerializedBatchMessage};
+use crate::processor::{DigestProcessor, Processor, SerializedBatchMessage};
 use crate::quorum_waiter::QuorumWaiter;
 use crate::synchronizer::Synchronizer;
+use crate::topologies::Topology;
 use async_trait::async_trait;
 use bytes::Bytes;
 use crypto::{Digest, PublicKey};
@@ -41,7 +42,7 @@ pub enum ConsensusMempoolMessage {
     Cleanup(Round),
 }
 
-pub struct Mempool {
+pub struct Mempool<T: Topology> {
     /// The public key of this authority.
     name: PublicKey,
     /// The committee information.
@@ -52,9 +53,11 @@ pub struct Mempool {
     store: Store,
     /// Send messages to consensus.
     tx_consensus: Sender<Digest>,
+    /// Topology of the network
+    topology: T,
 }
 
-impl Mempool {
+impl<T: Topology> Mempool<T> {
     pub fn spawn(
         name: PublicKey,
         committee: Committee,
@@ -62,6 +65,7 @@ impl Mempool {
         store: Store,
         rx_consensus: Receiver<ConsensusMempoolMessage>,
         tx_consensus: Sender<Digest>,
+        topology: T,
     ) {
         // NOTE: This log entry is used to compute performance.
         parameters.log();
@@ -73,6 +77,7 @@ impl Mempool {
             parameters,
             store,
             tx_consensus,
+            topology,
         };
 
         // Spawn all mempool tasks.
@@ -131,11 +136,11 @@ impl Mempool {
             /* rx_transaction */ rx_batch_maker,
             /* tx_message */ tx_quorum_waiter,
             /* mempool_addresses */
-            self.committee.broadcast_addresses(&self.name),
+            self.topology.broadcast_peers(&self.name).to_vec(),
         );
 
         // The `QuorumWaiter` waits for 2f authorities to acknowledge reception of the batch. It then forwards
-        // the batch to the `Processor`.
+        // the batch to the `DigestProcessor`.
         QuorumWaiter::spawn(
             self.committee.clone(),
             /* stake */ self.committee.stake(&self.name),
@@ -143,8 +148,8 @@ impl Mempool {
             /* tx_batch */ tx_processor,
         );
 
-        // The `Processor` hashes and stores the batch. It then forwards the batch's digest to the consensus.
-        Processor::spawn(
+        // The `DigestProcessor` hashes and stores the batch. It then forwards the batch's digest to the consensus.
+        DigestProcessor::spawn(
             self.store.clone(),
             /* rx_batch */ rx_processor,
             /* tx_digest */ self.tx_consensus.clone(),
@@ -180,9 +185,9 @@ impl Mempool {
             /* rx_request */ rx_helper,
         );
 
-        // This `Processor` hashes and stores the batches we receive from the other mempools. It then forwards the
+        // This `DigestProcessor` hashes and stores the batches we receive from the other mempools. It then forwards the
         // batch's digest to the consensus.
-        Processor::spawn(
+        DigestProcessor::spawn(
             self.store.clone(),
             /* rx_batch */ rx_processor,
             /* tx_digest */ self.tx_consensus.clone(),
@@ -200,6 +205,7 @@ struct TxReceiverHandler {
 
 #[async_trait]
 impl MessageHandler for TxReceiverHandler {
+    // TODO - Streaming : Find a solution to add a transaction to an existing block
     async fn dispatch(&self, _writer: &mut Writer, message: Bytes) -> Result<(), Box<dyn Error>> {
         // Send the transaction to the batch maker.
         self.tx_batch_maker
@@ -225,6 +231,7 @@ impl MessageHandler for MempoolReceiverHandler {
     async fn dispatch(&self, writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
         // Reply with an ACK.
         let _ = writer.send(Bytes::from("Ack")).await;
+        // TODO tress : Send to children nodes ?
 
         // Deserialize and parse the message.
         match bincode::deserialize(&serialized) {

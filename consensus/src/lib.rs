@@ -18,4 +18,5 @@ mod common;
 
 pub use crate::config::{Committee, Parameters};
 pub use crate::consensus::Consensus;
+pub use crate::leader::LeaderElector;
 pub use crate::messages::{Block, QC, TC};

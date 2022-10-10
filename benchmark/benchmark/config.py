@@ -1,9 +1,15 @@
 from json import dump, load
 
+ACCEPTED_TOPOLOGIES = {'fullmesh'}
 
 class ConfigError(Exception):
     pass
 
+
+class Topology:
+    def __init__(self, name):
+        assert(name in ACCEPTED_TOPOLOGIES)
+        self.name = name
 
 class Key:
     def __init__(self, name, secret):

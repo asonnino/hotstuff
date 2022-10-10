@@ -15,7 +15,7 @@ async fn hash_and_store() {
     let mut store = Store::new(path).unwrap();
 
     // Spawn a new `Processor` instance.
-    Processor::spawn(store.clone(), rx_batch, tx_digest);
+    DigestProcessor::spawn(store.clone(), rx_batch, tx_digest);
 
     // Send a batch to the `Processor`.
     let message = MempoolMessage::Batch(batch());

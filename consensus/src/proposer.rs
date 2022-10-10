@@ -130,7 +130,9 @@ impl Proposer {
                     //}
                 },
                 Some(message) = self.rx_message.recv() => match message {
+                    // Make a new block.
                     ProposerMessage::Make(round, qc, tc) => self.make_block(round, qc, tc).await,
+                    // Cleanup the buffer.
                     ProposerMessage::Cleanup(digests) => {
                         for x in &digests {
                             self.buffer.remove(x);

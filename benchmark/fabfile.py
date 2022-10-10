@@ -14,7 +14,7 @@ def local(ctx):
     bench_params = {
         'faults': 0,
         'nodes': 4,
-        'rate': 1_000,
+        'rate': 10000,
         'tx_size': 512,
         'duration': 20,
     }
@@ -31,8 +31,9 @@ def local(ctx):
             'max_batch_delay': 10
         }
     }
+    topology = 'fullmesh'
     try:
-        ret = LocalBench(bench_params, node_params).run(debug=False).result()
+        ret = LocalBench(bench_params, node_params, topology).run(debug=False).result()
         print(ret)
     except BenchError as e:
         Print.error(e)
@@ -116,8 +117,9 @@ def remote(ctx):
             'max_batch_delay': 100
         }
     }
+    topology = 'fullmesh'
     try:
-        Bench(ctx).run(bench_params, node_params, debug=False)
+        Bench(ctx).run(bench_params, node_params, topology, debug=False)
     except BenchError as e:
         Print.error(e)
 
