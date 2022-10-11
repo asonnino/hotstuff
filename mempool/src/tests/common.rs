@@ -21,34 +21,25 @@ pub fn keys() -> Vec<(PublicKey, SecretKey)> {
     (0..4).map(|_| generate_keypair(&mut rng)).collect()
 }
 
-// Fixture
-pub fn committee() -> Committee {
+// Fixture.
+pub fn committee_with_base_port(base_port: usize) -> Committee {
     Committee::new(
         keys()
             .into_iter()
             .enumerate()
             .map(|(i, (name, _))| {
                 let stake = 1;
-                let front = format!("127.0.0.1:{}", 100 + i).parse().unwrap();
-                let mempool = format!("127.0.0.1:{}", 100 + i).parse().unwrap();
+                let front = format!("127.0.0.1:{}", 100 + i + base_port)
+                    .parse()
+                    .unwrap();
+                let mempool = format!("127.0.0.1:{}", 100 + i + base_port)
+                    .parse()
+                    .unwrap();
                 (name, stake, front, mempool)
             })
             .collect(),
         /*  epoch */ 100,
     )
-}
-
-// Fixture.
-pub fn committee_with_base_port(base_port: u16) -> Committee {
-    let mut committee = committee();
-    for authority in committee.authorities.values_mut() {
-        let port = authority.transactions_address.port();
-        authority.transactions_address.set_port(base_port + port);
-
-        let port = authority.mempool_address.port();
-        authority.mempool_address.set_port(base_port + port);
-    }
-    committee
 }
 
 // Fixture

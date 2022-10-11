@@ -13,6 +13,7 @@ use log::{info, warn};
 use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+use std::net::SocketAddr;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
@@ -81,10 +82,12 @@ impl<T: Topology> Mempool<T> {
             topology,
         };
 
+        let (tx_ack, rx_ack) = channel(CHANNEL_CAPACITY);
+
         // Spawn all mempool tasks.
         mempool.handle_consensus_messages(rx_consensus);
-        mempool.handle_clients_transactions();
-        mempool.handle_mempool_messages();
+        mempool.handle_clients_transactions(rx_ack);
+        mempool.handle_mempool_messages(tx_ack);
 
         info!(
             "Mempool successfully booted on {}",
@@ -112,11 +115,10 @@ impl<T: Topology> Mempool<T> {
     }
 
     /// Spawn all tasks responsible to handle clients transactions.
-    fn handle_clients_transactions(&self) {
+    fn handle_clients_transactions(&self, rx_ack: Receiver<(SocketAddr, Digest)>) {
         let (tx_batch_maker, rx_batch_maker) = channel(CHANNEL_CAPACITY);
         let (tx_quorum_waiter, rx_quorum_waiter) = channel(CHANNEL_CAPACITY);
         let (tx_processor, rx_processor) = channel(CHANNEL_CAPACITY);
-        let (_, rx_ack) = channel(CHANNEL_CAPACITY);
 
         // We first receive clients' transactions from the network.
         let mut address = self
@@ -162,7 +164,7 @@ impl<T: Topology> Mempool<T> {
     }
 
     /// Spawn all tasks responsible to handle messages from other mempools.
-    fn handle_mempool_messages(&self) {
+    fn handle_mempool_messages(&self, tx_ack: Sender<(SocketAddr, Digest)>) {
         let (tx_helper, rx_helper) = channel(CHANNEL_CAPACITY);
         let (tx_processor, rx_processor) = channel(CHANNEL_CAPACITY);
 
@@ -178,6 +180,7 @@ impl<T: Topology> Mempool<T> {
             MempoolReceiverHandler {
                 tx_helper,
                 tx_processor,
+                tx_ack,
             },
         );
 
@@ -208,7 +211,12 @@ struct TxReceiverHandler {
 
 #[async_trait]
 impl MessageHandler for TxReceiverHandler {
-    async fn dispatch(&self, _writer: &mut Writer, message: Bytes) -> Result<(), Box<dyn Error>> {
+    async fn dispatch(
+        &self,
+        _writer: &mut Writer,
+        _peer: SocketAddr,
+        message: Bytes,
+    ) -> Result<(), Box<dyn Error>> {
         // Send the transaction to the batch maker.
         self.tx_batch_maker
             .send(message.to_vec())
@@ -226,11 +234,17 @@ impl MessageHandler for TxReceiverHandler {
 struct MempoolReceiverHandler {
     tx_helper: Sender<(Vec<Digest>, PublicKey)>,
     tx_processor: Sender<(SerializedBatchMessage, Digest)>,
+    tx_ack: Sender<(SocketAddr, Digest)>,
 }
 
 #[async_trait]
 impl MessageHandler for MempoolReceiverHandler {
-    async fn dispatch(&self, writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
+    async fn dispatch(
+        &self,
+        writer: &mut Writer,
+        peer: SocketAddr,
+        serialized: Bytes,
+    ) -> Result<(), Box<dyn Error>> {
         // Reply with an ACK.
         let _ = writer.send(Bytes::from("Ack")).await;
 
@@ -239,6 +253,7 @@ impl MessageHandler for MempoolReceiverHandler {
             Ok(MempoolMessage::Batch(..)) => {
                 // Send the batch to the digest processor.
                 let digest = Digest::hash(&serialized);
+                // TODO : Send ACK
                 self.tx_processor
                     .send((serialized.to_vec(), digest))
                     .await
@@ -249,8 +264,11 @@ impl MessageHandler for MempoolReceiverHandler {
                 .send((missing, requestor))
                 .await
                 .expect("Failed to send batch request"),
-            Ok(MempoolMessage::Ack(..)) => {
-                todo!()
+            Ok(MempoolMessage::Ack(digest)) => {
+                self.tx_ack
+                    .send((peer, digest))
+                    .await
+                    .expect("failed to send ack");
             }
             Err(e) => warn!("Serialization error: {}", e),
         }
