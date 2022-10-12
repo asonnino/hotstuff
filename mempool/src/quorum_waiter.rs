@@ -31,7 +31,11 @@ pub struct QuorumWaiter {
     /// Input Channel to receive commands.
     rx_message: Receiver<QuorumWaiterMessage>,
     /// Channel to deliver batches for which we have enough acknowledgements.
-    tx_batch: Sender<(SerializedBatchMessage, Digest)>,
+    tx_batch: Sender<(
+        SerializedBatchMessage,
+        Digest,
+        Option<(SocketAddr, PublicKey)>,
+    )>,
     /// Channel to receive acknowledgements from the network.
     rx_ack: Receiver<(SocketAddr, Digest)>,
 }
@@ -42,7 +46,11 @@ impl QuorumWaiter {
         committee: Committee,
         stake: Stake,
         rx_message: Receiver<QuorumWaiterMessage>,
-        tx_batch: Sender<(SerializedBatchMessage, Digest)>,
+        tx_batch: Sender<(
+            SerializedBatchMessage,
+            Digest,
+            Option<(SocketAddr, PublicKey)>,
+        )>,
         rx_ack: Receiver<(SocketAddr, Digest)>,
     ) {
         tokio::spawn(async move {
@@ -104,7 +112,7 @@ impl QuorumWaiter {
             }
 
             self.tx_batch
-                .send((batch, digest))
+                .send((batch, digest, None))
                 .await
                 .expect("Failed to deliver batch");
         }

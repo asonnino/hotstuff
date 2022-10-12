@@ -40,7 +40,7 @@ class Committee:
             'consensus': self._build_consensus(),
             'mempool': self._build_mempool()
         }
-
+    
     def _build_consensus(self):
         node = {}
         for a, n in zip(self.consensus, self.names):
@@ -56,7 +56,7 @@ class Committee:
                 'transactions_address': f, 
                 'mempool_address': m
             }
-        return {'authorities': node, 'epoch': 1}
+        return {'authorities': node, 'epoch': 1, 'mempool_address_map' : {m : n for n, m in zip(self.names, self.mempool)}}
 
     def print(self, filename):
         assert isinstance(filename, str)

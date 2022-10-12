@@ -1,7 +1,7 @@
 use crate::batch_maker::{BatchMaker, BatchWithSender, Transaction};
 use crate::config::{Committee, Parameters};
 use crate::helper::Helper;
-use crate::processor::{DigestProcessor, Processor, SerializedBatchMessage};
+use crate::processor::{Processor, SerializedBatchMessage};
 use crate::quorum_waiter::QuorumWaiter;
 use crate::synchronizer::Synchronizer;
 use crate::topologies::Topology;
@@ -144,7 +144,7 @@ impl<T: Topology> Mempool<T> {
         );
 
         // The `QuorumWaiter` waits for 2f authorities to acknowledge reception of the batch. It then forwards
-        // the batch to the `DigestProcessor`.
+        // the batch to the `Processor`.
         QuorumWaiter::spawn(
             self.committee.clone(),
             /* stake */ self.committee.stake(&self.name),
@@ -153,8 +153,9 @@ impl<T: Topology> Mempool<T> {
             /* rx_ack */ rx_ack,
         );
 
-        // The `DigestProcessor` hashes and stores the batch. It then forwards the batch's digest to the consensus.
-        DigestProcessor::spawn(
+        // The `Processor` hashes and stores the batch. It then forwards the batch's digest to the consensus.
+        Processor::spawn(
+            self.committee.clone(),
             self.store.clone(),
             /* rx_batch */ rx_processor,
             /* tx_digest */ self.tx_consensus.clone(),
@@ -191,9 +192,10 @@ impl<T: Topology> Mempool<T> {
             /* rx_request */ rx_helper,
         );
 
-        // This `DigestProcessor` hashes and stores the batches we receive from the other mempools. It then forwards the
+        // This `Processor` hashes and stores the batches we receive from the other mempools. It then forwards the
         // batch's digest to the consensus.
-        DigestProcessor::spawn(
+        Processor::spawn(
+            self.committee.clone(),
             self.store.clone(),
             /* rx_batch */ rx_processor,
             /* tx_digest */ self.tx_consensus.clone(),
@@ -233,7 +235,11 @@ impl MessageHandler for TxReceiverHandler {
 #[derive(Clone)]
 struct MempoolReceiverHandler {
     tx_helper: Sender<(Vec<Digest>, PublicKey)>,
-    tx_processor: Sender<(SerializedBatchMessage, Digest)>,
+    tx_processor: Sender<(
+        SerializedBatchMessage,
+        Digest,
+        Option<(SocketAddr, PublicKey)>,
+    )>,
     tx_ack: Sender<(SocketAddr, Digest)>,
 }
 
@@ -250,12 +256,15 @@ impl MessageHandler for MempoolReceiverHandler {
 
         // Deserialize and parse the message.
         match bincode::deserialize(&serialized) {
-            Ok(MempoolMessage::Batch(..)) => {
+            Ok(MempoolMessage::Batch(batch_with_sender)) => {
                 // Send the batch to the digest processor.
                 let digest = Digest::hash(&serialized);
-                // TODO : Send ACK
                 self.tx_processor
-                    .send((serialized.to_vec(), digest))
+                    .send((
+                        serialized.to_vec(),
+                        digest,
+                        Some((peer, batch_with_sender.sender)),
+                    ))
                     .await
                     .expect("Failed to send batch");
             }

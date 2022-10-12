@@ -61,6 +61,7 @@ pub struct Authority {
 pub struct Committee {
     pub authorities: HashMap<PublicKey, Authority>,
     pub epoch: EpochNumber,
+
     pub mempool_address_map: HashMap<SocketAddr, PublicKey>,
 }
 

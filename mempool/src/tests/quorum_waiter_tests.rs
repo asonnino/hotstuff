@@ -51,7 +51,7 @@ async fn wait_for_quorum() {
     tx_message.send(message).await.unwrap();
 
     // Wait for the `QuorumWaiter` to gather enough acknowledgements and output the batch.
-    let (batch, _) = rx_batch.recv().await.unwrap();
+    let (batch, _, _) = rx_batch.recv().await.unwrap();
     assert_eq!(batch, serialized);
 
     // Ensure the other listeners correctly received the batch.
@@ -94,6 +94,6 @@ async fn wait_for_quorum_ack() {
     }
 
     // Wait for the `QuorumWaiter` to gather enough acknowledgements and output the batch.
-    let (batch, _) = rx_batch.recv().await.unwrap();
+    let (batch, _, _) = rx_batch.recv().await.unwrap();
     assert_eq!(batch, serialized);
 }
