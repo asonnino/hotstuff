@@ -49,6 +49,9 @@ enum Command {
         /// The path where to create the data store.
         #[clap(short, long, value_parser, value_name = "TOPOLOGY")]
         topology_builder: String,
+        /// Optional fanout parameter.
+        #[clap(short, long, value_parser, value_name = "USIZE")]
+        fanout: Option<usize>,
     },
     /// Deploy a local testbed with the specified number of nodes.
     Deploy {
@@ -56,6 +59,8 @@ enum Command {
         nodes: u16,
         #[clap(short, long, value_parser, value_name = "TOPOLOGY")]
         topology_builder: String,
+        #[clap(short, long, value_parser, value_name = "USIZE")]
+        fanout: Option<usize>,
     },
 }
 
@@ -87,12 +92,23 @@ async fn main() {
             parameters,
             store,
             topology_builder,
+            fanout,
         } => {
             let topology_builder = match topology_builder.as_str() {
-                "fullmesh" => FullMeshTopologyBuilder,
+                "fullmesh" => FullMeshTopologyBuilder {},
+                "fanout" => KauriTopologyBuilder {},
                 _ => panic!("Unknown topology"),
             };
-            match Node::new(&committee, &keys, &store, parameters, topology_builder).await {
+            match Node::new(
+                &committee,
+                &keys,
+                &store,
+                parameters,
+                fanout.map(|e| e.to_string()),
+                topology_builder,
+            )
+            .await
+            {
                 Ok(mut node) => {
                     tokio::spawn(async move {
                         node.analyze_block().await;
@@ -106,7 +122,8 @@ async fn main() {
         Command::Deploy {
             nodes,
             topology_builder,
-        } => match deploy_testbed(nodes, topology_builder) {
+            fanout,
+        } => match deploy_testbed(nodes, topology_builder, fanout.map(|e| e.to_string())) {
             Ok(handles) => {
                 let _ = join_all(handles).await;
             }
@@ -118,6 +135,7 @@ async fn main() {
 fn deploy_testbed(
     nodes: u16,
     topology: String,
+    fanout: Option<String>,
 ) -> Result<Vec<JoinHandle<()>>, Box<dyn std::error::Error>> {
     let keys: Vec<_> = (0..nodes).map(|_| Secret::new()).collect();
 
@@ -158,6 +176,7 @@ fn deploy_testbed(
 
     let topology_builder = match topology.as_str() {
         "fullmesh" => FullMeshTopologyBuilder,
+        "fanout" => FullMeshTopologyBuilder,
         _ => panic!("Unknown topology"),
     };
 
@@ -180,6 +199,7 @@ fn deploy_testbed(
                     &key_file,
                     &store_path,
                     None,
+                    fanout,
                     new_topology_builder,
                 )
                 .await

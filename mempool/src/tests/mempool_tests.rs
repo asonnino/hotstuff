@@ -30,7 +30,9 @@ async fn handle_clients_transactions() {
         store,
         rx_consensus_to_mempool,
         tx_mempool_to_consensus,
-        FullMeshTopologyBuilder::build(committee.broadcast_addresses(&name)),
+        FullMeshTopologyBuilder {}
+            .build(committee.broadcast_addresses(&name))
+            .unwrap(),
     );
 
     // Spawn enough mempools' listeners to acknowledge our batches.

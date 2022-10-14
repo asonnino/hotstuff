@@ -140,7 +140,7 @@ impl<T: Topology> Mempool<T> {
             self.parameters.max_batch_delay,
             /* rx_transaction */ rx_batch_maker,
             /* tx_message */ tx_quorum_waiter,
-            /* mempool_addresses */ self.topology.broadcast_peers(&self.name).to_vec(),
+            /* mempool_addresses */ self.topology.broadcast_peers().to_vec(),
         );
 
         // The `QuorumWaiter` waits for 2f authorities to acknowledge reception of the batch. It then forwards
