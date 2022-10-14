@@ -1,6 +1,5 @@
 // Copyright(C) Facebook, Inc. and its affiliates.
 use super::*;
-use ed25519_dalek::Digest as _;
 use ed25519_dalek::Sha512;
 use rand::rngs::StdRng;
 use rand::SeedableRng as _;

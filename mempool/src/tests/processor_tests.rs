@@ -1,5 +1,5 @@
 use super::*;
-use crate::common::batch;
+use crate::common::{batch, committee_with_base_port};
 use crate::mempool::MempoolMessage;
 use std::fs;
 use tokio::sync::mpsc::channel;
@@ -15,19 +15,24 @@ async fn hash_and_store() {
     let mut store = Store::new(path).unwrap();
 
     // Spawn a new `Processor` instance.
-    DigestProcessor::spawn(store.clone(), rx_batch, tx_digest);
+    Processor::spawn(
+        committee_with_base_port(7000),
+        store.clone(),
+        rx_batch,
+        tx_digest,
+    );
 
     // Send a batch to the `Processor`.
     let message = MempoolMessage::Batch(batch());
     let serialized = bincode::serialize(&message).unwrap();
-    tx_batch.send(serialized.clone()).await.unwrap();
+    let digest = Digest::hash(&serialized);
+
+    tx_batch
+        .send((serialized.clone(), digest.clone(), None))
+        .await
+        .unwrap();
 
     // Ensure the `Processor` outputs the batch's digest.
-    let digest = Digest(
-        Sha512::digest(&serialized).as_slice()[..32]
-            .try_into()
-            .unwrap(),
-    );
     let received = rx_digest.recv().await.unwrap();
     assert_eq!(digest.clone(), received);
 

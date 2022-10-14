@@ -1,7 +1,7 @@
-use crate::batch_maker::{Batch, BatchMaker, Transaction};
+use crate::batch_maker::{BatchMaker, BatchWithSender, Transaction};
 use crate::config::{Committee, Parameters};
 use crate::helper::Helper;
-use crate::processor::{DigestProcessor, Processor, SerializedBatchMessage};
+use crate::processor::{Processor, SerializedBatchMessage};
 use crate::quorum_waiter::QuorumWaiter;
 use crate::synchronizer::Synchronizer;
 use crate::topologies::Topology;
@@ -13,6 +13,7 @@ use log::{info, warn};
 use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+use std::net::SocketAddr;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
@@ -29,7 +30,8 @@ pub type Round = u64;
 /// The message exchanged between the nodes' mempool.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum MempoolMessage {
-    Batch(Batch),
+    Ack(Digest),
+    Batch(BatchWithSender),
     BatchRequest(Vec<Digest>, /* origin */ PublicKey),
 }
 
@@ -80,10 +82,12 @@ impl<T: Topology> Mempool<T> {
             topology,
         };
 
+        let (tx_ack, rx_ack) = channel(CHANNEL_CAPACITY);
+
         // Spawn all mempool tasks.
         mempool.handle_consensus_messages(rx_consensus);
-        mempool.handle_clients_transactions();
-        mempool.handle_mempool_messages();
+        mempool.handle_clients_transactions(rx_ack);
+        mempool.handle_mempool_messages(tx_ack);
 
         info!(
             "Mempool successfully booted on {}",
@@ -111,7 +115,7 @@ impl<T: Topology> Mempool<T> {
     }
 
     /// Spawn all tasks responsible to handle clients transactions.
-    fn handle_clients_transactions(&self) {
+    fn handle_clients_transactions(&self, rx_ack: Receiver<(SocketAddr, Digest)>) {
         let (tx_batch_maker, rx_batch_maker) = channel(CHANNEL_CAPACITY);
         let (tx_quorum_waiter, rx_quorum_waiter) = channel(CHANNEL_CAPACITY);
         let (tx_processor, rx_processor) = channel(CHANNEL_CAPACITY);
@@ -131,25 +135,27 @@ impl<T: Topology> Mempool<T> {
         // (in a reliable manner) the batches to all other mempools that share the same `id` as us. Finally,
         // it gathers the 'cancel handlers' of the messages and send them to the `QuorumWaiter`.
         BatchMaker::spawn(
+            self.name,
             self.parameters.batch_size,
             self.parameters.max_batch_delay,
             /* rx_transaction */ rx_batch_maker,
             /* tx_message */ tx_quorum_waiter,
-            /* mempool_addresses */
-            self.topology.broadcast_peers(&self.name).to_vec(),
+            /* mempool_addresses */ self.topology.broadcast_peers(&self.name).to_vec(),
         );
 
         // The `QuorumWaiter` waits for 2f authorities to acknowledge reception of the batch. It then forwards
-        // the batch to the `DigestProcessor`.
+        // the batch to the `Processor`.
         QuorumWaiter::spawn(
             self.committee.clone(),
             /* stake */ self.committee.stake(&self.name),
             /* rx_message */ rx_quorum_waiter,
             /* tx_batch */ tx_processor,
+            /* rx_ack */ rx_ack,
         );
 
-        // The `DigestProcessor` hashes and stores the batch. It then forwards the batch's digest to the consensus.
-        DigestProcessor::spawn(
+        // The `Processor` hashes and stores the batch. It then forwards the batch's digest to the consensus.
+        Processor::spawn(
+            self.committee.clone(),
             self.store.clone(),
             /* rx_batch */ rx_processor,
             /* tx_digest */ self.tx_consensus.clone(),
@@ -159,7 +165,7 @@ impl<T: Topology> Mempool<T> {
     }
 
     /// Spawn all tasks responsible to handle messages from other mempools.
-    fn handle_mempool_messages(&self) {
+    fn handle_mempool_messages(&self, tx_ack: Sender<(SocketAddr, Digest)>) {
         let (tx_helper, rx_helper) = channel(CHANNEL_CAPACITY);
         let (tx_processor, rx_processor) = channel(CHANNEL_CAPACITY);
 
@@ -175,6 +181,7 @@ impl<T: Topology> Mempool<T> {
             MempoolReceiverHandler {
                 tx_helper,
                 tx_processor,
+                tx_ack,
             },
         );
 
@@ -185,9 +192,10 @@ impl<T: Topology> Mempool<T> {
             /* rx_request */ rx_helper,
         );
 
-        // This `DigestProcessor` hashes and stores the batches we receive from the other mempools. It then forwards the
+        // This `Processor` hashes and stores the batches we receive from the other mempools. It then forwards the
         // batch's digest to the consensus.
-        DigestProcessor::spawn(
+        Processor::spawn(
+            self.committee.clone(),
             self.store.clone(),
             /* rx_batch */ rx_processor,
             /* tx_digest */ self.tx_consensus.clone(),
@@ -205,8 +213,12 @@ struct TxReceiverHandler {
 
 #[async_trait]
 impl MessageHandler for TxReceiverHandler {
-    // TODO - Streaming : Find a solution to add a transaction to an existing block
-    async fn dispatch(&self, _writer: &mut Writer, message: Bytes) -> Result<(), Box<dyn Error>> {
+    async fn dispatch(
+        &self,
+        _writer: &mut Writer,
+        _peer: SocketAddr,
+        message: Bytes,
+    ) -> Result<(), Box<dyn Error>> {
         // Send the transaction to the batch maker.
         self.tx_batch_maker
             .send(message.to_vec())
@@ -223,28 +235,50 @@ impl MessageHandler for TxReceiverHandler {
 #[derive(Clone)]
 struct MempoolReceiverHandler {
     tx_helper: Sender<(Vec<Digest>, PublicKey)>,
-    tx_processor: Sender<SerializedBatchMessage>,
+    tx_processor: Sender<(
+        SerializedBatchMessage,
+        Digest,
+        Option<(SocketAddr, PublicKey)>,
+    )>,
+    tx_ack: Sender<(SocketAddr, Digest)>,
 }
 
 #[async_trait]
 impl MessageHandler for MempoolReceiverHandler {
-    async fn dispatch(&self, writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
+    async fn dispatch(
+        &self,
+        writer: &mut Writer,
+        peer: SocketAddr,
+        serialized: Bytes,
+    ) -> Result<(), Box<dyn Error>> {
         // Reply with an ACK.
         let _ = writer.send(Bytes::from("Ack")).await;
-        // TODO tress : Send to children nodes ?
 
         // Deserialize and parse the message.
         match bincode::deserialize(&serialized) {
-            Ok(MempoolMessage::Batch(..)) => self
-                .tx_processor
-                .send(serialized.to_vec())
-                .await
-                .expect("Failed to send batch"),
+            Ok(MempoolMessage::Batch(batch_with_sender)) => {
+                // Send the batch to the digest processor.
+                let digest = Digest::hash(&serialized);
+                self.tx_processor
+                    .send((
+                        serialized.to_vec(),
+                        digest,
+                        Some((peer, batch_with_sender.sender)),
+                    ))
+                    .await
+                    .expect("Failed to send batch");
+            }
             Ok(MempoolMessage::BatchRequest(missing, requestor)) => self
                 .tx_helper
                 .send((missing, requestor))
                 .await
                 .expect("Failed to send batch request"),
+            Ok(MempoolMessage::Ack(digest)) => {
+                self.tx_ack
+                    .send((peer, digest))
+                    .await
+                    .expect("failed to send ack");
+            }
             Err(e) => warn!("Serialization error: {}", e),
         }
         Ok(())

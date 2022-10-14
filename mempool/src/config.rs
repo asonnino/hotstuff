@@ -47,7 +47,7 @@ impl Parameters {
 pub type EpochNumber = u128;
 pub type Stake = u32;
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Authority {
     /// The voting power of this authority.
     pub stake: Stake,
@@ -57,14 +57,21 @@ pub struct Authority {
     pub mempool_address: SocketAddr,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Committee {
     pub authorities: HashMap<PublicKey, Authority>,
     pub epoch: EpochNumber,
+
+    pub mempool_address_map: HashMap<SocketAddr, PublicKey>,
 }
 
 impl Committee {
     pub fn new(info: Vec<(PublicKey, Stake, SocketAddr, SocketAddr)>, epoch: EpochNumber) -> Self {
+        let mempool_address_map = info
+            .iter()
+            .map(|(name, _, _, mempool_address)| (mempool_address.clone(), name.clone()))
+            .collect();
+
         Self {
             authorities: info
                 .into_iter()
@@ -78,7 +85,13 @@ impl Committee {
                 })
                 .collect(),
             epoch,
+            mempool_address_map,
         }
+    }
+
+    /// Returns the PublicKey of the authority that is responsible for the given address.
+    pub fn get_public_key(&self, address: &SocketAddr) -> Option<&PublicKey> {
+        self.mempool_address_map.get(address)
     }
 
     /// Return the stake of a specific authority.

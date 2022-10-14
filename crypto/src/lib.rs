@@ -1,3 +1,4 @@
+use dalek::Sha512;
 // Copyright(C) Facebook, Inc. and its affiliates.
 use ed25519_dalek as dalek;
 use ed25519_dalek::ed25519;
@@ -10,6 +11,8 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::sync::oneshot;
+
+use ed25519_dalek::Digest as _;
 
 #[cfg(test)]
 #[path = "tests/crypto_tests.rs"]
@@ -28,6 +31,14 @@ impl Digest {
 
     pub fn size(&self) -> usize {
         self.0.len()
+    }
+
+    pub fn hash(data: &[u8]) -> Self {
+        Self(
+            Sha512::digest(data).as_slice()[..32]
+                .try_into()
+                .expect("digest size is 32 bytes"),
+        )
     }
 }
 
