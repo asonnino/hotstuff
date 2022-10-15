@@ -22,13 +22,13 @@ pub enum TopologyError {
 /// `Topology` represents the basic expectations of a topology structure.
 pub trait Topology {
     /// `broadcast_peers` returns a slice of the peers to broadcast a batch to.
-    fn broadcast_peers(&self) -> &[(PublicKey, SocketAddr)];
+    fn broadcast_peers(&mut self, name: PublicKey) -> Vec<(PublicKey, SocketAddr)>;
 }
 
 /// `TopologyBuilder` is a trait that allows to build a topology.
 pub trait TopologyBuilder<T: Topology>: Clone {
     /// 'set_params' sets the parameters of the topology.
-    fn set_params(&mut self, params: &Parameters, name: &PublicKey) -> ();
+    fn set_params(&mut self, params: &Parameters, name: PublicKey) -> ();
 
     /// `build` builds a topology from a list of peers.
     fn build(&self, peers: Vec<(PublicKey, SocketAddr)>) -> Result<T, TopologyError>;
@@ -43,7 +43,7 @@ pub struct FullMeshTopology {
 pub struct FullMeshTopologyBuilder;
 
 impl TopologyBuilder<FullMeshTopology> for FullMeshTopologyBuilder {
-    fn set_params(&mut self, _params: &Parameters, _name: &PublicKey) -> () {}
+    fn set_params(&mut self, _params: &Parameters, _name: PublicKey) -> () {}
 
     fn build(
         &self,
@@ -58,21 +58,19 @@ impl TopologyBuilder<FullMeshTopology> for FullMeshTopologyBuilder {
 }
 
 impl Topology for FullMeshTopology {
-    fn broadcast_peers(&self) -> &[(PublicKey, SocketAddr)] {
-        &self.peers
+    fn broadcast_peers(&mut self, _name: PublicKey) -> Vec<(PublicKey, SocketAddr)> {
+        self.peers.clone()
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct KauriTopologyBuilder {
     pub fanout: Option<usize>,
-    pub id: Option<PublicKey>,
 }
 
 impl TopologyBuilder<KauriTopology> for KauriTopologyBuilder {
-    fn set_params(&mut self, params: &Parameters, name: &PublicKey) -> () {
+    fn set_params(&mut self, params: &Parameters, _name: PublicKey) -> () {
         self.fanout = params.fanout;
-        self.id = Some(name.clone());
     }
 
     // Builds an n-ary tree and add the children of id to peers
@@ -86,29 +84,37 @@ impl TopologyBuilder<KauriTopology> for KauriTopologyBuilder {
             .ok_or_else(|| TopologyError::MissingParameters {
                 param: "fanout".to_string(),
             })?;
-        let id = self.id.ok_or_else(|| TopologyError::MissingParameters {
-            param: "id".to_string(),
-        })?;
-        let mut processes_on_level = 1;
-        let mut new_peers = peers.clone();
-        new_peers.sort_by(|a, b| a.0.cmp(&b.0));
 
+        Ok(KauriTopology::new(peers, fanout))
+    }
+}
+
+impl Topology for KauriTopology {
+    fn broadcast_peers(&mut self, id: PublicKey) -> Vec<(PublicKey, SocketAddr)> {
+        // Find the index of the peer in the list
+        let index = self
+            .peers
+            .iter()
+            .position(|(peer_id, _)| peer_id == &id)
+            .unwrap();
+        self.peers.swap(0, index);
+        let mut processes_on_level = 1;
         let mut res = Vec::new();
         let mut i = 0;
-        'building: while i < new_peers.len() {
-            let remaining = new_peers.len() - i;
+        'building: while i < self.peers.len() {
+            let remaining = self.peers.len() - i;
             let max_fanout = remaining / processes_on_level;
-            let curr_fanout = std::cmp::min(fanout, max_fanout);
+            let curr_fanout = std::cmp::min(self.fanout, max_fanout);
 
             let mut start = i + processes_on_level;
 
             for _ in 1..processes_on_level + 1 {
                 for j in start..start + curr_fanout {
-                    if j >= new_peers.len() {
+                    if j >= self.peers.len() {
                         break 'building;
                     }
-                    if id == new_peers[i].0 {
-                        res.push(new_peers[j]);
+                    if id == self.peers[i].0 {
+                        res.push(self.peers[j]);
                     }
                 }
                 start += curr_fanout;
@@ -116,18 +122,21 @@ impl TopologyBuilder<KauriTopology> for KauriTopologyBuilder {
             }
             processes_on_level = min(curr_fanout * processes_on_level, remaining);
         }
-        info!("{} Kauri topology built with {:?} peers", id, res);
-        Ok(KauriTopology { peers: res })
-    }
-}
-
-impl Topology for KauriTopology {
-    fn broadcast_peers(&self) -> &[(PublicKey, SocketAddr)] {
-        &self.peers
+        self.peers.swap(0, index);
+        info!("Broadcasting to {} peers", res.len());
+        res
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct KauriTopology {
     peers: Vec<(PublicKey, SocketAddr)>,
+    fanout: usize,
+}
+
+impl KauriTopology {
+    pub fn new(mut peers: Vec<(PublicKey, SocketAddr)>, fanout: usize) -> Self {
+        peers.sort_by(|a, b| a.0.cmp(&b.0));
+        KauriTopology { peers, fanout }
+    }
 }

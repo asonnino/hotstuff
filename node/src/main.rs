@@ -116,10 +116,7 @@ async fn main() {
                         committee,
                         parameters,
                         store,
-                        KauriTopologyBuilder {
-                            fanout: None,
-                            id: None,
-                        },
+                        KauriTopologyBuilder { fanout: None },
                     )
                     .await
                 }
@@ -143,13 +140,7 @@ async fn main() {
         } => {
             let deployer = match topology_builder.as_str() {
                 "fullmesh" => deploy_testbed(nodes, FullMeshTopologyBuilder),
-                "kauri" => deploy_testbed(
-                    nodes,
-                    KauriTopologyBuilder {
-                        fanout: None,
-                        id: None,
-                    },
-                ),
+                "kauri" => deploy_testbed(nodes, KauriTopologyBuilder { fanout: None }),
                 _ => panic!("Unknown topology"),
             };
             match deployer {

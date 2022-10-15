@@ -82,7 +82,7 @@ where
     ) {
         // NOTE: This log entry is used to compute performance.
         parameters.log();
-        topology_builder.set_params(&parameters, &name);
+        topology_builder.set_params(&parameters, name);
         let mut peers = committee.broadcast_addresses(&name);
         peers.push((name, "127.0.0.1:0".parse().unwrap()));
 
@@ -90,7 +90,7 @@ where
             .build(peers)
             .expect("Failed to build topology");
         // Define a mempool instance.
-        let mempool = Self {
+        let mut mempool = Self {
             name,
             committee,
             parameters,
@@ -99,7 +99,6 @@ where
             topology,
             phantom: PhantomData,
         };
-
         let (tx_ack, rx_ack) = channel(CHANNEL_CAPACITY);
 
         // Spawn all mempool tasks.
@@ -133,7 +132,7 @@ where
     }
 
     /// Spawn all tasks responsible to handle clients transactions.
-    fn handle_clients_transactions(&self, rx_ack: Receiver<(SocketAddr, Digest)>) {
+    fn handle_clients_transactions(&mut self, rx_ack: Receiver<(SocketAddr, Digest)>) {
         let (tx_batch_maker, rx_batch_maker) = channel(CHANNEL_CAPACITY);
         let (tx_quorum_waiter, rx_quorum_waiter) = channel(CHANNEL_CAPACITY);
         let (tx_processor, rx_processor) = channel(CHANNEL_CAPACITY);
@@ -158,7 +157,7 @@ where
             self.parameters.max_batch_delay,
             /* rx_transaction */ rx_batch_maker,
             /* tx_message */ tx_quorum_waiter,
-            /* mempool_addresses */ self.topology.broadcast_peers().to_vec(),
+            /* mempool_addresses */ self.topology.broadcast_peers(self.name).to_vec(),
         );
 
         // The `QuorumWaiter` waits for 2f authorities to acknowledge reception of the batch. It then forwards
