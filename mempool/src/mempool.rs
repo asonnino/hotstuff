@@ -14,7 +14,6 @@ use log::{info, warn};
 use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
-use std::marker::PhantomData;
 use std::net::SocketAddr;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -46,10 +45,9 @@ pub enum ConsensusMempoolMessage {
     Cleanup(Round),
 }
 
-pub struct Mempool<Builder, T>
+pub struct Mempool<Builder>
 where
-    Builder: TopologyBuilder<T>,
-    T: Topology,
+    Builder: TopologyBuilder,
 {
     /// The public key of this authority.
     name: PublicKey,
@@ -62,14 +60,12 @@ where
     /// Send messages to consensus.
     tx_consensus: Sender<Digest>,
     /// Topology of the network
-    topology: T,
-    phantom: PhantomData<Builder>,
+    topology: Builder::Topology,
 }
 
-impl<Builder, T> Mempool<Builder, T>
+impl<Builder> Mempool<Builder>
 where
-    Builder: TopologyBuilder<T>,
-    T: Topology,
+    Builder: TopologyBuilder,
 {
     pub fn spawn(
         name: PublicKey,
@@ -97,7 +93,6 @@ where
             store,
             tx_consensus,
             topology,
-            phantom: PhantomData,
         };
         let (tx_ack, rx_ack) = channel(CHANNEL_CAPACITY);
 

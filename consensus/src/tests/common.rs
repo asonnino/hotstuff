@@ -80,7 +80,7 @@ impl Vote {
             author,
             signature: Signature::default(),
         };
-        let signature = Signature::new(&vote.digest(), &secret);
+        let signature = Signature::new(&vote.digest(), secret);
         Self { signature, ..vote }
     }
 }
@@ -99,7 +99,7 @@ impl Timeout {
             author,
             signature: Signature::default(),
         };
-        let signature = Signature::new(&timeout.digest(), &secret);
+        let signature = Signature::new(&timeout.digest(), secret);
         Self {
             signature,
             ..timeout

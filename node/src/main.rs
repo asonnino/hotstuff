@@ -11,8 +11,7 @@ use env_logger::Env;
 use futures::future::join_all;
 use log::error;
 use mempool::{
-    Committee as MempoolCommittee, FullMeshTopologyBuilder, KauriTopologyBuilder, Topology,
-    TopologyBuilder,
+    Committee as MempoolCommittee, FullMeshTopologyBuilder, KauriTopologyBuilder, TopologyBuilder,
 };
 use std::fs;
 use tokio::task::JoinHandle;
@@ -63,7 +62,7 @@ enum Command {
     },
 }
 
-async fn run_command<Builder, T>(
+async fn run_command<Builder>(
     keys: String,
     committee: String,
     parameters: Option<String>,
@@ -71,8 +70,7 @@ async fn run_command<Builder, T>(
     topology_builder: Builder,
 ) -> Result<Node, ConfigError>
 where
-    Builder: TopologyBuilder<T>,
-    T: Topology,
+    Builder: TopologyBuilder,
 {
     Node::new(&committee, &keys, &store, parameters, topology_builder).await
 }
@@ -153,13 +151,12 @@ async fn main() {
     }
 }
 
-fn deploy_testbed<Builder, T>(
+fn deploy_testbed<Builder>(
     nodes: u16,
     builder: Builder,
 ) -> Result<Vec<JoinHandle<()>>, Box<dyn std::error::Error>>
 where
-    Builder: TopologyBuilder<T> + Send + Sync + 'static,
-    T: Topology,
+    Builder: TopologyBuilder + Send + Sync + 'static,
 {
     let keys: Vec<_> = (0..nodes).map(|_| Secret::new()).collect();
 

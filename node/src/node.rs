@@ -3,8 +3,8 @@ use crate::config::{Committee, ConfigError, Parameters, Secret};
 use consensus::{Block, Consensus};
 use crypto::SignatureService;
 use log::info;
+use mempool::Mempool;
 use mempool::TopologyBuilder;
-use mempool::{Mempool, Topology};
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver};
 
@@ -16,7 +16,7 @@ pub struct Node {
 }
 
 impl Node {
-    pub async fn new<Builder, T>(
+    pub async fn new<Builder>(
         committee_file: &str,
         key_file: &str,
         store_path: &str,
@@ -24,8 +24,7 @@ impl Node {
         builder: Builder,
     ) -> Result<Self, ConfigError>
     where
-        Builder: TopologyBuilder<T>,
-        T: Topology,
+        Builder: TopologyBuilder,
     {
         let (tx_commit, rx_commit) = channel(CHANNEL_CAPACITY);
         let (tx_consensus_to_mempool, rx_consensus_to_mempool) = channel(CHANNEL_CAPACITY);
@@ -50,7 +49,7 @@ impl Node {
         let signature_service = SignatureService::new(secret_key);
 
         // Make a new mempool.
-        Mempool::<Builder, T>::spawn(
+        Mempool::spawn(
             name,
             committee.mempool,
             parameters.mempool,

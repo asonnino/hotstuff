@@ -14,7 +14,7 @@ async fn get_existing_parent_block() {
     let mut store = Store::new(path).unwrap();
     let key = b2.digest().to_vec();
     let value = bincode::serialize(&b2).unwrap();
-    let _ = store.write(key, value).await;
+    store.write(key, value).await;
 
     // Make a new synchronizer.
     let (name, _) = keys().pop().unwrap();
@@ -101,7 +101,7 @@ async fn get_missing_parent_block() {
     // Add the parent to the store.
     let key = parent_block.digest().to_vec();
     let value = bincode::serialize(&parent_block).unwrap();
-    let _ = store.write(key, value).await;
+    store.write(key, value).await;
 
     // Now that we have the parent, ensure the synchronizer loops back the block to the core
     // to resume processing.

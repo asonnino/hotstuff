@@ -51,7 +51,7 @@ impl Parameters {
         info!("Max batch delay set to {} ms", self.max_batch_delay);
         info!(
             "Fanout set to {}",
-            self.fanout.unwrap_or(default_fanout().unwrap())
+            self.fanout.unwrap_or_else(|| default_fanout().unwrap())
         );
     }
 }
@@ -81,7 +81,7 @@ impl Committee {
     pub fn new(info: Vec<(PublicKey, Stake, SocketAddr, SocketAddr)>, epoch: EpochNumber) -> Self {
         let mempool_address_map = info
             .iter()
-            .map(|(name, _, _, mempool_address)| (mempool_address.clone(), name.clone()))
+            .map(|(name, _, _, mempool_address)| (*mempool_address, *name))
             .collect();
 
         Self {

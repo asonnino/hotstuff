@@ -26,12 +26,14 @@ pub trait Topology {
 }
 
 /// `TopologyBuilder` is a trait that allows to build a topology.
-pub trait TopologyBuilder<T: Topology>: Clone {
+pub trait TopologyBuilder: Clone {
+    type Topology: Topology;
+
     /// 'set_params' sets the parameters of the topology.
-    fn set_params(&mut self, params: &Parameters, name: PublicKey) -> ();
+    fn set_params(&mut self, params: &Parameters, name: PublicKey);
 
     /// `build` builds a topology from a list of peers.
-    fn build(&self, peers: Vec<(PublicKey, SocketAddr)>) -> Result<T, TopologyError>;
+    fn build(&self, peers: Vec<(PublicKey, SocketAddr)>) -> Result<Self::Topology, TopologyError>;
 }
 
 /// `FullMeshTopology` is a topology where every node is connected to every other node.
@@ -42,14 +44,16 @@ pub struct FullMeshTopology {
 #[derive(Clone, Debug)]
 pub struct FullMeshTopologyBuilder;
 
-impl TopologyBuilder<FullMeshTopology> for FullMeshTopologyBuilder {
-    fn set_params(&mut self, _params: &Parameters, _name: PublicKey) -> () {}
+impl TopologyBuilder for FullMeshTopologyBuilder {
+    type Topology = FullMeshTopology;
+
+    fn set_params(&mut self, _params: &Parameters, _name: PublicKey) {}
 
     fn build(
         &self,
         peers: Vec<(PublicKey, SocketAddr)>,
     ) -> Result<FullMeshTopology, TopologyError> {
-        if peers.len() > 0 {
+        if !peers.is_empty() {
             Ok(FullMeshTopology { peers })
         } else {
             Err(TopologyError::NoPeers)
@@ -68,14 +72,16 @@ pub struct KauriTopologyBuilder {
     pub fanout: Option<usize>,
 }
 
-impl TopologyBuilder<KauriTopology> for KauriTopologyBuilder {
-    fn set_params(&mut self, params: &Parameters, _name: PublicKey) -> () {
+impl TopologyBuilder for KauriTopologyBuilder {
+    type Topology = KauriTopology;
+
+    fn set_params(&mut self, params: &Parameters, _name: PublicKey) {
         self.fanout = params.fanout;
     }
 
     // Builds an n-ary tree and add the children of id to peers
     fn build(&self, peers: Vec<(PublicKey, SocketAddr)>) -> Result<KauriTopology, TopologyError> {
-        if peers.len() < 1 {
+        if peers.is_empty() {
             return Err(TopologyError::NoPeers);
         }
 
