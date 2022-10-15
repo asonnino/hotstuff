@@ -2,7 +2,6 @@
 //! or to send an acknowledgement after receiving a batch of request.
 
 use crypto::PublicKey;
-use log::info;
 use std::{cmp::min, net::SocketAddr};
 use thiserror::Error;
 
@@ -129,7 +128,6 @@ impl Topology for KauriTopology {
             processes_on_level = min(curr_fanout * processes_on_level, remaining);
         }
         self.peers.swap(0, index);
-        info!("Broadcasting to {} peers", res.len());
         res
     }
 }
