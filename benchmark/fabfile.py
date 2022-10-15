@@ -31,7 +31,7 @@ def local(ctx):
             'max_batch_delay': 10
         }
     }
-    topology = 'fullmesh'
+    topology = 'kauri'
     try:
         ret = LocalBench(bench_params, node_params, topology).run(debug=False).result()
         print(ret)

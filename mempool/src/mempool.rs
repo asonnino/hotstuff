@@ -5,6 +5,7 @@ use crate::processor::{Processor, SerializedBatchMessage};
 use crate::quorum_waiter::QuorumWaiter;
 use crate::synchronizer::Synchronizer;
 use crate::topologies::Topology;
+use crate::TopologyBuilder;
 use async_trait::async_trait;
 use bytes::Bytes;
 use crypto::{Digest, PublicKey};
@@ -13,6 +14,7 @@ use log::{info, warn};
 use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+use std::marker::PhantomData;
 use std::net::SocketAddr;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -44,7 +46,11 @@ pub enum ConsensusMempoolMessage {
     Cleanup(Round),
 }
 
-pub struct Mempool<T: Topology> {
+pub struct Mempool<Builder, T>
+where
+    Builder: TopologyBuilder<T>,
+    T: Topology,
+{
     /// The public key of this authority.
     name: PublicKey,
     /// The committee information.
@@ -57,9 +63,14 @@ pub struct Mempool<T: Topology> {
     tx_consensus: Sender<Digest>,
     /// Topology of the network
     topology: T,
+    phantom: PhantomData<Builder>,
 }
 
-impl<T: Topology> Mempool<T> {
+impl<Builder, T> Mempool<Builder, T>
+where
+    Builder: TopologyBuilder<T>,
+    T: Topology,
+{
     pub fn spawn(
         name: PublicKey,
         committee: Committee,
@@ -67,11 +78,17 @@ impl<T: Topology> Mempool<T> {
         store: Store,
         rx_consensus: Receiver<ConsensusMempoolMessage>,
         tx_consensus: Sender<Digest>,
-        topology: T,
+        mut topology_builder: Builder,
     ) {
         // NOTE: This log entry is used to compute performance.
         parameters.log();
+        topology_builder.set_params(&parameters, &name);
+        let mut peers = committee.broadcast_addresses(&name);
+        peers.push((name, "127.0.0.1:0".parse().unwrap()));
 
+        let topology = topology_builder
+            .build(peers)
+            .expect("Failed to build topology");
         // Define a mempool instance.
         let mempool = Self {
             name,
@@ -80,6 +97,7 @@ impl<T: Topology> Mempool<T> {
             store,
             tx_consensus,
             topology,
+            phantom: PhantomData,
         };
 
         let (tx_ack, rx_ack) = channel(CHANNEL_CAPACITY);
@@ -274,6 +292,7 @@ impl MessageHandler for MempoolReceiverHandler {
                 .await
                 .expect("Failed to send batch request"),
             Ok(MempoolMessage::Ack(digest)) => {
+                info!("Received ACK for batch {} from {}", digest, peer);
                 self.tx_ack
                     .send((peer, digest))
                     .await

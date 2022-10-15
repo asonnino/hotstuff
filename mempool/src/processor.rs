@@ -52,7 +52,7 @@ impl Processor {
                     .expect("Failed to send batch digest");
                 if let Some((addr, sender)) = peer {
                     if let Some(source) = processor.committee.get_public_key(&addr) {
-                        if source == &sender {
+                        if source != &sender {
                             let payload = Bytes::from(
                                 bincode::serialize(&MempoolMessage::Ack(digest)).unwrap(),
                             );

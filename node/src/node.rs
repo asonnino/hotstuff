@@ -1,7 +1,7 @@
 use crate::config::Export as _;
 use crate::config::{Committee, ConfigError, Parameters, Secret};
 use consensus::{Block, Consensus};
-use crypto::{PublicKey, SignatureService};
+use crypto::SignatureService;
 use log::info;
 use mempool::TopologyBuilder;
 use mempool::{Mempool, Topology};
@@ -21,7 +21,6 @@ impl Node {
         key_file: &str,
         store_path: &str,
         parameters: Option<String>,
-        fanout: Option<String>,
         builder: Builder,
     ) -> Result<Self, ConfigError>
     where
@@ -44,28 +43,21 @@ impl Node {
             None => Parameters::default(),
         };
 
-        // Set params for the topology builder
-        builder.set_params("id", &PublicKey::encode_base64(&name));
-        if let Some(fanout) = fanout {
-            builder.set_params("fanout", &fanout);
-        }
-
         // Make the data store.
         let store = Store::new(store_path).expect("Failed to create store");
 
         // Run the signature service.
         let signature_service = SignatureService::new(secret_key);
 
-        let committee_mempool_addresses = committee.mempool.broadcast_addresses(&name);
         // Make a new mempool.
-        Mempool::spawn(
+        Mempool::<Builder, T>::spawn(
             name,
             committee.mempool,
             parameters.mempool,
             store.clone(),
             rx_consensus_to_mempool,
             tx_mempool_to_consensus,
-            builder.build(committee_mempool_addresses)?,
+            builder,
         );
 
         // Run the consensus core.

@@ -5,11 +5,15 @@ use crate::config::Export as _;
 use crate::config::{Committee, Secret};
 use crate::node::Node;
 use clap::{Parser, Subcommand};
+use config::ConfigError;
 use consensus::Committee as ConsensusCommittee;
 use env_logger::Env;
 use futures::future::join_all;
 use log::error;
-use mempool::{Committee as MempoolCommittee, FullMeshTopologyBuilder};
+use mempool::{
+    Committee as MempoolCommittee, FullMeshTopologyBuilder, KauriTopologyBuilder, Topology,
+    TopologyBuilder,
+};
 use std::fs;
 use tokio::task::JoinHandle;
 
@@ -49,9 +53,6 @@ enum Command {
         /// The path where to create the data store.
         #[clap(short, long, value_parser, value_name = "TOPOLOGY")]
         topology_builder: String,
-        /// Optional fanout parameter.
-        #[clap(short, long, value_parser, value_name = "USIZE")]
-        fanout: Option<usize>,
     },
     /// Deploy a local testbed with the specified number of nodes.
     Deploy {
@@ -59,9 +60,21 @@ enum Command {
         nodes: u16,
         #[clap(short, long, value_parser, value_name = "TOPOLOGY")]
         topology_builder: String,
-        #[clap(short, long, value_parser, value_name = "USIZE")]
-        fanout: Option<usize>,
     },
+}
+
+async fn run_command<Builder, T>(
+    keys: String,
+    committee: String,
+    parameters: Option<String>,
+    store: String,
+    topology_builder: Builder,
+) -> Result<Node, ConfigError>
+where
+    Builder: TopologyBuilder<T>,
+    T: Topology,
+{
+    Node::new(&committee, &keys, &store, parameters, topology_builder).await
 }
 
 #[tokio::main]
@@ -92,23 +105,28 @@ async fn main() {
             parameters,
             store,
             topology_builder,
-            fanout,
         } => {
-            let topology_builder = match topology_builder.as_str() {
-                "fullmesh" => FullMeshTopologyBuilder {},
-                "fanout" => KauriTopologyBuilder {},
+            let node = match topology_builder.as_str() {
+                "fullmesh" => {
+                    run_command(keys, committee, parameters, store, FullMeshTopologyBuilder).await
+                }
+                "kauri" => {
+                    run_command(
+                        keys,
+                        committee,
+                        parameters,
+                        store,
+                        KauriTopologyBuilder {
+                            fanout: None,
+                            id: None,
+                        },
+                    )
+                    .await
+                }
                 _ => panic!("Unknown topology"),
             };
-            match Node::new(
-                &committee,
-                &keys,
-                &store,
-                parameters,
-                fanout.map(|e| e.to_string()),
-                topology_builder,
-            )
-            .await
-            {
+
+            match node {
                 Ok(mut node) => {
                     tokio::spawn(async move {
                         node.analyze_block().await;
@@ -122,21 +140,36 @@ async fn main() {
         Command::Deploy {
             nodes,
             topology_builder,
-            fanout,
-        } => match deploy_testbed(nodes, topology_builder, fanout.map(|e| e.to_string())) {
-            Ok(handles) => {
-                let _ = join_all(handles).await;
+        } => {
+            let deployer = match topology_builder.as_str() {
+                "fullmesh" => deploy_testbed(nodes, FullMeshTopologyBuilder),
+                "kauri" => deploy_testbed(
+                    nodes,
+                    KauriTopologyBuilder {
+                        fanout: None,
+                        id: None,
+                    },
+                ),
+                _ => panic!("Unknown topology"),
+            };
+            match deployer {
+                Ok(handles) => {
+                    let _ = join_all(handles).await;
+                }
+                Err(e) => error!("Failed to deploy testbed: {}", e),
             }
-            Err(e) => error!("Failed to deploy testbed: {}", e),
-        },
+        }
     }
 }
 
-fn deploy_testbed(
+fn deploy_testbed<Builder, T>(
     nodes: u16,
-    topology: String,
-    fanout: Option<String>,
-) -> Result<Vec<JoinHandle<()>>, Box<dyn std::error::Error>> {
+    builder: Builder,
+) -> Result<Vec<JoinHandle<()>>, Box<dyn std::error::Error>>
+where
+    Builder: TopologyBuilder<T> + Send + Sync + 'static,
+    T: Topology,
+{
     let keys: Vec<_> = (0..nodes).map(|_| Secret::new()).collect();
 
     // Print the committee file.
@@ -174,12 +207,6 @@ fn deploy_testbed(
     }
     .write(committee_file)?;
 
-    let topology_builder = match topology.as_str() {
-        "fullmesh" => FullMeshTopologyBuilder,
-        "fanout" => FullMeshTopologyBuilder,
-        _ => panic!("Unknown topology"),
-    };
-
     // Write the key files and spawn all nodes.
     keys.iter()
         .enumerate()
@@ -191,19 +218,10 @@ fn deploy_testbed(
             let store_path = format!("db_{}", i);
             let _ = fs::remove_dir_all(&store_path);
 
-            let new_topology_builder = topology_builder.clone();
+            let new_builder = builder.clone();
 
             Ok(tokio::spawn(async move {
-                match Node::new(
-                    committee_file,
-                    &key_file,
-                    &store_path,
-                    None,
-                    fanout,
-                    new_topology_builder,
-                )
-                .await
-                {
+                match Node::new(committee_file, &key_file, &store_path, None, new_builder).await {
                     Ok(mut node) => {
                         // Sink the commit channel.
                         while node.commit.recv().await.is_some() {}
