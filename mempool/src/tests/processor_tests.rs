@@ -1,11 +1,13 @@
 use super::*;
-use crate::common::{batch, committee_with_base_port};
+use crate::common::{batch, committee_with_base_port, keys};
 use crate::mempool::MempoolMessage;
+use crate::topologies::FullMeshTopology;
 use std::fs;
 use tokio::sync::mpsc::channel;
 
 #[tokio::test]
 async fn hash_and_store() {
+    let (name, _) = keys().pop().unwrap();
     let (tx_batch, rx_batch) = channel(1);
     let (tx_digest, mut rx_digest) = channel(1);
 
@@ -20,6 +22,10 @@ async fn hash_and_store() {
         store.clone(),
         rx_batch,
         tx_digest,
+        FullMeshTopology {
+            peers: vec![],
+            name: name,
+        },
     );
 
     // Send a batch to the `Processor`.

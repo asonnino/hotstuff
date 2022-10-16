@@ -1,6 +1,6 @@
 from json import dump, load
 
-ACCEPTED_TOPOLOGIES = {'fullmesh'}
+ACCEPTED_TOPOLOGIES = {'fullmesh', 'kauri'}
 
 class ConfigError(Exception):
     pass

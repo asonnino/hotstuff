@@ -78,8 +78,7 @@ impl QuorumWaiter {
             let digest = Digest::hash(&batch);
 
             // Set of publickeys which already sent an acknowledgement.
-            let mut acks =
-                HashSet::<PublicKey>::from_iter(handlers.iter().map(|(pk, _)| pk.clone()));
+            let mut acks = HashSet::<PublicKey>::from_iter(handlers.iter().map(|(pk, _)| *pk));
 
             let mut wait_for_quorum: FuturesUnordered<_> = handlers
                 .into_iter()
@@ -102,7 +101,7 @@ impl QuorumWaiter {
                         let name = self.committee.get_public_key(&addr);
                         if let Some(name) = name {
                             if received_digest == digest && !acks.contains(name) {
-                                let stake = self.committee.stake(&name);
+                                let stake = self.committee.stake(name);
                                 total_stake += stake;
                                 acks.insert(*name);
                             }

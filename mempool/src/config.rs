@@ -19,6 +19,13 @@ pub struct Parameters {
     /// The delay after which the workers seal a batch of transactions, even if `max_batch_size`
     /// is not reached. Denominated in ms.
     pub max_batch_delay: u64,
+    /// Fanout for Kauri topology
+    #[serde(default = "default_fanout")]
+    pub fanout: Option<usize>,
+}
+
+fn default_fanout() -> Option<usize> {
+    Some(3)
 }
 
 impl Default for Parameters {
@@ -29,6 +36,7 @@ impl Default for Parameters {
             sync_retry_nodes: 3,
             batch_size: 500_000,
             max_batch_delay: 100,
+            fanout: default_fanout(),
         }
     }
 }
@@ -41,6 +49,10 @@ impl Parameters {
         info!("Sync retry nodes set to {} nodes", self.sync_retry_nodes);
         info!("Batch size set to {} B", self.batch_size);
         info!("Max batch delay set to {} ms", self.max_batch_delay);
+        info!(
+            "Fanout set to {}",
+            self.fanout.unwrap_or_else(|| default_fanout().unwrap())
+        );
     }
 }
 
@@ -69,7 +81,7 @@ impl Committee {
     pub fn new(info: Vec<(PublicKey, Stake, SocketAddr, SocketAddr)>, epoch: EpochNumber) -> Self {
         let mempool_address_map = info
             .iter()
-            .map(|(name, _, _, mempool_address)| (mempool_address.clone(), name.clone()))
+            .map(|(name, _, _, mempool_address)| (*mempool_address, *name))
             .collect();
 
         Self {

@@ -105,7 +105,7 @@ async fn generate_proposal() {
     let votes: Vec<_> = keys()
         .iter()
         .map(|(public_key, secret_key)| {
-            Vote::new_from_key(hash.clone(), block.round, *public_key, &secret_key)
+            Vote::new_from_key(hash.clone(), block.round, *public_key, secret_key)
         })
         .collect();
     let hight_qc = QC {
