@@ -106,7 +106,14 @@ async fn main() {
         } => {
             let node = match topology_builder.as_str() {
                 "fullmesh" => {
-                    run_command(keys, committee, parameters, store, FullMeshTopologyBuilder).await
+                    run_command(
+                        keys,
+                        committee,
+                        parameters,
+                        store,
+                        FullMeshTopologyBuilder { name: None },
+                    )
+                    .await
                 }
                 "kauri" => {
                     run_command(
@@ -137,7 +144,7 @@ async fn main() {
             topology_builder,
         } => {
             let deployer = match topology_builder.as_str() {
-                "fullmesh" => deploy_testbed(nodes, FullMeshTopologyBuilder),
+                "fullmesh" => deploy_testbed(nodes, FullMeshTopologyBuilder { name: None }),
                 "kauri" => deploy_testbed(nodes, KauriTopologyBuilder { fanout: None }),
                 _ => panic!("Unknown topology"),
             };

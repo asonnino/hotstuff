@@ -13,7 +13,7 @@ def local(ctx):
     ''' Run benchmarks on localhost '''
     bench_params = {
         'faults': 0,
-        'nodes': 4,
+        'nodes': 10,
         'rate': 10000,
         'tx_size': 512,
         'duration': 20,
@@ -31,7 +31,7 @@ def local(ctx):
             'max_batch_delay': 10
         }
     }
-    topology = 'kauri'
+    topology = 'fullmesh'
     try:
         ret = LocalBench(bench_params, node_params, topology).run(debug=False).result()
         print(ret)

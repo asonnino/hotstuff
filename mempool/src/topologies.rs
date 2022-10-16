@@ -1,4 +1,4 @@
-//! Contains the traits and structured required to broadcast a batch of message
+//! Contains the traits and structures required to broadcast a batch of message
 //! or to send an acknowledgement after receiving a batch of request.
 
 use crypto::PublicKey;
@@ -19,7 +19,7 @@ pub enum TopologyError {
 }
 
 /// `Topology` represents the basic expectations of a topology structure.
-pub trait Topology {
+pub trait Topology: Clone + Send + Sync + 'static {
     /// `broadcast_peers` returns a slice of the peers to broadcast a batch to.
     fn broadcast_peers(&mut self, name: PublicKey) -> Vec<(PublicKey, SocketAddr)>;
 }
@@ -36,33 +36,45 @@ pub trait TopologyBuilder: Clone {
 }
 
 /// `FullMeshTopology` is a topology where every node is connected to every other node.
+#[derive(Clone, Debug)]
 pub struct FullMeshTopology {
-    peers: Vec<(PublicKey, SocketAddr)>,
+    pub(crate) peers: Vec<(PublicKey, SocketAddr)>,
+    pub(crate) name: PublicKey,
 }
 
 #[derive(Clone, Debug)]
-pub struct FullMeshTopologyBuilder;
+pub struct FullMeshTopologyBuilder {
+    pub name: Option<PublicKey>,
+}
 
 impl TopologyBuilder for FullMeshTopologyBuilder {
     type Topology = FullMeshTopology;
 
-    fn set_params(&mut self, _params: &Parameters, _name: PublicKey) {}
+    fn set_params(&mut self, _params: &Parameters, name: PublicKey) {
+        self.name = Some(name);
+    }
 
     fn build(
         &self,
         peers: Vec<(PublicKey, SocketAddr)>,
     ) -> Result<FullMeshTopology, TopologyError> {
-        if !peers.is_empty() {
-            Ok(FullMeshTopology { peers })
-        } else {
-            Err(TopologyError::NoPeers)
+        let name = self.name.ok_or(TopologyError::MissingParameters {
+            param: "name".to_string(),
+        })?;
+        if peers.is_empty() {
+            return Err(TopologyError::NoPeers);
         }
+        Ok(FullMeshTopology { peers, name })
     }
 }
 
 impl Topology for FullMeshTopology {
-    fn broadcast_peers(&mut self, _name: PublicKey) -> Vec<(PublicKey, SocketAddr)> {
-        self.peers.clone()
+    fn broadcast_peers(&mut self, name: PublicKey) -> Vec<(PublicKey, SocketAddr)> {
+        if name == self.name {
+            self.peers.clone()
+        } else {
+            vec![]
+        }
     }
 }
 

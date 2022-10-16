@@ -171,6 +171,7 @@ where
             self.store.clone(),
             /* rx_batch */ rx_processor,
             /* tx_digest */ self.tx_consensus.clone(),
+            self.topology.clone(),
         );
 
         info!("Mempool listening to client transactions on {}", address);
@@ -211,6 +212,7 @@ where
             self.store.clone(),
             /* rx_batch */ rx_processor,
             /* tx_digest */ self.tx_consensus.clone(),
+            self.topology.clone(),
         );
 
         info!("Mempool listening to mempool messages on {}", address);
