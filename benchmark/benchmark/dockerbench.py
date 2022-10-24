@@ -282,16 +282,17 @@ class DockerBench:
                 hosts = hosts[:n-faults]
 
                 # Run the benchmark.
-                #for i in range(self.bench_parameters.runs):
-                #Print.heading(f'Run {i+1}/{self.bench_parameters.runs}')
-                try:
-                    self._run_single(
-                        hosts, r, self.bench_parameters, self.node_parameters, debug
-                    )
-                    self._logs(faults).print(PathMaker.result_file(
-                        faults, n, r, self.bench_parameters.tx_size
-                    ))
-                except (subprocess.SubprocessError, ParseError) as e:
-                    self.kill()
-                    Print.error(BenchError('Benchmark failed', e))
-                    continue
+                for i in range(self.bench_parameters.runs):
+                    Print.heading(f'Run {i+1}/{self.bench_parameters.runs}')
+                    try:
+                        self._run_single(
+                            hosts, r, self.bench_parameters, self.node_parameters, debug
+                        )
+                        self._logs(faults).print(PathMaker.result_file(
+                            faults, n, r, self.bench_parameters.tx_size
+                        ))
+                    except (subprocess.SubprocessError, ParseError) as e:
+                        self.kill()
+                        Print.error(BenchError('Benchmark failed', e))
+                        continue
+                self.kill()

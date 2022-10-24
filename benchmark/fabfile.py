@@ -44,8 +44,7 @@ def docker(ctx):
 
     try:
         # Create a container, connected to benchNet network, which will supervise the benchmark
-        ret = DockerBench(bench_params, node_params, settings).run(debug=True).result()
-        print(ret)
+        ret = DockerBench(bench_params, node_params, settings).run(debug=True)
     except BenchError as e:
         Print.error(e)
 

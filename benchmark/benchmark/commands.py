@@ -45,7 +45,6 @@ class CommandMaker:
         nodes = f'--nodes {" ".join(nodes)}' if nodes else ''
         cmd = (f'./client {address} --size {size} '
                 f'--rate {rate} --timeout {timeout} {nodes}')
-        print(cmd)
         return cmd
 
     @staticmethod
