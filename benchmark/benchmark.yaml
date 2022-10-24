@@ -1,0 +1,23 @@
+
+services:
+server-superhotstuff01:
+    image: superhotstuff
+    hostname: server
+    cap_add:
+        - NET_ADMIN
+    labels:
+        superhotstuff01: "true"
+    deploy:
+        replicas: 10
+        endpoint_mode: dnsrr
+    environment:
+        BENCHMARK_UUID: 'superhotstuff01'
+    networks:
+    - benchNet
+networks:
+    benchNet:
+        external:
+        name: benchNet
+    outside:
+        driver: overlay
+        
