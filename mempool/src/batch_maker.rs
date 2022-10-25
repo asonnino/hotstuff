@@ -1,13 +1,11 @@
 use crate::mempool::MempoolMessage;
-use crate::quorum_waiter::QuorumWaiterMessage;
+use crate::processor::SerializedBatchMessage;
 use bytes::Bytes;
 #[cfg(feature = "benchmark")]
 use crypto::Digest;
 use crypto::PublicKey;
 #[cfg(feature = "benchmark")]
 use ed25519_dalek::{Digest as _, Sha512};
-#[cfg(feature = "benchmark")]
-use log::debug;
 #[cfg(feature = "benchmark")]
 use log::info;
 use network::ReliableSender;
@@ -43,7 +41,7 @@ pub struct BatchMaker {
     /// Channel to receive transactions from the network.
     rx_transaction: Receiver<Transaction>,
     /// Output channel to deliver sealed batches to the `QuorumWaiter`.
-    tx_message: Sender<QuorumWaiterMessage>,
+    tx_message: Sender<SerializedBatchMessage>,
     /// The network addresses of the other mempools.
     mempool_addresses: Vec<(PublicKey, SocketAddr)>,
     /// Holds the current batch.
@@ -60,7 +58,7 @@ impl BatchMaker {
         batch_size: usize,
         max_batch_delay: u64,
         rx_transaction: Receiver<Transaction>,
-        tx_message: Sender<QuorumWaiterMessage>,
+        tx_message: Sender<SerializedBatchMessage>,
         mempool_addresses: Vec<(PublicKey, SocketAddr)>,
     ) {
         tokio::spawn(async move {
@@ -136,7 +134,7 @@ impl BatchMaker {
         let serialized = bincode::serialize(&message).expect("Failed to serialize our own batch");
 
         // Broadcast the batch through the network.
-        let (names, addresses): (Vec<_>, _) = self.mempool_addresses.iter().cloned().unzip();
+        let (_, addresses): (Vec<_>, _) = self.mempool_addresses.iter().cloned().unzip();
         let bytes = Bytes::from(serialized.clone());
 
         #[cfg(feature = "benchmark")]
@@ -160,14 +158,11 @@ impl BatchMaker {
             // NOTE: This log entry is used to compute performance.
             info!("Batch {:?} contains {} B", digest, size);
         }
-        let handlers = self.network.broadcast(addresses, bytes).await;
+        self.network.broadcast(addresses, bytes).await;
 
         // Send the batch through the deliver channel for further processing.
         self.tx_message
-            .send(QuorumWaiterMessage {
-                batch: serialized,
-                handlers: names.into_iter().zip(handlers.into_iter()).collect(),
-            })
+            .send(serialized)
             .await
             .expect("Failed to deliver batch");
     }

@@ -81,13 +81,15 @@ impl Topology for FullMeshTopology {
 #[derive(Clone, Debug)]
 pub struct KauriTopologyBuilder {
     pub fanout: Option<usize>,
+    pub name: Option<PublicKey>,
 }
 
 impl TopologyBuilder for KauriTopologyBuilder {
     type Topology = KauriTopology;
 
-    fn set_params(&mut self, params: &Parameters, _name: PublicKey) {
+    fn set_params(&mut self, params: &Parameters, name: PublicKey) {
         self.fanout = params.fanout;
+        self.name = Some(name)
     }
 
     // Builds an n-ary tree and add the children of id to peers
@@ -101,8 +103,10 @@ impl TopologyBuilder for KauriTopologyBuilder {
             .ok_or_else(|| TopologyError::MissingParameters {
                 param: "fanout".to_string(),
             })?;
-
-        Ok(KauriTopology::new(peers, fanout))
+        let name = self.name.ok_or_else(|| TopologyError::MissingParameters {
+            param: "name".to_string(),
+        })?;
+        Ok(KauriTopology::new(peers, fanout, name))
     }
 }
 
@@ -115,7 +119,10 @@ impl Topology for KauriTopology {
             .iter()
             .position(|(peer_id, _)| peer_id == &id)
             .unwrap();
+
+        // Place him at the beginning of the list
         self.peers.swap(0, index);
+
         let mut processes_on_level = 1;
         let mut res = Vec::new();
         let mut i = 0;
@@ -126,12 +133,12 @@ impl Topology for KauriTopology {
 
             let mut start = i + processes_on_level;
 
-            for _ in 1..processes_on_level + 1 {
+            for _ in 0..processes_on_level {
                 for j in start..start + curr_fanout {
                     if j >= self.peers.len() {
                         break 'building;
                     }
-                    if id == self.peers[i].0 {
+                    if self.name == self.peers[i].0 {
                         res.push(self.peers[j]);
                     }
                 }
@@ -149,11 +156,16 @@ impl Topology for KauriTopology {
 pub struct KauriTopology {
     peers: Vec<(PublicKey, SocketAddr)>,
     fanout: usize,
+    name: PublicKey,
 }
 
 impl KauriTopology {
-    pub fn new(mut peers: Vec<(PublicKey, SocketAddr)>, fanout: usize) -> Self {
+    pub fn new(mut peers: Vec<(PublicKey, SocketAddr)>, fanout: usize, name: PublicKey) -> Self {
         peers.sort_by(|a, b| a.0.cmp(&b.0));
-        KauriTopology { peers, fanout }
+        KauriTopology {
+            peers,
+            fanout,
+            name,
+        }
     }
 }

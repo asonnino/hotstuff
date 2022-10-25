@@ -18,6 +18,7 @@ async fn hash_and_store() {
 
     // Spawn a new `Processor` instance.
     Processor::spawn(
+        name,
         committee_with_base_port(7000),
         store.clone(),
         rx_batch,

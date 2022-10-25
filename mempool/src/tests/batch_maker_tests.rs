@@ -27,7 +27,7 @@ async fn make_batch() {
         batch: vec![transaction(), transaction()],
         sender,
     };
-    let QuorumWaiterMessage { batch, handlers: _ } = rx_message.recv().await.unwrap();
+    let batch = rx_message.recv().await.unwrap();
     match bincode::deserialize(&batch).unwrap() {
         MempoolMessage::Batch(batch) => assert_eq!(batch, expected_batch),
         _ => panic!("Unexpected message"),
@@ -58,7 +58,7 @@ async fn batch_timeout() {
         batch: vec![transaction()],
         sender,
     };
-    let QuorumWaiterMessage { batch, handlers: _ } = rx_message.recv().await.unwrap();
+    let batch = rx_message.recv().await.unwrap();
     match bincode::deserialize(&batch).unwrap() {
         MempoolMessage::Batch(batch) => assert_eq!(batch, expected_batch),
         _ => panic!("Unexpected message"),

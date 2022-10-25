@@ -23,12 +23,7 @@ pub trait MessageHandler: Clone + Send + Sync + 'static {
     /// number of `Sender<T>` channels. Then implement `dispatch` to deserialize incoming messages and
     /// forward them through the appropriate delivery channel. Then `writer` can be used to send back
     /// responses or acknowledgements to the sender machine (see unit tests for examples).
-    async fn dispatch(
-        &self,
-        writer: &mut Writer,
-        peer: SocketAddr,
-        message: Bytes,
-    ) -> Result<(), Box<dyn Error>>;
+    async fn dispatch(&self, writer: &mut Writer, message: Bytes) -> Result<(), Box<dyn Error>>;
 }
 
 /// For each incoming request, we spawn a new runner responsible to receive messages and forward them
@@ -77,8 +72,7 @@ impl<Handler: MessageHandler> Receiver<Handler> {
             while let Some(frame) = reader.next().await {
                 match frame.map_err(|e| NetworkError::FailedToReceiveMessage(peer, e)) {
                     Ok(message) => {
-                        if let Err(e) = handler.dispatch(&mut writer, peer, message.freeze()).await
-                        {
+                        if let Err(e) = handler.dispatch(&mut writer, message.freeze()).await {
                             warn!("{}", e);
                             return;
                         }
