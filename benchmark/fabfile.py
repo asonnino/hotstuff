@@ -21,7 +21,7 @@ def docker(ctx):
         'duration': 20,
         'latency': 10,  # in ms
         'bandwidth': "100",  # Has to be str > 0
-        'topology': 'kauri',
+        'topology': 'fullmesh',
     }
     node_params = {
         'consensus': {
@@ -55,12 +55,12 @@ def local(ctx):
     ''' Run benchmarks on localhost '''
     bench_params = {
         'faults': 0,
-        'nodes': 10,
-        'clients': 4,  # Must be the same length as nodes or an integer
+        'nodes': 7,
+        'clients': 1,  # Must be the same length as nodes or an integer
         'rate': 10000,
         'tx_size': 512,
         'duration': 20,
-        'topology': 'fullmesh',
+        'topology': 'kauri',
     }
     node_params = {
         'consensus': {
@@ -73,7 +73,7 @@ def local(ctx):
             'sync_retry_nodes': 3,
             'batch_size': 15_000,
             'max_batch_delay': 10,
-            'fanout': 4,
+            'fanout': 3,
         }
     }
     try:

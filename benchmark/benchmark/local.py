@@ -45,19 +45,23 @@ class LocalBench:
             Print.info('Setting up testbed...')
             nodes, rate = self.nodes[0], self.rate[0]
 
+            Print.info('Cleaning logs...')
             # Cleanup all files.
             cmd = f'{CommandMaker.clean_logs()} ; {CommandMaker.cleanup()}'
             subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
             sleep(0.5)  # Removing the store may take time.
 
+            Print.info('Recompile latest code...')
             # Recompile the latest code.
             cmd = CommandMaker.compile().split()
             subprocess.run(cmd, check=True, cwd=PathMaker.node_crate_path())
 
+            Print.info('Create alias...')
             # Create alias for the client and nodes binary.
             cmd = CommandMaker.alias_binaries(PathMaker.binary_path())
             subprocess.run([cmd], shell=True)
 
+            Print.info('Generate config file...')
             # Generate configuration files.
             keys = []
             key_files = [PathMaker.key_file(i) for i in range(nodes)]
@@ -80,10 +84,14 @@ class LocalBench:
 
             # Run the clients (they will wait for the nodes to be ready).
             addresses = committee.front
-            rate_share = ceil(rate / nodes)
+            max_clients = self.clients[0]
+            current_client = 0
+            rate_share = ceil(rate / max_clients)
             timeout = self.node_parameters.timeout_delay
             client_logs = [PathMaker.client_log_file(i) for i in range(nodes)]
             for addr, log_file in zip(addresses, client_logs):
+                if current_client >= max_clients:
+                    rate_share = 0
                 cmd = CommandMaker.run_client(
                     addr,
                     self.tx_size,
@@ -91,6 +99,7 @@ class LocalBench:
                     timeout
                 )
                 self._background_run(cmd, log_file)
+                current_client += 1
 
             # Run the nodes.
             dbs = [PathMaker.db_path(i) for i in range(nodes)]

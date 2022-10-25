@@ -6,6 +6,7 @@ use crate::processor::SerializedBatchMessage;
 use crypto::{Digest, PublicKey};
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
+use log::info;
 use network::CancelHandler;
 use std::collections::HashSet;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -109,7 +110,7 @@ impl QuorumWaiter {
                     }
                 };
             }
-
+            info!("Quorum reached for batch {:?}", &digest);
             self.tx_batch
                 .send((batch, digest, None))
                 .await

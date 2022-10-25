@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use bytes::Bytes;
 use crypto::{Digest, PublicKey};
-use log::debug;
+use log::info;
 use network::ReliableSender;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -70,7 +70,6 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
     async fn run(&mut self) {
         while let Some((batch, digest, peer)) = self.rx_batch.recv().await {
             self.store.write(digest.to_vec(), batch.clone()).await;
-
             if let Some((addr, sender)) = peer {
                 // If peer is not None then the message was received by another peer.
                 if let Some(source) = self.committee.get_public_key(&addr) {
@@ -90,11 +89,11 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
                     .iter()
                     .map(|e| e.1)
                     .collect();
-
+                info!("Relaying batch {} to {:?}", &digest, peers);
                 self.network.broadcast(peers, batch.into()).await;
             } else {
                 // If peer is None then the message is ours and must be sent to consensus
-                debug!("Sending batch digest {digest} to consensus");
+                info!("Sending batch digest {digest} to consensus");
                 self.tx_digest
                     .send(digest)
                     .await

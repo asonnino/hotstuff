@@ -7,6 +7,8 @@ use crypto::PublicKey;
 #[cfg(feature = "benchmark")]
 use ed25519_dalek::{Digest as _, Sha512};
 #[cfg(feature = "benchmark")]
+use log::debug;
+#[cfg(feature = "benchmark")]
 use log::info;
 use network::ReliableSender;
 use serde::{Deserialize, Serialize};
@@ -133,6 +135,10 @@ impl BatchMaker {
         let message = MempoolMessage::Batch(batch); // Costly operation.
         let serialized = bincode::serialize(&message).expect("Failed to serialize our own batch");
 
+        // Broadcast the batch through the network.
+        let (names, addresses): (Vec<_>, _) = self.mempool_addresses.iter().cloned().unzip();
+        let bytes = Bytes::from(serialized.clone());
+
         #[cfg(feature = "benchmark")]
         {
             // NOTE: This is one extra hash that is only needed to print the following log entries.
@@ -150,14 +156,10 @@ impl BatchMaker {
                     u64::from_be_bytes(id)
                 );
             }
-
+            info!("Broadcasting batch {} to {:?}", &digest, &addresses);
             // NOTE: This log entry is used to compute performance.
             info!("Batch {:?} contains {} B", digest, size);
         }
-
-        // Broadcast the batch through the network.
-        let (names, addresses): (Vec<_>, _) = self.mempool_addresses.iter().cloned().unzip();
-        let bytes = Bytes::from(serialized.clone());
         let handlers = self.network.broadcast(addresses, bytes).await;
 
         // Send the batch through the deliver channel for further processing.
