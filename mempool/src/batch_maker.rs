@@ -1,5 +1,5 @@
 use crate::mempool::MempoolMessage;
-use crate::processor::SerializedBatchMessage;
+use crate::quorum_waiter::QuorumWaiterMessage;
 use bytes::Bytes;
 #[cfg(feature = "benchmark")]
 use crypto::Digest;
@@ -41,7 +41,7 @@ pub struct BatchMaker {
     /// Channel to receive transactions from the network.
     rx_transaction: Receiver<Transaction>,
     /// Output channel to deliver sealed batches to the `QuorumWaiter`.
-    tx_message: Sender<SerializedBatchMessage>,
+    tx_message: Sender<QuorumWaiterMessage>,
     /// The network addresses of the other mempools.
     mempool_addresses: Vec<(PublicKey, SocketAddr)>,
     /// Holds the current batch.
@@ -58,7 +58,7 @@ impl BatchMaker {
         batch_size: usize,
         max_batch_delay: u64,
         rx_transaction: Receiver<Transaction>,
-        tx_message: Sender<SerializedBatchMessage>,
+        tx_message: Sender<QuorumWaiterMessage>,
         mempool_addresses: Vec<(PublicKey, SocketAddr)>,
     ) {
         tokio::spawn(async move {
@@ -158,11 +158,14 @@ impl BatchMaker {
             // NOTE: This log entry is used to compute performance.
             info!("Batch {:?} contains {} B", digest, size);
         }
-        self.network.broadcast(addresses, bytes).await;
-
+        let handlers = self.network.broadcast(addresses, bytes).await;
+        let message = QuorumWaiterMessage {
+            batch: serialized,
+            handlers,
+        };
         // Send the batch through the deliver channel for further processing.
         self.tx_message
-            .send(serialized)
+            .send(message)
             .await
             .expect("Failed to deliver batch");
     }

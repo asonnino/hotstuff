@@ -64,10 +64,8 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
     async fn run(&mut self) {
         while let Some((batch, digest, peer)) = self.rx_batch.recv().await {
             self.store.write(digest.to_vec(), batch.clone()).await;
-            info!("Received batch {} from {:?}", digest, peer);
             if let Some(source) = peer {
                 // If peer is not None then the message was received by another peer.
-
                 let source_addr = self
                     .committee
                     .mempool_address(&source)
@@ -75,7 +73,10 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
                 let payload = Bytes::from(
                     bincode::serialize(&MempoolMessage::Ack((self.name, digest.clone()))).unwrap(),
                 );
-                self.network.send(source_addr, payload).await;
+                let handler = self.network.send(source_addr, payload).await;
+                info!("Sent Ack to {} for batch {}", source_addr, &digest);
+                // Await the handlers
+                tokio::spawn(async { handler.await });
 
                 // Send the batch to other peers.
                 let peers = self
@@ -84,11 +85,14 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
                     .iter()
                     .map(|e| e.1)
                     .collect();
-                info!("Relaying batch {} to {:?}", &digest, peers);
-                self.network.broadcast(peers, batch.into()).await;
+                info!("Relaying batch {} to {:?}", &digest, &peers);
+                let handlers = self.network.broadcast(peers, batch.into()).await;
+                // Await the handlers
+                tokio::join!(async move {
+                    futures::future::join_all(handlers).await;
+                });
             } else {
                 // If peer is None then the message is ours and must be sent to consensus
-                info!("Sending batch digest {digest} to consensus");
                 self.tx_digest
                     .send(digest)
                     .await

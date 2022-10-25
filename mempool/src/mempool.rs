@@ -254,7 +254,6 @@ impl MessageHandler for MempoolReceiverHandler {
     async fn dispatch(&self, writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
         // Reply with an ACK.
         let _ = writer.send(Bytes::from("Ack")).await;
-
         // Deserialize and parse the message.
         match bincode::deserialize(&serialized) {
             Ok(MempoolMessage::Batch(batch_with_sender)) => {
@@ -271,7 +270,7 @@ impl MessageHandler for MempoolReceiverHandler {
                 .await
                 .expect("Failed to send batch request"),
             Ok(MempoolMessage::Ack((peer, digest))) => {
-                info!("Received ACK for batch {} from {}", digest, peer);
+                info!("Received ack for {}", digest);
                 self.tx_ack
                     .send((peer, digest))
                     .await

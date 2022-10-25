@@ -2,6 +2,7 @@ use crate::config::{Committee, Stake};
 use crate::processor::SerializedBatchMessage;
 use crypto::{Digest, PublicKey};
 use log::info;
+use network::CancelHandler;
 use std::collections::HashSet;
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -13,6 +14,8 @@ pub mod quorum_waiter_tests;
 pub struct QuorumWaiterMessage {
     /// A serialized `MempoolMessage::Batch` message.
     pub batch: SerializedBatchMessage,
+    /// Handlers to send the messages
+    pub handlers: Vec<CancelHandler>,
 }
 
 /// The QuorumWaiter waits for 2f authorities to acknowledge reception of a batch.
@@ -22,7 +25,7 @@ pub struct QuorumWaiter {
     /// The stake of this authority.
     stake: Stake,
     /// Input Channel to receive commands.
-    rx_message: Receiver<SerializedBatchMessage>,
+    rx_message: Receiver<QuorumWaiterMessage>,
     /// Channel to deliver batches for which we have enough acknowledgements.
     tx_batch: Sender<(SerializedBatchMessage, Digest, Option<PublicKey>)>,
     /// Channel to receive acknowledgements from the network.
@@ -34,7 +37,7 @@ impl QuorumWaiter {
     pub fn spawn(
         committee: Committee,
         stake: Stake,
-        rx_message: Receiver<SerializedBatchMessage>,
+        rx_message: Receiver<QuorumWaiterMessage>,
         tx_batch: Sender<(SerializedBatchMessage, Digest, Option<PublicKey>)>,
         rx_ack: Receiver<(PublicKey, Digest)>,
     ) {
@@ -59,7 +62,8 @@ impl QuorumWaiter {
 
     /// Main loop.
     async fn run(&mut self) {
-        while let Some(batch) = self.rx_message.recv().await {
+        // TODO add an ack[digest][publickey] map to keep track of the acks we have received.
+        while let Some(QuorumWaiterMessage { batch, handlers }) = self.rx_message.recv().await {
             let digest = Digest::hash(&batch);
 
             // Set of publickeys which already sent an acknowledgement.
