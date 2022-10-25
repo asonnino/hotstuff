@@ -14,14 +14,14 @@ def docker(ctx):
     """run a benchmark on docker"""
     bench_params = {
         'faults': 0,
-        'nodes': [4],
-        'clients' : [1], # Must be the same length as nodes or an integer
+        'nodes': 20,
+        'clients': 1,
         'rate': [10000],
         'tx_size': 512,
         'duration': 20,
-        'latency' : 20, # in ms
-        'bandwidth' : "", # Has to be str > 0
-        'topology' : 'fullmesh',
+        'latency': 10,  # in ms
+        'bandwidth': "100",  # Has to be str > 0
+        'topology': 'kauri',
     }
     node_params = {
         'consensus': {
@@ -33,15 +33,15 @@ def docker(ctx):
             'sync_retry_delay': 5_000,
             'sync_retry_nodes': 3,
             'batch_size': 15_000,
-            'max_batch_delay': 40,
-            'fanout' : 4,
+            'max_batch_delay': 10,
+            'fanout': 4,
         }
     }
     settings = dict({
-            "consensus_port": 8000,
-            "mempool_port": 7000,
-            "front_port": 6000
-        })
+        "consensus_port": 8000,
+        "mempool_port": 7000,
+        "front_port": 6000
+    })
 
     try:
         # Create a container, connected to benchNet network, which will supervise the benchmark
@@ -49,13 +49,14 @@ def docker(ctx):
     except BenchError as e:
         Print.error(e)
 
+
 @task
 def local(ctx):
     ''' Run benchmarks on localhost '''
     bench_params = {
         'faults': 0,
         'nodes': 10,
-        'clients' : 4, # Must be the same length as nodes or an integer
+        'clients': 4,  # Must be the same length as nodes or an integer
         'rate': 10000,
         'tx_size': 512,
         'duration': 20,
@@ -72,7 +73,7 @@ def local(ctx):
             'sync_retry_nodes': 3,
             'batch_size': 15_000,
             'max_batch_delay': 10,
-            'fanout' : 4,
+            'fanout': 4,
         }
     }
     try:
@@ -142,7 +143,7 @@ def remote(ctx):
     bench_params = {
         'faults': 0,
         'nodes': [10, 20],
-        'clients' : 4, # Must be the same length as nodes or an integer
+        'clients': 4,  # Must be the same length as nodes or an integer
         'rate': [10_000, 30_000],
         'tx_size': 512,
         'duration': 300,
