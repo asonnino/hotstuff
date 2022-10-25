@@ -14,13 +14,14 @@ def docker(ctx):
     """run a benchmark on docker"""
     bench_params = {
         'faults': 0,
-        'nodes': [10],
+        'nodes': [4],
+        'clients' : [1], # Must be the same length as nodes or an integer
         'rate': [10000],
         'tx_size': 512,
         'duration': 20,
-        'latency' : 0,
-        'bandwidth' : 0,
-        'topology' : 'kauri',
+        'latency' : 20, # in ms
+        'bandwidth' : "", # Has to be str > 0
+        'topology' : 'fullmesh',
     }
     node_params = {
         'consensus': {
@@ -32,7 +33,7 @@ def docker(ctx):
             'sync_retry_delay': 5_000,
             'sync_retry_nodes': 3,
             'batch_size': 15_000,
-            'max_batch_delay': 10,
+            'max_batch_delay': 40,
             'fanout' : 4,
         }
     }
@@ -54,6 +55,7 @@ def local(ctx):
     bench_params = {
         'faults': 0,
         'nodes': 10,
+        'clients' : 4, # Must be the same length as nodes or an integer
         'rate': 10000,
         'tx_size': 512,
         'duration': 20,
@@ -140,6 +142,7 @@ def remote(ctx):
     bench_params = {
         'faults': 0,
         'nodes': [10, 20],
+        'clients' : 4, # Must be the same length as nodes or an integer
         'rate': [10_000, 30_000],
         'tx_size': 512,
         'duration': 300,

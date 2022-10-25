@@ -128,37 +128,7 @@ class DockerBench:
 
         return committee
     
-#     @staticmethod
-#     def _generate_config_yaml(nodes, path = 'benchmark.yaml'):
-#         to_save = f'''
-# services:
-# server-superhotstuff01:
-#     image: superhotstuff
-#     hostname: server
-#     cap_add:
-#         - NET_ADMIN
-#     labels:
-#         superhotstuff01: "true"
-#     deploy:
-#         replicas: {nodes}
-#         endpoint_mode: dnsrr
-#     environment:
-#         BENCHMARK_UUID: 'superhotstuff01'
-#     networks:
-#     - benchNet
-# networks:
-#     benchNet:
-#         external:
-#         name: benchNet
-#     outside:
-#         driver: overlay
-#         '''
-#         # Save the file
-#         with open(path, 'w') as f:
-#             f.write(to_save)
-#         return
-    
-    def _run_single(self, hosts, rate, bench_parameters, node_parameters, debug=False):
+    def _run_single(self, hosts, max_clients, rate, bench_parameters, node_parameters, debug=False):
         Print.info('Booting testbed...')
         self.stop(delete_logs=True)
         # Run the clients (they will wait for the nodes to be ready).
@@ -166,10 +136,13 @@ class DockerBench:
         # for the faulty nodes to be online).
         committee = Committee.load(PathMaker.committee_file())
         addresses = [f'{x}:{self.settings["front_port"]}' for x in hosts]
-        rate_share = ceil(rate / committee.size())  # Take faults into account.
+        rate_share = ceil(rate / max_clients)  # Doesn't take faults into account.
         timeout = node_parameters.timeout_delay
         client_logs = [PathMaker.client_log_file(i) for i in range(len(hosts))]
+        number_of_clients = 0
         for container, addr, log_file in zip(self.docker_client.containers.list(), addresses, client_logs):
+            if number_of_clients >= max_clients:
+                rate_share = 0
             cmd = CommandMaker.run_client(
                 addr,
                 bench_parameters.tx_size,
@@ -178,6 +151,7 @@ class DockerBench:
                 nodes=addresses
             )
             self._background_run(container, cmd, log_file)
+            number_of_clients += 1
 
         # Run the nodes.
         key_files = [PathMaker.key_file(i) for i in range(len(hosts))]
@@ -252,12 +226,18 @@ class DockerBench:
                 if elapsed_time > stop_time:
                     raise Exception('Containers not ready after 120 seconds')
 
+        # traffic control rules
+        if self.latency > 0 or self.bandwidth != "":
+            for container in self.docker_client.containers.list():
+                cmd = CommandMaker.tc(self.latency, self.bandwidth)
+                container.exec_run(docker_cmd(cmd))
+
     def run(self, debug = False):
         assert isinstance(debug, bool)
         Print.heading('Starting remote benchmark')
 
         # Run benchmarks.
-        for n in self.bench_parameters.nodes:
+        for i, n in enumerate(self.bench_parameters.nodes):
             for r in self.bench_parameters.rate:
                 self.launch_containers(n)
 
@@ -269,6 +249,8 @@ class DockerBench:
                 for container in self.docker_client.containers.list():
                     hosts.append(container.attrs['NetworkSettings']['Networks']['benchNet']['IPAddress'])
                 Print.info(f'hosts : {hosts}')
+
+                clients = self.clients[i]
 
                 # Upload all configuration files.
                 try:
@@ -282,14 +264,15 @@ class DockerBench:
                 hosts = hosts[:n-faults]
 
                 # Run the benchmark.
-                for i in range(self.bench_parameters.runs):
-                    Print.heading(f'Run {i+1}/{self.bench_parameters.runs}')
+                for j in range(self.bench_parameters.runs):
+                    Print.heading(f'Run {j+1}/{self.bench_parameters.runs}')
                     try:
                         self._run_single(
-                            hosts, r, self.bench_parameters, self.node_parameters, debug
+                            hosts, clients, r, self.bench_parameters, self.node_parameters, debug
                         )
+                        # faults, nodes, rate, tx_size, latency, bandwidth, clients
                         self._logs(faults).print(PathMaker.result_file(
-                            faults, n, r, self.bench_parameters.tx_size
+                            faults, n, r, self.bench_parameters.tx_size, self.latency, self.bandwidth if self.bandwidth != "" else "max", clients, self.topology.name
                         ))
                     except (subprocess.SubprocessError, ParseError) as e:
                         self.kill()

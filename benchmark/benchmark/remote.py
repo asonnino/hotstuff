@@ -290,7 +290,7 @@ class Bench:
                             hosts, r, bench_parameters, node_parameters, debug
                         )
                         self._logs(hosts, faults).print(PathMaker.result_file(
-                            faults, n, r, bench_parameters.tx_size
+                            faults, n, r, bench_parameters.tx_size, self.latency, self.bandwidth if self.bandwidth != "" else "max", clients, self.topology.name
                         ))
                     except (subprocess.SubprocessError, GroupException, ParseError) as e:
                         self.kill(hosts=hosts)
