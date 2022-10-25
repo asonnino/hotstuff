@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 
 use bytes::Bytes;
 use crypto::{Digest, PublicKey};
+use log::info;
 use network::ReliableSender;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -69,10 +70,10 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
     async fn run(&mut self) {
         while let Some((batch, digest, peer)) = self.rx_batch.recv().await {
             self.store.write(digest.to_vec(), batch.clone()).await;
-
-            // Send an ack to the peer that sent the batch if it isn't the sender.
             if let Some((addr, sender)) = peer {
+                // If peer is not None then the message was received by another peer.
                 if let Some(source) = self.committee.get_public_key(&addr) {
+                    // Send an ACK to the sender of the batch if we did not receive the message from him.
                     if source != &sender {
                         let payload = Bytes::from(
                             bincode::serialize(&MempoolMessage::Ack(digest.clone())).unwrap(),
@@ -82,23 +83,22 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
                 }
 
                 // Send the batch to other peers.
-                self.network
-                    .broadcast(
-                        self.topology
-                            .broadcast_peers(sender)
-                            .iter()
-                            .map(|e| e.1)
-                            .collect(),
-                        batch.into(),
-                    )
-                    .await;
+                let peers = self
+                    .topology
+                    .broadcast_peers(sender)
+                    .iter()
+                    .map(|e| e.1)
+                    .collect();
+                info!("Relaying batch {} to {:?}", &digest, peers);
+                self.network.broadcast(peers, batch.into()).await;
+            } else {
+                // If peer is None then the message is ours and must be sent to consensus
+                info!("Sending batch digest {digest} to consensus");
+                self.tx_digest
+                    .send(digest)
+                    .await
+                    .expect("Failed to send batch digest");
             }
-
-            // Send the batch to consensus.
-            self.tx_digest
-                .send(digest.clone())
-                .await
-                .expect("Failed to send batch digest");
         }
     }
 }

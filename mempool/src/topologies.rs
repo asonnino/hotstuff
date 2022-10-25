@@ -108,6 +108,7 @@ impl TopologyBuilder for KauriTopologyBuilder {
 
 impl Topology for KauriTopology {
     fn broadcast_peers(&mut self, id: PublicKey) -> Vec<(PublicKey, SocketAddr)> {
+        // id - x + 1
         // Find the index of the peer in the list
         let index = self
             .peers

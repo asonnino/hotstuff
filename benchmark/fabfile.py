@@ -1,4 +1,5 @@
 from fabric import task
+from benchmark.dockerbench import DockerBench
 
 from benchmark.local import LocalBench
 from benchmark.logs import ParseError, LogParser
@@ -9,14 +10,18 @@ from benchmark.remote import Bench, BenchError
 
 
 @task
-def local(ctx):
-    ''' Run benchmarks on localhost '''
+def docker(ctx):
+    """run a benchmark on docker"""
     bench_params = {
         'faults': 0,
-        'nodes': 10,
-        'rate': 10000,
+        'nodes': 20,
+        'clients': 1,
+        'rate': [10000],
         'tx_size': 512,
         'duration': 20,
+        'latency': 10,  # in ms
+        'bandwidth': "100",  # Has to be str > 0
+        'topology': 'fullmesh',
     }
     node_params = {
         'consensus': {
@@ -28,12 +33,51 @@ def local(ctx):
             'sync_retry_delay': 5_000,
             'sync_retry_nodes': 3,
             'batch_size': 15_000,
-            'max_batch_delay': 10
+            'max_batch_delay': 10,
+            'fanout': 4,
         }
     }
-    topology = 'fullmesh'
+    settings = dict({
+        "consensus_port": 8000,
+        "mempool_port": 7000,
+        "front_port": 6000
+    })
+
     try:
-        ret = LocalBench(bench_params, node_params, topology).run(debug=False).result()
+        # Create a container, connected to benchNet network, which will supervise the benchmark
+        ret = DockerBench(bench_params, node_params, settings).run(debug=True)
+    except BenchError as e:
+        Print.error(e)
+
+
+@task
+def local(ctx):
+    ''' Run benchmarks on localhost '''
+    bench_params = {
+        'faults': 0,
+        'nodes': 7,
+        'clients': 1,  # Must be the same length as nodes or an integer
+        'rate': 10000,
+        'tx_size': 512,
+        'duration': 20,
+        'topology': 'kauri',
+    }
+    node_params = {
+        'consensus': {
+            'timeout_delay': 1_000,
+            'sync_retry_delay': 10_000,
+        },
+        'mempool': {
+            'gc_depth': 50,
+            'sync_retry_delay': 5_000,
+            'sync_retry_nodes': 3,
+            'batch_size': 15_000,
+            'max_batch_delay': 10,
+            'fanout': 3,
+        }
+    }
+    try:
+        ret = LocalBench(bench_params, node_params).run(debug=False).result()
         print(ret)
     except BenchError as e:
         Print.error(e)
@@ -99,10 +143,12 @@ def remote(ctx):
     bench_params = {
         'faults': 0,
         'nodes': [10, 20],
+        'clients': 4,  # Must be the same length as nodes or an integer
         'rate': [10_000, 30_000],
         'tx_size': 512,
         'duration': 300,
         'runs': 5,
+        'topology': 'kauri',
     }
     node_params = {
         'consensus': {
@@ -117,9 +163,8 @@ def remote(ctx):
             'max_batch_delay': 100
         }
     }
-    topology = 'fullmesh'
     try:
-        Bench(ctx).run(bench_params, node_params, topology, debug=False)
+        Bench(ctx).run(bench_params, node_params, debug=False)
     except BenchError as e:
         Print.error(e)
 

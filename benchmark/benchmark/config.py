@@ -127,8 +127,16 @@ class BenchParameters:
         try:
             nodes = json['nodes']
             nodes = nodes if isinstance(nodes, list) else [nodes]
+
+            clients = json['clients']
+            clients = clients if isinstance(clients, list) else [clients for _ in range(len(nodes))]
+            # Must be the same length as nodes
+
             if not nodes or any(x <= 1 for x in nodes):
                 raise ConfigError('Missing or invalid number of nodes')
+
+            if not clients or any(x <= 0 for x in clients) or len(clients) != len(nodes) or any(x > y for x, y in zip(clients, nodes)):
+                raise ConfigError('Missing or invalid number of clients')
 
             rate = json['rate']
             rate = rate if isinstance(rate, list) else [rate]
@@ -136,11 +144,16 @@ class BenchParameters:
                 raise ConfigError('Missing input rate')
 
             self.nodes = [int(x) for x in nodes]
+            self.clients = [int(x) for x in clients]
             self.rate = [int(x) for x in rate]
             self.tx_size = int(json['tx_size'])
             self.faults = int(json['faults'])
             self.duration = int(json['duration'])
             self.runs = int(json['runs']) if 'runs' in json else 1
+            self.topology = Topology(json['topology'])
+            self.latency = int(json['latency']) if 'latency' in json else 0
+            self.bandwidth = json['bandwidth'] if 'bandwidth' in json else ""
+            
         except KeyError as e:
             raise ConfigError(f'Malformed bench parameters: missing key {e}')
 

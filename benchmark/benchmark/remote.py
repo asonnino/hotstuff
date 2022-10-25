@@ -176,7 +176,7 @@ class Bench:
 
         return committee
 
-    def _run_single(self, hosts, rate, bench_parameters, node_parameters, debug=False):
+    def _run_single(self, hosts, max_clients, rate, bench_parameters, node_parameters, debug=False):
         Print.info('Booting testbed...')
 
         # Kill any potentially unfinished run and delete logs.
@@ -185,12 +185,16 @@ class Bench:
         # Run the clients (they will wait for the nodes to be ready).
         # Filter all faulty nodes from the client addresses (or they will wait
         # for the faulty nodes to be online).
-        committee = Committee.load(PathMaker.committee_file())
+        # committee = Committee.load(PathMaker.committee_file()) Removed to use max_clients
         addresses = [f'{x}:{self.settings.front_port}' for x in hosts]
-        rate_share = ceil(rate / committee.size())  # Take faults into account.
+        # Doesn't take faults into account.
+        rate_share = ceil(rate / max_clients)
+        current_client_process = 0
         timeout = node_parameters.timeout_delay
         client_logs = [PathMaker.client_log_file(i) for i in range(len(hosts))]
         for host, addr, log_file in zip(hosts, addresses, client_logs):
+            if current_client_process >= max_clients:
+                rate_share = 0
             cmd = CommandMaker.run_client(
                 addr,
                 bench_parameters.tx_size,
@@ -199,6 +203,7 @@ class Bench:
                 nodes=addresses
             )
             self._background_run(host, cmd, log_file)
+            current_client_process += 1
 
         # Run the nodes.
         key_files = [PathMaker.key_file(i) for i in range(len(hosts))]
@@ -265,7 +270,7 @@ class Bench:
             raise BenchError('Failed to update nodes', e)
 
         # Run benchmarks.
-        for n in bench_parameters.nodes:
+        for i, n in enumerate(bench_parameters.nodes):
             for r in bench_parameters.rate:
                 Print.heading(f'\nRunning {n} nodes (input rate: {r:,} tx/s)')
                 hosts = selected_hosts[:n]
@@ -283,14 +288,14 @@ class Bench:
                 hosts = hosts[:n-faults]
 
                 # Run the benchmark.
-                for i in range(bench_parameters.runs):
-                    Print.heading(f'Run {i+1}/{bench_parameters.runs}')
+                for j in range(bench_parameters.runs):
+                    Print.heading(f'Run {j+1}/{bench_parameters.runs}')
                     try:
                         self._run_single(
-                            hosts, r, bench_parameters, node_parameters, debug
+                            hosts, self.clients[i], r, bench_parameters, node_parameters, debug
                         )
                         self._logs(hosts, faults).print(PathMaker.result_file(
-                            faults, n, r, bench_parameters.tx_size
+                            faults, n, r, bench_parameters.tx_size, self.clients[i], self.latency, self.bandwidth if self.bandwidth != "" else "max", clients, self.topology.name
                         ))
                     except (subprocess.SubprocessError, GroupException, ParseError) as e:
                         self.kill(hosts=hosts)

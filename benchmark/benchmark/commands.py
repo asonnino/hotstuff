@@ -8,12 +8,12 @@ class CommandMaker:
     @staticmethod
     def cleanup():
         return (
-            f'rm -r .db-* ; rm .*.json ; mkdir -p {PathMaker.results_path()}'
+            f'rm -rf .db-* ; rm .*.json ; mkdir -p {PathMaker.results_path()}'
         )
 
     @staticmethod
     def clean_logs():
-        return f'rm -r {PathMaker.logs_path()} ; mkdir -p {PathMaker.logs_path()}'
+        return f'rm -rf {PathMaker.logs_path()} ; mkdir -p {PathMaker.logs_path()}'
 
     @staticmethod
     def compile():
@@ -23,6 +23,18 @@ class CommandMaker:
     def generate_key(filename):
         assert isinstance(filename, str)
         return f'./node keys --filename {filename}'
+
+    @staticmethod
+    def tc(latency, bandwidth):
+        assert isinstance(latency, int)
+        assert isinstance(bandwidth, str)
+        cmd = ['tc qdisc add dev eth0 root netem']
+        if latency > 0:
+            cmd.append(f'delay {latency}ms')
+        if bandwidth:
+            cmd.append(f'limit 400000 rate {bandwidth}mbit')
+        cmd = ' '.join(cmd)
+        return cmd
 
     @staticmethod
     def run_node(keys, committee, store, parameters, topology, debug=False):
@@ -43,8 +55,9 @@ class CommandMaker:
         assert isinstance(nodes, list)
         assert all(isinstance(x, str) for x in nodes)
         nodes = f'--nodes {" ".join(nodes)}' if nodes else ''
-        return (f'./client {address} --size {size} '
-                f'--rate {rate} --timeout {timeout} {nodes}')
+        cmd = (f'./client {address} --size {size} '
+               f'--rate {rate} --timeout {timeout} {nodes}')
+        return cmd
 
     @staticmethod
     def kill():
