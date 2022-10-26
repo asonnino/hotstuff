@@ -33,7 +33,7 @@ struct Cli {
     #[clap(short, long, value_parser, value_name = "INT")]
     rate: u64,
     /// Network addresses that must be reachable before starting the benchmark.
-    #[clap(short, long, value_parser, value_name = "[Addr]")]
+    #[clap(short, long, value_parser, value_name = "[Addr]", multiple = true)]
     nodes: Vec<SocketAddr>,
 }
 

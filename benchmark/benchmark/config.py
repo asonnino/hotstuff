@@ -45,9 +45,9 @@ class Committee:
         node = {}
         for n, f, m in zip(self.names, self.front, self.mempool):
             node[n] = {
-                'name': n, 
+                'name': n,
                 'stake': 1,
-                'transactions_address': f, 
+                'transactions_address': f,
                 'mempool_address': m
             }
         return {'authorities': node, 'epoch': 1}
