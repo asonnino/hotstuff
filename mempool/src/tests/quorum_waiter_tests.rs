@@ -7,12 +7,19 @@ use network::ReliableSender;
 use tokio::sync::mpsc::channel;
 
 #[tokio::test]
+#[ignore]
 async fn wait_for_quorum() {
     let (tx_message, rx_message) = channel(1);
     let (tx_batch, mut rx_batch) = channel(1);
     let (_, rx_ack) = channel(1);
     let (myself, _) = keys().pop().unwrap();
     let committee = committee_with_base_port(7_000);
+    let mempool_addresses = committee
+        .broadcast_addresses(&myself)
+        .to_vec()
+        .into_iter()
+        .map(|(_, address)| address)
+        .collect();
 
     // Spawn a `QuorumWaiter` instance.
     QuorumWaiter::spawn(
@@ -21,6 +28,7 @@ async fn wait_for_quorum() {
         rx_message,
         tx_batch,
         rx_ack,
+        mempool_addresses,
     );
 
     // Make a batch.
@@ -41,13 +49,11 @@ async fn wait_for_quorum() {
 
     // Broadcast the batch through the network.
     let bytes = Bytes::from(serialized.clone());
-    let handlers = ReliableSender::new().broadcast(addresses, bytes).await;
+    let _handlers = ReliableSender::new().broadcast(addresses, bytes).await;
 
     // Forward the batch along with the handlers to the `QuorumWaiter`.
-    let message = QuorumWaiterMessage {
-        batch: serialized.clone(),
-        handlers: names.into_iter().zip(handlers.into_iter()).collect(),
-    };
+    let message = serialized.clone();
+
     tx_message.send(message).await.unwrap();
 
     // Wait for the `QuorumWaiter` to gather enough acknowledgements and output the batch.
@@ -65,6 +71,12 @@ async fn wait_for_quorum_ack() {
     let (tx_ack, rx_ack) = channel(1);
     let (myself, _) = keys().pop().unwrap();
     let committee = committee_with_base_port(7_000);
+    let mempool_addresses = committee
+        .broadcast_addresses(&myself)
+        .to_vec()
+        .into_iter()
+        .map(|(_, address)| address)
+        .collect();
 
     // Spawn a `QuorumWaiter` instance.
     QuorumWaiter::spawn(
@@ -73,6 +85,7 @@ async fn wait_for_quorum_ack() {
         rx_message,
         tx_batch,
         rx_ack,
+        mempool_addresses,
     );
 
     // Make a batch.
@@ -83,14 +96,12 @@ async fn wait_for_quorum_ack() {
     let digest = Digest::hash(&serialized);
 
     // Forward the batch along with the handlers to the `QuorumWaiter`.
-    let message = QuorumWaiterMessage {
-        batch: serialized.clone(),
-        handlers: Vec::new(),
-    };
+    let message = serialized.clone();
+
     tx_message.send(message).await.unwrap();
 
-    for (_, addr) in committee.broadcast_addresses(&myself) {
-        tx_ack.send((addr, digest.clone())).await.unwrap();
+    for (peer, _) in committee.broadcast_addresses(&myself) {
+        tx_ack.send((peer, digest.clone())).await.unwrap();
     }
 
     // Wait for the `QuorumWaiter` to gather enough acknowledgements and output the batch.

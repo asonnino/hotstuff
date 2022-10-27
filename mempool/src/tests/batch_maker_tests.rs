@@ -6,7 +6,6 @@ use tokio::sync::mpsc::channel;
 async fn make_batch() {
     let (tx_transaction, rx_transaction) = channel(1);
     let (tx_message, mut rx_message) = channel(1);
-    let dummy_addresses = vec![(PublicKey::default(), "127.0.0.1:0".parse().unwrap())];
     let sender = keys()[0].0;
     // Spawn a `BatchMaker` instance.
     BatchMaker::spawn(
@@ -15,7 +14,6 @@ async fn make_batch() {
         /* max_batch_delay */ 1_000_000, // Ensure the timer is not triggered.
         rx_transaction,
         tx_message,
-        /* mempool_addresses */ dummy_addresses,
     );
 
     // Send enough transactions to seal a batch.
@@ -27,7 +25,7 @@ async fn make_batch() {
         batch: vec![transaction(), transaction()],
         sender,
     };
-    let QuorumWaiterMessage { batch, handlers: _ } = rx_message.recv().await.unwrap();
+    let batch = rx_message.recv().await.unwrap();
     match bincode::deserialize(&batch).unwrap() {
         MempoolMessage::Batch(batch) => assert_eq!(batch, expected_batch),
         _ => panic!("Unexpected message"),
@@ -38,7 +36,6 @@ async fn make_batch() {
 async fn batch_timeout() {
     let (tx_transaction, rx_transaction) = channel(1);
     let (tx_message, mut rx_message) = channel(1);
-    let dummy_addresses = vec![(PublicKey::default(), "127.0.0.1:0".parse().unwrap())];
     let sender = keys()[0].0;
     // Spawn a `BatchMaker` instance.
     BatchMaker::spawn(
@@ -47,7 +44,6 @@ async fn batch_timeout() {
         /* max_batch_delay */ 50, // Ensure the timer is triggered.
         rx_transaction,
         tx_message,
-        /* mempool_addresses */ dummy_addresses,
     );
 
     // Do not send enough transactions to seal a batch..
@@ -58,7 +54,7 @@ async fn batch_timeout() {
         batch: vec![transaction()],
         sender,
     };
-    let QuorumWaiterMessage { batch, handlers: _ } = rx_message.recv().await.unwrap();
+    let batch = rx_message.recv().await.unwrap();
     match bincode::deserialize(&batch).unwrap() {
         MempoolMessage::Batch(batch) => assert_eq!(batch, expected_batch),
         _ => panic!("Unexpected message"),
