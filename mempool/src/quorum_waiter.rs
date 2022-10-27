@@ -1,22 +1,17 @@
 use crate::config::{Committee, Stake};
 use crate::processor::SerializedBatchMessage;
+use bytes::Bytes;
 use crypto::{Digest, PublicKey};
+use futures::future::join_all;
 use log::info;
-use network::CancelHandler;
-use std::collections::HashSet;
+use network::ReliableSender;
+use std::collections::{HashMap, HashSet};
+use std::net::SocketAddr;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 #[cfg(test)]
 #[path = "tests/quorum_waiter_tests.rs"]
 pub mod quorum_waiter_tests;
-
-#[derive(Debug)]
-pub struct QuorumWaiterMessage {
-    /// A serialized `MempoolMessage::Batch` message.
-    pub batch: SerializedBatchMessage,
-    /// Handlers to send the messages
-    pub handlers: Vec<CancelHandler>,
-}
 
 /// The QuorumWaiter waits for 2f authorities to acknowledge reception of a batch.
 pub struct QuorumWaiter {
@@ -25,11 +20,15 @@ pub struct QuorumWaiter {
     /// The stake of this authority.
     stake: Stake,
     /// Input Channel to receive commands.
-    rx_message: Receiver<QuorumWaiterMessage>,
+    rx_message: Receiver<SerializedBatchMessage>,
     /// Channel to deliver batches for which we have enough acknowledgements.
     tx_batch: Sender<(SerializedBatchMessage, Digest, Option<PublicKey>)>,
     /// Channel to receive acknowledgements from the network.
     rx_ack: Receiver<(PublicKey, Digest)>,
+    /// The network addresses of the other mempools.
+    mempool_addresses: Vec<SocketAddr>,
+    /// A network sender to broadcast the batches to the other mempools.
+    network: ReliableSender,
 }
 
 impl QuorumWaiter {
@@ -37,10 +36,12 @@ impl QuorumWaiter {
     pub fn spawn(
         committee: Committee,
         stake: Stake,
-        rx_message: Receiver<QuorumWaiterMessage>,
+        rx_message: Receiver<SerializedBatchMessage>,
         tx_batch: Sender<(SerializedBatchMessage, Digest, Option<PublicKey>)>,
         rx_ack: Receiver<(PublicKey, Digest)>,
+        mempool_addresses: Vec<SocketAddr>,
     ) {
+        info!("Broadcasting batches to {:?}", &mempool_addresses);
         tokio::spawn(async move {
             Self {
                 committee,
@@ -48,6 +49,8 @@ impl QuorumWaiter {
                 rx_message,
                 tx_batch,
                 rx_ack,
+                mempool_addresses,
+                network: ReliableSender::new(),
             }
             .run()
             .await;
@@ -63,30 +66,47 @@ impl QuorumWaiter {
     /// Main loop.
     async fn run(&mut self) {
         // TODO add an ack[digest][publickey] map to keep track of the acks we have received.
-        while let Some(QuorumWaiterMessage { batch, handlers }) = self.rx_message.recv().await {
-            let digest = Digest::hash(&batch);
 
-            // Set of publickeys which already sent an acknowledgement.
-            let mut acks = HashSet::<PublicKey>::new();
+        let mut acks = HashMap::new();
+        let mut blocks = HashMap::new();
+        let mut stakes = HashMap::new();
 
-            // Wait for the first 2f nodes to send back an Ack. Then we consider the batch
-            // delivered and we send its digest to the consensus (that will include it into
-            // the dag). This should reduce the amount of synching.
-            let mut total_stake = self.stake;
-            while total_stake < self.committee.quorum_threshold() {
-                if let Some((peer, ackd_digest)) = self.rx_ack.recv().await {
-                    if ackd_digest == digest && !acks.contains(&peer) {
-                        let stake = self.committee.stake(&peer);
-                        total_stake += stake;
-                        acks.insert(peer);
+        loop {
+            tokio::select! {
+                // Broadcast the batch to the network.
+                Some(batch) = self.rx_message.recv() => {
+                    let digest = Digest::hash(&batch);
+                    acks.insert(digest.clone(), HashSet::new());
+                    blocks.insert(digest.clone(), batch.clone());
+                    stakes.insert(digest.clone(), self.stake);
+                    let handlers = self
+                        .network
+                        .broadcast(self.mempool_addresses.clone(), Bytes::from(batch))
+                        .await;
+                    // Spawn a new tasks to wait for the handlers
+                    tokio::spawn(async move { join_all(handlers).await });
+                },
+                // Handle acknowledgements.
+                Some((peer, digest)) = self.rx_ack.recv() => {
+                    // Check if an ack from this peer was not already received
+                    if let Some(ack_map) = acks.get_mut(&digest) {
+                        if ack_map.insert(peer){
+                            // Update the stake and read it
+                            let stake = stakes.get_mut(&digest).expect("Stakes not found");
+                            *stake += self.committee.stake(&peer);
+
+                            if stake >= &mut self.committee.quorum_threshold() {
+                                // Delete the maps
+                                acks.remove(&digest);
+                                stakes.remove(&digest);
+
+                                // Deliver the batch
+                                let _ = self.tx_batch.send((blocks.remove(&digest).expect("Block not found"), digest, None)).await;
+                            }
+                        }
                     }
-                }
+                },
             }
-            info!("Quorum reached for batch {:?}", &digest);
-            self.tx_batch
-                .send((batch, digest, None))
-                .await
-                .expect("Failed to deliver batch");
         }
     }
 }

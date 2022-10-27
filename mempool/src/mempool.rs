@@ -151,8 +151,15 @@ where
             self.parameters.max_batch_delay,
             /* rx_transaction */ rx_batch_maker,
             /* tx_message */ tx_quorum_waiter,
-            /* mempool_addresses */ self.topology.broadcast_peers(self.name).to_vec(),
         );
+
+        let (_, mempool_addresses): (Vec<_>, _) = self
+            .topology
+            .broadcast_peers(self.name)
+            .to_vec()
+            .iter()
+            .cloned()
+            .unzip();
 
         // The `QuorumWaiter` waits for 2f authorities to acknowledge reception of the batch. It then forwards
         // the batch to the `Processor`.
@@ -162,6 +169,7 @@ where
             /* rx_message */ rx_quorum_waiter,
             /* tx_batch */ tx_processor,
             /* rx_ack */ rx_ack,
+            mempool_addresses,
         );
 
         // The `Processor` hashes and stores the batch. It then forwards the batch's digest to the consensus.
