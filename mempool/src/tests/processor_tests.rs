@@ -1,7 +1,7 @@
 use super::*;
 use crate::common::{batch, committee_with_base_port, keys};
 use crate::mempool::MempoolMessage;
-use crate::topologies::FullMeshTopology;
+use crate::FullMeshTopology;
 use std::fs;
 use tokio::sync::mpsc::channel;
 

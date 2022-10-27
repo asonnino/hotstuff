@@ -13,6 +13,7 @@ mod common;
 
 pub use crate::config::{Committee, Parameters};
 pub use crate::mempool::{ConsensusMempoolMessage, Mempool};
-pub use crate::topologies::{
-    FullMeshTopologyBuilder, KauriTopologyBuilder, Topology, TopologyBuilder,
+pub use crate::topologies::traits::{Topology, TopologyBuilder};
+pub use crate::topologies::types::{
+    FullMeshTopology, FullMeshTopologyBuilder, KauriTopology, KauriTopologyBuilder,
 };
