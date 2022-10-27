@@ -1,5 +1,6 @@
 use bytes::Bytes;
 use crypto::{Digest, PublicKey};
+use futures::future::join_all;
 use log::info;
 use network::ReliableSender;
 use store::Store;
@@ -88,8 +89,8 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
                 info!("Relaying batch {} to {:?}", &digest, &peers);
                 let handlers = self.network.broadcast(peers, batch.into()).await;
                 // Await the handlers
-                tokio::join!(async move {
-                    futures::future::join_all(handlers).await;
+                tokio::spawn(async move {
+                    join_all(handlers).await;
                 });
             } else {
                 // If peer is None then the message is ours and must be sent to consensus

@@ -14,13 +14,13 @@ def docker(ctx):
     """run a benchmark on docker"""
     bench_params = {
         'faults': 0,
-        'nodes': 20,
+        'nodes': 10,
         'clients': 1,
         'rate': [10000],
         'tx_size': 512,
         'duration': 20,
         'latency': 10,  # in ms
-        'bandwidth': "100",  # Has to be str > 0
+        #'bandwidth': "100",  # Has to be str > 0
         'topology': 'fullmesh',
     }
     node_params = {
