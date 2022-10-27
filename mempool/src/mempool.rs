@@ -142,9 +142,7 @@ where
             /* handler */ TxReceiverHandler { tx_batch_maker },
         );
 
-        // The transactions are sent to the `BatchMaker` that assembles them into batches. It then broadcasts
-        // (in a reliable manner) the batches to all other mempools that share the same `id` as us. Finally,
-        // it gathers the 'cancel handlers' of the messages and send them to the `QuorumWaiter`.
+        // The transactions are sent to the `BatchMaker` that assembles them into batches.
         BatchMaker::spawn(
             self.name,
             self.parameters.batch_size,
@@ -161,8 +159,9 @@ where
             .cloned()
             .unzip();
 
-        // The `QuorumWaiter` waits for 2f authorities to acknowledge reception of the batch. It then forwards
-        // the batch to the `Processor`.
+        // The `QuorumWaiter` broadcasts (in a reliable manner) the batches to all other mempools that
+        // share the same `id` as us`. It waits for 2f authorities to acknowledge reception of the batch.
+        // It then forward the batch to the `Processor`.
         QuorumWaiter::spawn(
             self.committee.clone(),
             /* stake */ self.committee.stake(&self.name),
@@ -172,7 +171,7 @@ where
             mempool_addresses,
         );
 
-        // The `Processor` hashes and stores the batch. It then forwards the batch's digest to the consensus.
+        // The `Processor` hashes and stores the batch. It then forwards the batch's digest to the consensus and to other nodes.
         Processor::spawn(
             self.name,
             self.committee.clone(),
@@ -214,7 +213,7 @@ where
         );
 
         // This `Processor` hashes and stores the batches we receive from the other mempools. It then forwards the
-        // batch's digest to the consensus.
+        // batch's digest to the consensus and to other nodes.
         Processor::spawn(
             self.name,
             self.committee.clone(),
