@@ -92,13 +92,11 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
                 tokio::spawn(async move {
                     join_all(handlers).await;
                 });
-            } else {
-                // If peer is None then the message is ours and must be sent to consensus
-                self.tx_digest
-                    .send(digest)
-                    .await
-                    .expect("Failed to send batch digest");
             }
+            self.tx_digest
+                .send(digest)
+                .await
+                .expect("Failed to send batch digest");
         }
     }
 }

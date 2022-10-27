@@ -277,7 +277,7 @@ impl MessageHandler for MempoolReceiverHandler {
                 .await
                 .expect("Failed to send batch request"),
             Ok(MempoolMessage::Ack((peer, digest))) => {
-                info!("Received ack for {}", digest);
+                info!("Received ack for {} from {}", digest, peer);
                 self.tx_ack
                     .send((peer, digest))
                     .await
