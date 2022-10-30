@@ -207,7 +207,8 @@ impl Topology for BinomialTreeTopology {
     fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr)> {
         self.peers.rotate_left(self.my_index);
         let children: HashSet<_> = self.broadcast_peers(self.name).into_iter().collect();
-        let mut res = children.clone();
+        let mut res_set = HashSet::new();
+        let mut res = Vec::new();
         let mut bitmask = 1;
         while bitmask < self.peers.len() {
             bitmask <<= 1;
@@ -220,16 +221,18 @@ impl Topology for BinomialTreeTopology {
             for i in 0..subchildren.len() {
                 let v = subchildren[i] | bitmask;
                 subchildren.push(v);
-                if v < self.peers.len() && !children.contains(&self.peers[v]) {
-                    res.insert(self.peers[v].clone());
+                if v < self.peers.len()
+                    && !children.contains(&self.peers[v])
+                    && res_set.insert(self.peers[v].clone())
+                    && self.peers[v].0 != self.name
+                {
+                    res.push(self.peers[v].clone());
                 }
             }
         }
 
         self.peers.rotate_right(self.my_index);
 
-        res.into_iter()
-            .filter(|peer| !children.contains(peer) && peer.0 != self.name)
-            .collect()
+        res
     }
 }
