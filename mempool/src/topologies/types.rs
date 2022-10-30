@@ -14,6 +14,7 @@ pub struct FullMeshTopologyBuilder {
     pub name: Option<PublicKey>,
 }
 
+/// `KauriTopology` is a simple tree topology parametrized by the number of children per node.
 #[derive(Clone, Debug)]
 pub struct KauriTopology {
     pub peers: Vec<(PublicKey, SocketAddr)>,
@@ -36,4 +37,16 @@ impl KauriTopology {
             name,
         }
     }
+}
+
+/// `BinomialTreeTopology` is a topology where the leader will reach every node.
+#[derive(Clone, Debug)]
+pub struct BinomialTreeTopology {
+    pub(crate) peers: Vec<(PublicKey, SocketAddr)>,
+    pub(crate) name: PublicKey,
+}
+
+#[derive(Clone, Debug)]
+pub struct BinomialTreeTopologyBuilder {
+    pub name: Option<PublicKey>,
 }
