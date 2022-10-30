@@ -79,7 +79,7 @@ impl Topology for KauriTopology {
             .unwrap();
 
         // Place him at the beginning of the list
-        self.peers.swap(0, index);
+        self.peers.rotate_left(index);
 
         let mut processes_on_level = 1;
         let mut res = Vec::new();
@@ -106,7 +106,7 @@ impl Topology for KauriTopology {
             }
             processes_on_level = min(curr_fanout * processes_on_level, remaining);
         }
-        self.peers.swap(0, index);
+        self.peers.rotate_right(index);
         res
     }
 }
@@ -144,12 +144,12 @@ impl Topology for BinomialTreeTopology {
             .unwrap();
 
         // Place him at the beginning of the list
-        self.peers.swap(0, index);
+        self.peers.rotate_left(index);
 
         let mut res = Vec::new();
 
         // TODO
-        self.peers.swap(0, index);
+        self.peers.rotate_right(index);
         res
     }
 }
