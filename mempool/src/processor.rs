@@ -28,7 +28,7 @@ pub struct Processor<T: Topology> {
     /// Network topology
     topology: T,
     /// Input channel to receive batches
-    rx_batch: Receiver<(SerializedBatchMessage, Digest, Option<PublicKey>)>,
+    rx_batch: Receiver<(SerializedBatchMessage, Digest, PublicKey)>,
     /// Output channel to send the batches' digest to consensus
     tx_digest: Sender<Digest>,
 }
@@ -41,7 +41,7 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
         // The persistent storage.
         store: Store,
         // Input channel to receive batches.
-        rx_batch: Receiver<(SerializedBatchMessage, Digest, Option<PublicKey>)>,
+        rx_batch: Receiver<(SerializedBatchMessage, Digest, PublicKey)>,
         // Output channel to send out batches' digests.
         tx_digest: Sender<Digest>,
         // Network topology
@@ -63,10 +63,10 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
     }
 
     async fn run(&mut self) {
-        while let Some((batch, digest, peer)) = self.rx_batch.recv().await {
+        while let Some((batch, digest, source)) = self.rx_batch.recv().await {
             self.store.write(digest.to_vec(), batch.clone()).await;
-            if let Some(source) = peer {
-                // If peer is not None then the message was received by another peer.
+            if source != self.name {
+                // If peer is not the current node then the message was received by another peer and should be ack'd then relayed.
                 let source_addr = self
                     .committee
                     .mempool_address(&source)

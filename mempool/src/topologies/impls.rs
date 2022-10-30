@@ -29,6 +29,7 @@ impl TopologyBuilder for FullMeshTopologyBuilder {
         if peers.is_empty() {
             return Err(TopologyError::NoPeers);
         }
+        let peers = peers.into_iter().filter(|(p, _)| p != &name).collect();
         Ok(FullMeshTopology { peers, name })
     }
 }
@@ -122,7 +123,7 @@ impl Topology for KauriTopology {
 
         self.peers
             .iter()
-            .filter(|peer| !broadcast_set.contains(peer))
+            .filter(|peer| !broadcast_set.contains(peer) || peer.0 == self.name)
             .cloned()
             .collect()
     }
@@ -173,6 +174,7 @@ impl Topology for BinomialTreeTopology {
         let mut res = Vec::new();
         let mut base = 1;
         if sender == self.name {
+            // If the sender is the current node, then the result is self.peers[2^i] for i in [0, log2(peers.len())]
             while base < self.peers.len() {
                 base <<= 1;
             }
@@ -206,10 +208,11 @@ impl Topology for BinomialTreeTopology {
         while bitmask < self.peers.len() {
             bitmask <<= 1;
         }
-        bitmask >>= 2;
+        bitmask >>= 1;
         let mut subchildren = vec![bitmask, 0];
 
         while bitmask > 0 {
+            bitmask >>= 1;
             for i in 0..subchildren.len() {
                 let v = subchildren[i] | bitmask;
                 subchildren.push(v);
@@ -222,7 +225,7 @@ impl Topology for BinomialTreeTopology {
         self.peers.rotate_right(self.my_index);
 
         res.into_iter()
-            .filter(|peer| !children.contains(peer))
+            .filter(|peer| !children.contains(peer) && peer.0 != self.name)
             .collect()
     }
 }
