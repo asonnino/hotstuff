@@ -30,6 +30,11 @@ pub struct QuorumWaiter {
     /// A network sender to broadcast the batches to the other mempools.
     network: ReliableSender,
 }
+struct BlockInProcess {
+    stake: u32,
+    block: Vec<u8>,
+    acks: HashSet<PublicKey>,
+}
 
 impl QuorumWaiter {
     /// Spawn a new QuorumWaiter.
@@ -57,28 +62,20 @@ impl QuorumWaiter {
         });
     }
 
-    // /// Helper function. It waits for a future to complete and then delivers a value.
-    // async fn waiter(wait_for: CancelHandler, deliver: Stake) -> Stake {
-    //     let _ = wait_for.await;
-    //     deliver
-    // }
-
     /// Main loop.
     async fn run(&mut self) {
-        // TODO add an ack[digest][publickey] map to keep track of the acks we have received.
-
-        let mut acks = HashMap::new();
-        let mut blocks = HashMap::new();
-        let mut stakes = HashMap::new();
-
+        let mut stake_map = HashMap::new();
         loop {
             tokio::select! {
                 // Broadcast the batch to the network.
                 Some(batch) = self.rx_message.recv() => {
                     let digest = Digest::hash(&batch);
-                    acks.insert(digest.clone(), HashSet::new());
-                    blocks.insert(digest.clone(), batch.clone());
-                    stakes.insert(digest.clone(), self.stake);
+                    stake_map.insert(digest.clone(), BlockInProcess {
+                        stake : self.stake,
+                        block : batch.clone(),
+                        acks : HashSet::new(),
+                    });
+
                     let handlers = self
                         .network
                         .broadcast(self.mempool_addresses.clone(), Bytes::from(batch))
@@ -89,19 +86,16 @@ impl QuorumWaiter {
                 // Handle acknowledgements.
                 Some((peer, digest)) = self.rx_ack.recv() => {
                     // Check if an ack from this peer was not already received
-                    if let Some(ack_map) = acks.get_mut(&digest) {
-                        if ack_map.insert(peer){
+                    if let Some(block_in_process) = stake_map.get_mut(&digest) {
+                        if block_in_process.acks.insert(peer){
                             // Update the stake and read it
-                            let stake = stakes.get_mut(&digest).expect("Stakes not found");
-                            *stake += self.committee.stake(&peer);
+                            block_in_process.stake += self.committee.stake(&peer);
 
-                            if stake >= &mut self.committee.quorum_threshold() {
-                                // Delete the maps
-                                acks.remove(&digest);
-                                stakes.remove(&digest);
-
+                            if block_in_process.stake >= self.committee.quorum_threshold() {
                                 // Deliver the batch
-                                let _ = self.tx_batch.send((blocks.remove(&digest).expect("Block not found"), digest, None)).await;
+                                let block_in_process = stake_map.remove(&digest).expect("The block should be in the map");
+
+                                let _ = self.tx_batch.send((block_in_process.block, digest, None)).await;
                             }
                         }
                     }
