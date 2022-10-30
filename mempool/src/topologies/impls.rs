@@ -184,14 +184,18 @@ impl Topology for BinomialTreeTopology {
                 base >>= 1;
             }
         } else {
-            let mut my_index = (self.my_index - index) % self.peers.len();
-            while my_index != 0 && my_index % 2 == 0 {
-                my_index >>= 1;
+            let mut tmp = (self.my_index - index) % self.peers.len();
+            let fixed_index = tmp;
+            while tmp != 0 && tmp % 2 == 0 {
+                tmp >>= 1;
                 base <<= 1;
             }
             base >>= 1;
             while base > 0 {
-                res.push(self.peers[my_index + base].clone());
+                let child_index = fixed_index + base;
+                if child_index < self.peers.len() {
+                    res.push(self.peers[child_index].clone());
+                }
                 base >>= 1;
             }
         }
