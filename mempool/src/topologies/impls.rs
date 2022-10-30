@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::collections::HashSet;
 use std::net::SocketAddr;
 
 use crate::Parameters;
@@ -40,6 +41,10 @@ impl Topology for FullMeshTopology {
             vec![]
         }
     }
+
+    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr)> {
+        vec![]
+    }
 }
 
 impl TopologyBuilder for KauriTopologyBuilder {
@@ -70,7 +75,6 @@ impl TopologyBuilder for KauriTopologyBuilder {
 
 impl Topology for KauriTopology {
     fn broadcast_peers(&mut self, id: PublicKey) -> Vec<(PublicKey, SocketAddr)> {
-        // id - x + 1
         // Find the index of the peer in the list
         let index = self
             .peers
@@ -78,7 +82,7 @@ impl Topology for KauriTopology {
             .position(|(peer_id, _)| peer_id == &id)
             .unwrap();
 
-        // Place him at the beginning of the list
+        // Place the sender at the beginning of the list
         self.peers.rotate_left(index);
 
         let mut processes_on_level = 1;
@@ -106,8 +110,21 @@ impl Topology for KauriTopology {
             }
             processes_on_level = min(curr_fanout * processes_on_level, remaining);
         }
+        // Place the sender at the end of the list
         self.peers.rotate_right(index);
         res
+    }
+
+    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr)> {
+        // Returns the difference of self.peers and self.broadcast_peers(self.name)
+        let broadcast_set: HashSet<(PublicKey, SocketAddr)> =
+            self.broadcast_peers(self.name).iter().cloned().collect();
+
+        self.peers
+            .iter()
+            .filter(|peer| !broadcast_set.contains(peer))
+            .cloned()
+            .collect()
     }
 }
 
@@ -129,27 +146,83 @@ impl TopologyBuilder for BinomialTreeTopologyBuilder {
         let name = self.name.ok_or_else(|| TopologyError::MissingParameters {
             param: "name".to_string(),
         })?;
-        Ok(BinomialTreeTopology { peers, name })
+        let my_index = peers
+            .iter()
+            .position(|(peer_id, _)| peer_id == &name)
+            .expect("Peer not found in peers list");
+        Ok(BinomialTreeTopology {
+            peers,
+            name,
+            my_index,
+        })
     }
 }
 
 impl Topology for BinomialTreeTopology {
-    fn broadcast_peers(&mut self, id: PublicKey) -> Vec<(PublicKey, SocketAddr)> {
-        // id - x + 1
+    fn broadcast_peers(&mut self, sender: PublicKey) -> Vec<(PublicKey, SocketAddr)> {
         // Find the index of the peer in the list
         let index = self
             .peers
             .iter()
-            .position(|(peer_id, _)| peer_id == &id)
+            .position(|(peer_id, _)| peer_id == &sender)
             .unwrap();
 
-        // Place him at the beginning of the list
+        // Place the sender at the beginning of the list
         self.peers.rotate_left(index);
 
         let mut res = Vec::new();
-
-        // TODO
+        let mut base = 1;
+        if sender == self.name {
+            while base < self.peers.len() {
+                base <<= 1;
+            }
+            base >>= 1;
+            while base > 0 {
+                res.push(self.peers[base].clone());
+                base >>= 1;
+            }
+        } else {
+            let mut my_index = (self.my_index - index) % self.peers.len();
+            while my_index != 0 && my_index % 2 == 0 {
+                my_index >>= 1;
+                base <<= 1;
+            }
+            base >>= 1;
+            while base > 0 {
+                res.push(self.peers[my_index + base].clone());
+                base >>= 1;
+            }
+        }
+        // Place the sender at the end of the list
         self.peers.rotate_right(index);
         res
+    }
+
+    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr)> {
+        self.peers.rotate_left(self.my_index);
+        let children: HashSet<_> = self.broadcast_peers(self.name).into_iter().collect();
+        let mut res = children.clone();
+        let mut bitmask = 1;
+        while bitmask < self.peers.len() {
+            bitmask <<= 1;
+        }
+        bitmask >>= 2;
+        let mut subchildren = vec![bitmask, 0];
+
+        while bitmask > 0 {
+            for i in 0..subchildren.len() {
+                let v = subchildren[i] | bitmask;
+                subchildren.push(v);
+                if v < self.peers.len() && !children.contains(&self.peers[v]) {
+                    res.insert(self.peers[v].clone());
+                }
+            }
+        }
+
+        self.peers.rotate_right(self.my_index);
+
+        res.into_iter()
+            .filter(|peer| !children.contains(peer))
+            .collect()
     }
 }

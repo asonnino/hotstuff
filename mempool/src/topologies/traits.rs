@@ -13,6 +13,9 @@ use crate::topologies::error::TopologyError;
 pub trait Topology: Clone + Send + Sync + 'static {
     /// `broadcast_peers` returns a slice of the peers to broadcast a batch to.
     fn broadcast_peers(&mut self, name: PublicKey) -> Vec<(PublicKey, SocketAddr)>;
+
+    /// `indirect peers` returns a slice of the peers to broadcast a batch to if an ack is not received before a given period.
+    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr)>;
 }
 
 /// `TopologyBuilder` is a trait that allows to build a topology.

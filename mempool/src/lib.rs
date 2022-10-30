@@ -15,5 +15,6 @@ pub use crate::config::{Committee, Parameters};
 pub use crate::mempool::{ConsensusMempoolMessage, Mempool};
 pub use crate::topologies::traits::{Topology, TopologyBuilder};
 pub use crate::topologies::types::{
-    FullMeshTopology, FullMeshTopologyBuilder, KauriTopology, KauriTopologyBuilder,
+    BinomialTreeTopology, BinomialTreeTopologyBuilder, FullMeshTopology, FullMeshTopologyBuilder,
+    KauriTopology, KauriTopologyBuilder,
 };

@@ -11,7 +11,8 @@ use env_logger::Env;
 use futures::future::join_all;
 use log::error;
 use mempool::{
-    Committee as MempoolCommittee, FullMeshTopologyBuilder, KauriTopologyBuilder, TopologyBuilder,
+    BinomialTreeTopologyBuilder, Committee as MempoolCommittee, FullMeshTopologyBuilder,
+    KauriTopologyBuilder, TopologyBuilder,
 };
 use std::fs;
 use tokio::task::JoinHandle;
@@ -128,6 +129,16 @@ async fn main() {
                     )
                     .await
                 }
+                "binomial" => {
+                    run_command(
+                        keys,
+                        committee,
+                        parameters,
+                        store,
+                        BinomialTreeTopologyBuilder { name: None },
+                    )
+                    .await
+                }
                 _ => panic!("Unknown topology"),
             };
 
@@ -155,6 +166,7 @@ async fn main() {
                         name: None,
                     },
                 ),
+                "binomial" => deploy_testbed(nodes, BinomialTreeTopologyBuilder { name: None }),
                 _ => panic!("Unknown topology"),
             };
             match deployer {

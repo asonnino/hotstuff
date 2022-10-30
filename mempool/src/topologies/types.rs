@@ -44,6 +44,7 @@ impl KauriTopology {
 pub struct BinomialTreeTopology {
     pub(crate) peers: Vec<(PublicKey, SocketAddr)>,
     pub(crate) name: PublicKey,
+    pub my_index: usize,
 }
 
 #[derive(Clone, Debug)]
