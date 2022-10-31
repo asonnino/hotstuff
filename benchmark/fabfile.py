@@ -13,15 +13,15 @@ from benchmark.remote import Bench, BenchError
 def docker(ctx):
     """run a benchmark on docker"""
     bench_params = {
-        'faults': 0,
-        'nodes': 15,
-        'clients': 1,
-        'rate': [40000],
-        'tx_size': 512,
-        'duration': 20,
-        'latency': 10,  # in ms
-        #'bandwidth': "100",  # Has to be str > 0
-        'topology': 'binomial',
+        'faults': 0,                    # Number of faults
+        'nodes': 30,                    # Number of nodes
+        'clients': 1,                   # Number of clients
+        'rate': [30000],                # Total rate of transactions per second
+        'tx_size': 512,                 # Transaction size in kbytes
+        'duration': 20,                 # Duration in s
+        'latency': 10,                  # Latency in ms
+        'bandwidth': "1000",            # Bandwidth in Mbps
+        'topology': 'binomial',         # 'kauri', 'fullmesh', 'binomial'
     }
     node_params = {
         'consensus': {
@@ -34,7 +34,7 @@ def docker(ctx):
             'sync_retry_nodes': 3,
             'batch_size': 15_000,
             'max_batch_delay': 10,
-            'fanout': 4,
+            'fanout': 3,
         }
     }
     settings = dict({
