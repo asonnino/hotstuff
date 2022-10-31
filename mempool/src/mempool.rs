@@ -14,6 +14,7 @@ use log::{info, warn};
 use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+use std::net::SocketAddr;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
@@ -151,7 +152,7 @@ where
             /* tx_message */ tx_quorum_waiter,
         );
 
-        let (_, mempool_addresses): (Vec<_>, _) = self
+        let (_, mempool_addresses): (Vec<_>, Vec<SocketAddr>) = self
             .topology
             .broadcast_peers(self.name)
             .to_vec()
@@ -159,16 +160,20 @@ where
             .cloned()
             .unzip();
 
+        let indirect_peers = self.topology.indirect_peers();
+
         // The `QuorumWaiter` broadcasts (in a reliable manner) the batches to all other mempools that
         // share the same `id` as us`. It waits for 2f authorities to acknowledge reception of the batch.
         // It then forward the batch to the `Processor`.
         QuorumWaiter::spawn(
+            self.name,
             self.committee.clone(),
             /* stake */ self.committee.stake(&self.name),
             /* rx_message */ rx_quorum_waiter,
             /* tx_batch */ tx_processor,
             /* rx_ack */ rx_ack,
             mempool_addresses,
+            indirect_peers,
         );
 
         // The `Processor` hashes and stores the batch. It then forwards the batch's digest to the consensus and to other nodes.
@@ -252,7 +257,7 @@ impl MessageHandler for TxReceiverHandler {
 #[derive(Clone)]
 struct MempoolReceiverHandler {
     tx_helper: Sender<(Vec<Digest>, PublicKey)>,
-    tx_processor: Sender<(SerializedBatchMessage, Digest, Option<PublicKey>)>,
+    tx_processor: Sender<(SerializedBatchMessage, Digest, PublicKey)>,
     tx_ack: Sender<(PublicKey, Digest)>,
 }
 
@@ -267,7 +272,7 @@ impl MessageHandler for MempoolReceiverHandler {
                 // Send the batch to the digest processor.
                 let digest = Digest::hash(&serialized);
                 self.tx_processor
-                    .send((serialized.to_vec(), digest, Some(batch_with_sender.sender)))
+                    .send((serialized.to_vec(), digest, batch_with_sender.sender))
                     .await
                     .expect("Failed to send batch");
             }
@@ -277,7 +282,6 @@ impl MessageHandler for MempoolReceiverHandler {
                 .await
                 .expect("Failed to send batch request"),
             Ok(MempoolMessage::Ack((peer, digest))) => {
-                info!("Received ack for {} from {}", digest, peer);
                 self.tx_ack
                     .send((peer, digest))
                     .await

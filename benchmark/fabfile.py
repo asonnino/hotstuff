@@ -14,14 +14,14 @@ def docker(ctx):
     """run a benchmark on docker"""
     bench_params = {
         'faults': 0,
-        'nodes': 10,
+        'nodes': 30,
         'clients': 1,
-        'rate': [10000],
+        'rate': [40000],
         'tx_size': 512,
         'duration': 20,
         'latency': 10,  # in ms
         #'bandwidth': "100",  # Has to be str > 0
-        'topology': 'fullmesh',
+        'topology': 'binomial',
     }
     node_params = {
         'consensus': {
@@ -57,10 +57,10 @@ def local(ctx):
         'faults': 0,
         'nodes': 10,
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': 10000,
+        'rate': 50000,
         'tx_size': 512,
         'duration': 20,
-        'topology': 'kauri',
+        'topology': 'binomial',
     }
     node_params = {
         'consensus': {
