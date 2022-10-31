@@ -56,6 +56,18 @@ This command may take a long time the first time you run it (compiling rust code
  End-to-end latency: 9 ms
 -----------------------------------------
 ```
+## Docker benchmark
+In order to run a benchmark on [docker](https://www.docker.com/), please follow the steps below: 
+- Install docker on every physical machine. 
+- Build the docker image on every physical machine with :
+    ```
+    cd benchmark
+    docker build -t superhotstuff .
+    ```
+- On your main machine, initialize a docker swarm with `docker swarm init`. This command will output a token that you will need in the next step.
+- On the other machines, join the swarm with `docker swarm join --token <token> <ip>`.
+- Create an overlay network with `docker network create --driver=overlay --subnet=10.1.0.0/16 benchNet`.
+- Run `fab docker` on your main machine.
 
 ## Next Steps
 
