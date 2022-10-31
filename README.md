@@ -81,6 +81,7 @@ The results will be in the `results` repository following this format :
 
 ## TODO : 
 - Signatures for the Ack messages.
+- Rewrite the tests to adapt to the new codebase.
 
 ## License
 
