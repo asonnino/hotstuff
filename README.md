@@ -1,16 +1,23 @@
-> **Note to readers:** This codebase is useful to get started with BFT consensus and as baseline when designing your own protocols. If you are looking for state-of-the-art BFT protocols, I recommend [Tusk](https://github.com/asonnino/narwhal) (asynchronous) and [Bullshark](https://github.com/asonnino/narwhal/tree/bullshark) (partially-synchronous) that provide superior performance, robustness, and scalability.
+> **Note to readers:** This codebase is built from a minimal implementation of the [2-chain variant of the HotStuff consensus protocol by asonnino](https://github.com/asonnino/hotstuff). 
 
-# HotStuff
+# SuperHotStuff
 
-[![build status](https://img.shields.io/github/workflow/status/asonnino/hotstuff/Rust/main?style=flat-square&logo=github)](https://github.com/asonnino/hotstuff/actions)
+[![build status](https://img.shields.io/github/workflow/status/AlianBenabdallah/SuperHotStuff/Rust/main?style=flat-square&logo=github)](https://github.com/AlianBenabdallah/SuperHotStuff/actions)
 [![rustc](https://img.shields.io/badge/rustc-1.64+-blue?style=flat-square&logo=rust)](https://www.rust-lang.org)
 [![license](https://img.shields.io/badge/license-Apache-blue.svg?style=flat-square)](LICENSE)
 
-This repo provides a minimal implementation of the [2-chain variant of the HotStuff consensus protocol](https://arxiv.org/abs/2106.10362) used at the core of [Diem](https://www.diem.com/en-us/). The codebase has been designed to be small, efficient, and easy to benchmark and modify. It has not been designed to run in production but uses real cryptography ([dalek](https://doc.dalek.rs/ed25519_dalek)), networking ([tokio](https://docs.rs/tokio)), and storage ([rocksdb](https://docs.rs/rocksdb)).
+This repo tries to improve the throughput and latency of HotStuff by imposing an arbitrary topology to the mempool. This idea is motivated by the fact that broadcasting a batch of transactions to every peer is not scalable and very costly. Nodes which receive the block will relay it according to the topology. Three different topologies are implemented. :
+- `fullmesh` : The broadcaster will send the block to every other nodes.
+- `kauri` : The topology is a balanced n-ary tree where the broadcaster is the root.
+- `binomial` : The topology is a binomial tree. 
+
+Note that we don't use a custom topology to relay consensus messages as we suppose that these messages are light and therefore are not a bottleneck.
+
+The codebase has been designed to be small, efficient, and easy to benchmark and modify. It has not been designed to run in production but uses real cryptography ([dalek](https://doc.dalek.rs/ed25519_dalek)), networking ([tokio](https://docs.rs/tokio)), and storage ([rocksdb](https://docs.rs/rocksdb)).
 
 ## Quick Start
 
-HotStuff is written in Rust, but all benchmarking scripts are written in Python and run with [Fabric](http://www.fabfile.org/).
+SuperHotStuff is written in Rust, but all benchmarking scripts are written in Python and run with [Fabric](http://www.fabfile.org/).
 To deploy and benchmark a testbed of 4 nodes on your local machine, clone the repo and install the python dependencies:
 
 ```bash
@@ -69,9 +76,11 @@ In order to run a benchmark on [docker](https://www.docker.com/), please follow 
 - Create an overlay network with `docker network create --driver=overlay --subnet=10.1.0.0/16 benchNet`.
 - Run `fab docker` on your main machine.
 
-## Next Steps
+The results will be in the `results` repository following this format : 
+'bench-{topology}-{faults}-{nodes}-{clients}-{rate}-{tx_size}-{latency}-{bandwidth}.txt'
 
-The [wiki](https://github.com/asonnino/hotstuff/wiki) documents the codebase, explains its architecture and how to read benchmarks' results, and provides a step-by-step tutorial to run [benchmarks on Amazon Web Services](https://github.com/asonnino/hotstuff/wiki/AWS-Benchmarks) across multiple data centers (WAN).
+## TODO : 
+- Signatures for the Ack messages.
 
 ## License
 
