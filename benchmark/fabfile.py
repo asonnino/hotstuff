@@ -17,7 +17,7 @@ def docker(ctx):
         'nodes': 30,                    # Number of nodes
         'clients': 1,                   # Number of clients
         'rate': [30000],                # Total rate of transactions per second
-        'tx_size': 512,                 # Transaction size in kbytes
+        'tx_size': 512,                 # Transaction size in bytes
         'duration': 20,                 # Duration in s
         'latency': 10,                  # Latency in ms
         'bandwidth': "1000",            # Bandwidth in Mbps
