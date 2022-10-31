@@ -61,6 +61,7 @@ impl QuorumWaiter {
         indirect_peers: Vec<(PublicKey, SocketAddr)>,
     ) {
         info!("Broadcasting batches to {:?}", &mempool_addresses);
+        info!("Indirect_peers {:?}", indirect_peers);
         tokio::spawn(async move {
             Self {
                 name,
@@ -125,7 +126,7 @@ impl QuorumWaiter {
                     // If it is not received then send the batch to the indirect peer
                     if let Some(block_in_process) = stake_map.get_mut(&digest) {
                         if let Some((peer, addr)) = self.indirect_peers.get(index) {
-                            if block_in_process.acks.contains(&peer) {
+                            if block_in_process.acks.contains(peer) {
                                 if index + 1 < self.indirect_peers.len() {
                                     my_block_queue.push(wait_block(duration / 2, (digest, index + 1)));
                                 }

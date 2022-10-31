@@ -180,7 +180,7 @@ impl Topology for BinomialTreeTopology {
             }
             base >>= 1;
             while base > 0 {
-                res.push(self.peers[base].clone());
+                res.push(self.peers[base]);
                 base >>= 1;
             }
         } else {
@@ -194,7 +194,7 @@ impl Topology for BinomialTreeTopology {
             while base > 0 {
                 let child_index = fixed_index + base;
                 if child_index < self.peers.len() {
-                    res.push(self.peers[child_index].clone());
+                    res.push(self.peers[child_index]);
                 }
                 base >>= 1;
             }
@@ -223,10 +223,10 @@ impl Topology for BinomialTreeTopology {
                 subchildren.push(v);
                 if v < self.peers.len()
                     && !children.contains(&self.peers[v])
-                    && res_set.insert(self.peers[v].clone())
+                    && res_set.insert(self.peers[v])
                     && self.peers[v].0 != self.name
                 {
-                    res.push(self.peers[v].clone());
+                    res.push(self.peers[v]);
                 }
             }
         }

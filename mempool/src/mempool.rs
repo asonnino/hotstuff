@@ -162,8 +162,6 @@ where
 
         let indirect_peers = self.topology.indirect_peers();
 
-        info!("Indirect_peers {:?}", indirect_peers);
-
         // The `QuorumWaiter` broadcasts (in a reliable manner) the batches to all other mempools that
         // share the same `id` as us`. It waits for 2f authorities to acknowledge reception of the batch.
         // It then forward the batch to the `Processor`.
