@@ -77,7 +77,7 @@ In order to run a benchmark on [docker](https://www.docker.com/), please follow 
 - Run `fab docker` on your main machine.
 
 The results will be in the `results` repository following this format : 
-'bench-{topology}-{faults}-{nodes}-{clients}-{rate}-{tx_size}-{latency}-{bandwidth}.txt'
+`bench-{topology}-{faults}-{nodes}-{clients}-{rate}-{tx_size}-{latency}-{bandwidth}.txt`
 
 ## TODO : 
 - Signatures for the Ack messages.
