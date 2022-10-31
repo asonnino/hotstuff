@@ -41,7 +41,7 @@ impl Synchronizer {
         tokio::spawn(async move {
             let mut waiting = FuturesUnordered::new();
             let mut pending = HashSet::new();
-            let mut requests = HashMap::new();
+            let mut requests: HashMap<Digest, u128> = HashMap::new();
 
             let timer = sleep(Duration::from_millis(TIMER_ACCURACY));
             tokio::pin!(timer);
@@ -50,25 +50,25 @@ impl Synchronizer {
                     Some(block) = rx_inner.recv() => {
                         if pending.insert(block.digest()) {
                             let parent = block.parent().clone();
-                            let author = block.author;
+                            // let author = block.author;
                             let fut = Self::waiter(store_copy.clone(), parent.clone(), block);
                             waiting.push(fut);
 
-                            if !requests.contains_key(&parent){
-                                debug!("Requesting sync for block {}", parent);
-                                let now = SystemTime::now()
-                                    .duration_since(UNIX_EPOCH)
-                                    .expect("Failed to measure time")
-                                    .as_millis();
-                                requests.insert(parent.clone(), now);
-                                let address = committee
-                                    .address(&author)
-                                    .expect("Author of valid block is not in the committee");
-                                let message = ConsensusMessage::SyncRequest(parent, name);
-                                let message = bincode::serialize(&message)
-                                    .expect("Failed to serialize sync request");
-                                network.send(address, Bytes::from(message)).await;
-                            }
+                            // if !requests.contains_key(&parent){
+                            //     debug!("Requesting sync for block {}", parent);
+                            //     let now = SystemTime::now()
+                            //         .duration_since(UNIX_EPOCH)
+                            //         .expect("Failed to measure time")
+                            //         .as_millis();
+                            //     requests.insert(parent.clone(), now);
+                            //     let address = committee
+                            //         .address(&author)
+                            //         .expect("Author of valid block is not in the committee");
+                            //     let message = ConsensusMessage::SyncRequest(parent, name);
+                            //     let message = bincode::serialize(&message)
+                            //         .expect("Failed to serialize sync request");
+                            //     network.send(address, Bytes::from(message)).await;
+                            // }
                         }
                     },
                     Some(result) = waiting.next() => match result {
