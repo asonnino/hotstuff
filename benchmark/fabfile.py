@@ -21,7 +21,7 @@ def docker(ctx):
         'duration': 20,
         'latency': 10,  # in ms
         #'bandwidth': "100",  # Has to be str > 0
-        'topology': 'kauri',
+        'topology': 'binomial',
     }
     node_params = {
         'consensus': {
@@ -44,8 +44,8 @@ def docker(ctx):
     })
 
     try:
-        # Create a container, connected to benchNet network, which will supervise the benchmark
-        ret = DockerBench(bench_params, node_params, settings).run(debug=True)
+        # Create containers and run the benchmark
+        DockerBench(bench_params, node_params, settings).run(debug=True)
     except BenchError as e:
         Print.error(e)
 
@@ -57,10 +57,10 @@ def local(ctx):
         'faults': 0,
         'nodes': 10,
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': 50000,
+        'rate': 40000,
         'tx_size': 512,
         'duration': 20,
-        'topology': 'fullmesh',
+        'topology': 'binomial',
     }
     node_params = {
         'consensus': {

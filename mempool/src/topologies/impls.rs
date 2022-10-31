@@ -147,15 +147,7 @@ impl TopologyBuilder for BinomialTreeTopologyBuilder {
         let name = self.name.ok_or_else(|| TopologyError::MissingParameters {
             param: "name".to_string(),
         })?;
-        let my_index = peers
-            .iter()
-            .position(|(peer_id, _)| peer_id == &name)
-            .expect("Peer not found in peers list");
-        Ok(BinomialTreeTopology {
-            peers,
-            name,
-            my_index,
-        })
+        Ok(BinomialTreeTopology::new(peers, name))
     }
 }
 

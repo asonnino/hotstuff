@@ -47,6 +47,18 @@ pub struct BinomialTreeTopology {
     pub my_index: usize,
 }
 
+impl BinomialTreeTopology {
+    pub fn new(mut peers: Vec<(PublicKey, SocketAddr)>, name: PublicKey) -> Self {
+        peers.sort_by(|a, b| a.0.cmp(&b.0));
+        let my_index = peers.iter().position(|(p, _)| p == &name).unwrap();
+        BinomialTreeTopology {
+            peers,
+            name,
+            my_index,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct BinomialTreeTopologyBuilder {
     pub name: Option<PublicKey>,
