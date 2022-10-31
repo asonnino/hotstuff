@@ -23,12 +23,14 @@ async fn wait_for_quorum() {
 
     // Spawn a `QuorumWaiter` instance.
     QuorumWaiter::spawn(
+        myself,
         committee.clone(),
         /* stake */ 1,
         rx_message,
         tx_batch,
         rx_ack,
         mempool_addresses,
+        vec![],
     );
 
     // Make a batch.
@@ -80,12 +82,14 @@ async fn wait_for_quorum_ack() {
 
     // Spawn a `QuorumWaiter` instance.
     QuorumWaiter::spawn(
+        myself,
         committee.clone(),
         /* stake */ 1,
         rx_message,
         tx_batch,
         rx_ack,
         mempool_addresses,
+        vec![],
     );
 
     // Make a batch.

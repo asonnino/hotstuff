@@ -35,7 +35,7 @@ async fn hash_and_store() {
     let digest = Digest::hash(&serialized);
 
     tx_batch
-        .send((serialized.clone(), digest.clone(), None))
+        .send((serialized.clone(), digest.clone(), name))
         .await
         .unwrap();
 
