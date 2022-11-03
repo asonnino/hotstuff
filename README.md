@@ -2,7 +2,7 @@
 
 # SuperHotStuff
 
-[![build status](https://img.shields.io/github/workflow/status/AlianBenabdallah/SuperHotStuff/Rust/main?style=flat-square&logo=github)](https://github.com/AlianBenabdallah/SuperHotStuff/actions)
+[![build status](https://img.shields.io/github/workflow/status/AlianBenabdallah/SuperHotStuff/Build/main?style=flat-square&logo=github)](https://github.com/AlianBenabdallah/SuperHotStuff/actions)
 [![rustc](https://img.shields.io/badge/rustc-1.64+-blue?style=flat-square&logo=rust)](https://www.rust-lang.org)
 [![license](https://img.shields.io/badge/license-Apache-blue.svg?style=flat-square)](LICENSE)
 
@@ -77,11 +77,12 @@ In order to run a benchmark on [docker](https://www.docker.com/), please follow 
 - Run `fab docker` on your main machine.
 
 The results will be in the `results` repository following this format : 
-'bench-{topology}-{faults}-{nodes}-{clients}-{rate}-{tx_size}-{latency}-{bandwidth}.txt'
+`bench-{topology}-{faults}-{nodes}-{clients}-{rate}-{tx_size}-{latency}-{bandwidth}.txt`
 
 ## TODO : 
 - Signatures for the Ack messages.
 - Rewrite the tests to adapt to the new codebase.
+- Add a cache for the topology structures.
 
 ## License
 
