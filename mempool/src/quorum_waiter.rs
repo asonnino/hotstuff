@@ -48,6 +48,12 @@ async fn wait_block<T>(duration: Duration, value: T) -> T {
     value
 }
 
+// Duration before sending batches to the indirect peers if no ack was received
+const INDIRECT_PEERS_TIMEOUT: Duration = Duration::from_millis(500);
+
+// Duration before sending a batch to a second indirect peer when we already sent it to one
+const SLOW_PEERS_TIMEOUT: Duration = Duration::from_millis(50);
+
 impl QuorumWaiter {
     /// Spawn a new QuorumWaiter.
     pub fn spawn(
@@ -83,7 +89,6 @@ impl QuorumWaiter {
     async fn run(&mut self) {
         let mut stake_map = HashMap::new();
         let mut my_block_queue = FuturesUnordered::new();
-        let duration = Duration::from_millis(500);
         loop {
             tokio::select! {
                 // Broadcast the batch to the network.
@@ -99,7 +104,7 @@ impl QuorumWaiter {
                         .network
                         .broadcast(self.mempool_addresses.clone(), Bytes::from(batch))
                         .await;
-                    my_block_queue.push(wait_block(duration, (digest, 0)));
+                    my_block_queue.push(wait_block(INDIRECT_PEERS_TIMEOUT, (digest, 0)));
 
                     // Spawn a new task to wait for the handlers
                     tokio::spawn(async move { join_all(handlers).await });
@@ -121,27 +126,26 @@ impl QuorumWaiter {
                     }
                 },
                 Some((digest, index)) = my_block_queue.next() => {
-                    // For each block in the queue, check if we received the acks from the indirect peers
-                    // If an ack is received then increment the index
-                    // If it is not received then send the batch to the indirect peer
+                    // For each (digest, index) in the queue, send the batch to the indirect peer for which no ack was received
+                    // starting at index
                     if let Some(block_in_process) = stake_map.get_mut(&digest) {
-                        if let Some((peer, addr)) = self.indirect_peers.get(index) {
-                            if block_in_process.acks.contains(peer) {
-                                if index + 1 < self.indirect_peers.len() {
-                                    my_block_queue.push(wait_block(duration / 2, (digest, index + 1)));
-                                }
-                            } else {
-                                info!("Sending batch {} to indirect peer {}", digest, addr);
-                                // Send the batch
+                        // Find the last indirect peer from which no ack was received, starting from index
+                        let mut i = index;
+                        while i < self.indirect_peers.len() {
+                            let (peer, address) = self.indirect_peers[i];
+                            if !block_in_process.acks.contains(&peer) {
+                                // Send the batch to the indirect peer
                                 let handler = self
                                     .network
-                                    .send(*addr, Bytes::from(block_in_process.block.clone()))
+                                    .send(address, Bytes::from(block_in_process.block.clone()))
                                     .await;
-
-                                my_block_queue.push(wait_block(duration, (digest, index + 1)));
-                                // Spawn a new tasks to wait for the handlers
+                                // Spawn a new task to wait for the handlers
                                 tokio::spawn(async move { handler.await });
+                                // Add the block to the queue
+                                my_block_queue.push(wait_block(SLOW_PEERS_TIMEOUT, (digest, i+1)));
+                                break;
                             }
+                            i += 1;
                         }
                     }
                 },
