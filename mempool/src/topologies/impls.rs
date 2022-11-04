@@ -176,7 +176,7 @@ impl Topology for BinomialTreeTopology {
                 base >>= 1;
             }
         } else {
-            let mut tmp = (self.my_index - index) % self.peers.len();
+            let mut tmp = (self.my_index - index).rem_euclid(self.peers.len());
             let fixed_index = tmp;
             while tmp != 0 && tmp % 2 == 0 {
                 tmp >>= 1;
