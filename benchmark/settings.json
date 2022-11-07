@@ -2,7 +2,7 @@
     "testbed": "superhotstuff",
     "key": {
         "name": "ali_aws",
-        "path": "/home/aliruk/.ssh/ali_aws"
+        "path": "/absolute_path_to_key"
     },
     "ports": {
         "consensus": 8000,

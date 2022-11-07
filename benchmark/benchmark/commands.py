@@ -26,7 +26,7 @@ class CommandMaker:
 
     @staticmethod
     def remove_tc(interface='eth0'):
-        return f'tc qdisc del dev {interface} root'
+        return f'tc qdisc del dev {interface} root netem'
 
     @staticmethod
     def tc(latency, bandwidth, interface='eth0'):
@@ -36,7 +36,7 @@ class CommandMaker:
         if latency > 0:
             cmd.append(f'delay {latency}ms')
         if bandwidth:
-            cmd.append(f'limit 400000 rate {bandwidth}mbit')
+            cmd.append(f'limit 4000000 rate {bandwidth}mbit')
         cmd = ' '.join(cmd)
         return cmd
 

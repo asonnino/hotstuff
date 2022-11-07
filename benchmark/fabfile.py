@@ -144,7 +144,7 @@ def remote(ctx):
         'faults': 0,
         'nodes': [10],
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': [140_000],
+        'rate': [100_000],
         'tx_size': 512,
         'duration': 30,
         'runs': 1,
@@ -161,8 +161,8 @@ def remote(ctx):
             'gc_depth': 50,
             'sync_retry_delay': 5_000,
             'sync_retry_nodes': 3,
-            'batch_size': 500_000,
-            'max_batch_delay': 35,
+            'batch_size': 1_000_000,
+            'max_batch_delay': 100,
             'fanout' : 3,
         }
     }
