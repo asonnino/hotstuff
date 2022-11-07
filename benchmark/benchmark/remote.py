@@ -56,9 +56,8 @@ class Bench:
             'sudo apt-get -y upgrade',
             'sudo apt-get -y autoremove',
 
-            # The following dependencies prevent the error: [error: linker `cc` not found].
-            'sudo apt-get -y install build-essential',
-            'sudo apt-get -y install cmake',
+            # The following dependencies prevent the error: [error: linker `cc` not found] and install tc.
+            'sudo apt-get -y install build-essential cmake iproute2',
 
             # Install rust (non-interactive).
             'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y',
@@ -112,7 +111,7 @@ class Bench:
         output = c.run(cmd, hide=True)
         self._check_stderr(output)
 
-    def _update(self, hosts):
+    def _update(self, hosts, latency, bandwidth):
         Print.info(
             f'Updating {len(hosts)} nodes (branch "{self.settings.branch}")...'
         )
@@ -127,6 +126,8 @@ class Bench:
             )
         ]
         g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect)
+        g.run(f'sudo {CommandMaker.remove_tc("ens5")} || true', hide=True)
+        g.run(f'sudo {CommandMaker.tc(latency, bandwidth, "ens5")}')
         g.run(' && '.join(cmd), hide=True)
 
     def _config(self, hosts, node_parameters):
@@ -265,7 +266,11 @@ class Bench:
 
         # Update nodes.
         try:
-            self._update(selected_hosts)
+            self._update(
+                selected_hosts,
+                bench_parameters.latency,
+                bench_parameters.bandwidth,
+            )
         except (GroupException, ExecutionError) as e:
             e = FabricError(e) if isinstance(e, GroupException) else e
             raise BenchError('Failed to update nodes', e)

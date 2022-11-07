@@ -56,7 +56,7 @@ def local(ctx):
     bench_params = {
         'faults': 0,
         'nodes': 10,
-        'clients': 1,  # Must be the same length as nodes or an integer
+        'clients': 3,  # Must be the same length as nodes or an integer
         'rate': 40000,
         'tx_size': 512,
         'duration': 20,
@@ -102,7 +102,7 @@ def destroy(ctx):
 
 
 @task
-def start(ctx, max=5):
+def start(ctx, max=10):
     ''' Start at most `max` machines per data center '''
     try:
         InstanceManager.make().start_instances(max)
@@ -144,11 +144,13 @@ def remote(ctx):
         'faults': 0,
         'nodes': [10],
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': [200_000],
+        'rate': [140_000],
         'tx_size': 512,
         'duration': 30,
         'runs': 1,
-        'topology': 'kauri',
+        'topology': 'binomial',
+        'latency': 0,
+        'bandwidth': "",
     }
     node_params = {
         'consensus': {
@@ -160,7 +162,8 @@ def remote(ctx):
             'sync_retry_delay': 5_000,
             'sync_retry_nodes': 3,
             'batch_size': 500_000,
-            'max_batch_delay': 100
+            'max_batch_delay': 100,
+            'fanout' : 3,
         }
     }
     try:

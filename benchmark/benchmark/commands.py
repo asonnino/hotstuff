@@ -25,10 +25,14 @@ class CommandMaker:
         return f'./node keys --filename {filename}'
 
     @staticmethod
-    def tc(latency, bandwidth):
+    def remove_tc(interface='eth0'):
+        return f'tc qdisc del dev {interface} root'
+
+    @staticmethod
+    def tc(latency, bandwidth, interface='eth0'):
         assert isinstance(latency, int)
         assert isinstance(bandwidth, str)
-        cmd = ['tc qdisc add dev eth0 root netem']
+        cmd = [f'tc qdisc add dev {interface} root netem']
         if latency > 0:
             cmd.append(f'delay {latency}ms')
         if bandwidth:
