@@ -84,7 +84,7 @@ def local(ctx):
 
 
 @task
-def create(ctx, nodes=5):
+def create(ctx, nodes=10):
     ''' Create a testbed'''
     try:
         InstanceManager.make().create_instances(nodes)
@@ -150,7 +150,7 @@ def remote(ctx):
         'runs': 1,
         'topology': 'binomial',
         'latency': 0,
-        'bandwidth': "",
+        'bandwidth': "500",
     }
     node_params = {
         'consensus': {
@@ -162,7 +162,7 @@ def remote(ctx):
             'sync_retry_delay': 5_000,
             'sync_retry_nodes': 3,
             'batch_size': 500_000,
-            'max_batch_delay': 100,
+            'max_batch_delay': 35,
             'fanout' : 3,
         }
     }
