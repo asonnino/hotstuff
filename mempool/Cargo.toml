@@ -1,7 +1,7 @@
 [package]
 name = "mempool"
 version = "0.1.0"
-authors = ["Alberto Sonnino <asonnino@fb.com>"]
+authors = ["Alberto Sonnino <asonnino@fb.com>", "Ali Benabdallah <ali.benabdallah@epfl.ch>"]
 edition = "2018"
 
 [dependencies]

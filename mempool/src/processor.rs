@@ -1,7 +1,7 @@
 use bytes::Bytes;
 use crypto::{Digest, PublicKey};
 use futures::future::join_all;
-use log::info;
+use log::debug;
 use network::ReliableSender;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -75,7 +75,7 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
                     bincode::serialize(&MempoolMessage::Ack((self.name, digest.clone()))).unwrap(),
                 );
                 let handler = self.network.send(source_addr, payload).await;
-                info!("Sent Ack to {} for batch {}", source_addr, &digest);
+                debug!("Sent Ack to {} for batch {}", source_addr, &digest);
                 // Await the handlers
                 tokio::spawn(async { handler.await });
 
@@ -86,7 +86,7 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
                     .iter()
                     .map(|e| e.1)
                     .collect();
-                info!("Relaying batch {} to {:?}", &digest, &peers);
+                debug!("Relaying batch {} to {:?}", &digest, &peers);
                 let handlers = self.network.broadcast(peers, batch.into()).await;
                 // Await the handlers
                 tokio::spawn(async move {

@@ -5,7 +5,7 @@ use crypto::{Digest, PublicKey};
 use futures::future::join_all;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt as _;
-use log::info;
+use log::{debug, info};
 use network::ReliableSender;
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
@@ -111,7 +111,7 @@ impl QuorumWaiter {
                 },
                 // Handle acknowledgements.
                 Some((peer, digest)) = self.rx_ack.recv() => {
-                    info!("Received ack from {:?} for {:?}", self.committee.mempool_address(&peer), digest);
+                    debug!("Received ack from {:?} for {:?}", self.committee.mempool_address(&peer), digest);
                     // Check if an ack was not already received from this peer
                     if let Some(block_in_process) = stake_map.get_mut(&digest) {
                         if block_in_process.acks.insert(peer){
