@@ -140,14 +140,10 @@ impl Client {
         join_all(self.nodes.iter().cloned().map(|address| {
             tokio::spawn(async move {
                 loop {
-                    let connection = TcpStream::connect(address).await;
-                    if connection.is_ok() {
+                    if TcpStream::connect(address).await.is_ok() {
                         break;
-                    } else {
-                        info!("Waiting for node {} to be online...", address);
-                        info!("Node is not ready yet: {}", connection.unwrap_err());
-                        sleep(Duration::from_millis(10)).await;
                     }
+                    sleep(Duration::from_millis(10)).await;
                 }
             })
         }))

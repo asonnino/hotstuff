@@ -56,11 +56,11 @@ def local(ctx):
     bench_params = {
         'faults': 0,
         'nodes': 10,
-        'clients': 3,  # Must be the same length as nodes or an integer
-        'rate': 40000,
+        'clients': 2,  # Must be the same length as nodes or an integer
+        'rate': 100000,
         'tx_size': 512,
         'duration': 20,
-        'topology': 'binomial',
+        'topology': 'fullmesh',
     }
     node_params = {
         'consensus': {
@@ -84,7 +84,7 @@ def local(ctx):
 
 
 @task
-def create(ctx, nodes=10):
+def create(ctx, nodes=20):
     ''' Create a testbed'''
     try:
         InstanceManager.make().create_instances(nodes)
@@ -102,7 +102,7 @@ def destroy(ctx):
 
 
 @task
-def start(ctx, max=10):
+def start(ctx, max=30):
     ''' Start at most `max` machines per data center '''
     try:
         InstanceManager.make().start_instances(max)
@@ -142,15 +142,15 @@ def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
         'faults': 0,
-        'nodes': [10],
+        'nodes': 30,
         'clients': 1,  # Must be the same length as nodes or an integer
         'rate': [100_000],
         'tx_size': 512,
         'duration': 30,
         'runs': 1,
-        'topology': 'binomial',
+        'topology': 'fullmesh',
         'latency': 0,
-        'bandwidth': "500",
+        'bandwidth': "",
     }
     node_params = {
         'consensus': {

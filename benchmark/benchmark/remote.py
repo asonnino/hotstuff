@@ -193,11 +193,11 @@ class Bench:
         current_client_process = 0
         timeout = node_parameters.timeout_delay
         client_logs = [PathMaker.client_log_file(i) for i in range(len(hosts))]
-        for host, addr, log_file in zip(hosts, addresses, client_logs):
+        for host, log_file in zip(hosts, client_logs):
             if current_client_process >= max_clients:
                 rate_share = 0
             cmd = CommandMaker.run_client(
-                addr,
+                f"127.0.0.1:{self.settings.front_port}",
                 bench_parameters.tx_size,
                 rate_share,
                 timeout,
