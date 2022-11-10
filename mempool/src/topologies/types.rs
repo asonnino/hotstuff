@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{collections::HashMap, net::SocketAddr};
 
 use crypto::PublicKey;
 
@@ -62,4 +62,21 @@ impl BinomialTreeTopology {
 #[derive(Clone, Debug)]
 pub struct BinomialTreeTopologyBuilder {
     pub name: Option<PublicKey>,
+}
+
+#[derive(Clone, Debug)]
+pub struct CacheTopology<T> {
+    pub(crate) inner: T,
+    pub(crate) direct_peers_cache: HashMap<PublicKey, Vec<(PublicKey, SocketAddr)>>,
+    pub(crate) indirect_peers_cache: Option<Vec<(PublicKey, SocketAddr)>>,
+}
+
+impl<T> CacheTopology<T> {
+    pub fn new(inner: T) -> Self {
+        CacheTopology {
+            inner,
+            direct_peers_cache: HashMap::new(),
+            indirect_peers_cache: None,
+        }
+    }
 }

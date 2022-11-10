@@ -12,6 +12,8 @@ use crate::topologies::types::{
     KauriTopology, KauriTopologyBuilder,
 };
 
+use super::types::CacheTopology;
+
 impl TopologyBuilder for FullMeshTopologyBuilder {
     type Topology = FullMeshTopology;
 
@@ -226,5 +228,30 @@ impl Topology for BinomialTreeTopology {
         self.peers.rotate_right(self.my_index);
 
         res
+    }
+}
+
+impl<T> Topology for CacheTopology<T>
+where
+    T: Topology,
+{
+    fn broadcast_peers(&mut self, id: PublicKey) -> Vec<(PublicKey, SocketAddr)> {
+        if let Some(peers) = self.direct_peers_cache.get(&id) {
+            peers.clone()
+        } else {
+            let peers = self.inner.broadcast_peers(id);
+            self.direct_peers_cache.insert(id, peers.clone());
+            peers
+        }
+    }
+
+    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr)> {
+        if let Some(peers) = &self.indirect_peers_cache {
+            peers.clone()
+        } else {
+            let peers = self.inner.indirect_peers();
+            self.indirect_peers_cache = Some(peers.clone());
+            peers
+        }
     }
 }

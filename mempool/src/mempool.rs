@@ -4,6 +4,7 @@ use crate::helper::Helper;
 use crate::processor::{Processor, SerializedBatchMessage};
 use crate::quorum_waiter::QuorumWaiter;
 use crate::synchronizer::Synchronizer;
+use crate::topologies::types::CacheTopology;
 use crate::topologies::Topology;
 use crate::TopologyBuilder;
 use async_trait::async_trait;
@@ -60,7 +61,7 @@ where
     /// Send messages to consensus.
     tx_consensus: Sender<Digest>,
     /// Topology of the network
-    topology: Builder::Topology,
+    topology: CacheTopology<Builder::Topology>,
 }
 
 impl<Builder> Mempool<Builder>
@@ -82,9 +83,12 @@ where
         let mut peers = committee.broadcast_addresses(&name);
         peers.push((name, committee.mempool_address(&name).unwrap()));
 
-        let topology = topology_builder
-            .build(peers)
-            .expect("Failed to build topology");
+        let topology = CacheTopology::new(
+            topology_builder
+                .build(peers)
+                .expect("Failed to build topology"),
+        );
+
         // Define a mempool instance.
         let mut mempool = Self {
             name,
