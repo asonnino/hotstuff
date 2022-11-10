@@ -57,7 +57,7 @@ def local(ctx):
         'faults': 0,
         'nodes': 10,
         'clients': 2,  # Must be the same length as nodes or an integer
-        'rate': 100000,
+        'rate': 10000,
         'tx_size': 512,
         'duration': 20,
         'topology': 'fullmesh',
