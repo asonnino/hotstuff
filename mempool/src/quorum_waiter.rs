@@ -120,6 +120,7 @@ impl QuorumWaiter {
                             if block_in_process.stake >= self.committee.quorum_threshold() {
                                 // Deliver the batch
                                 let block_in_process = stake_map.remove(&digest).expect("The block should be in the map");
+                                debug!("tx_batch capacity: {:?}", self.tx_batch.capacity());
                                 let _ = self.tx_batch.send((block_in_process.block, digest, self.name)).await;
                             }
                         }

@@ -5,6 +5,7 @@ use crypto::Digest;
 use crypto::PublicKey;
 #[cfg(feature = "benchmark")]
 use ed25519_dalek::{Digest as _, Sha512};
+use log::debug;
 #[cfg(feature = "benchmark")]
 use log::info;
 use serde::{Deserialize, Serialize};
@@ -145,6 +146,7 @@ impl BatchMaker {
             info!("Batch {:?} contains {} B", digest, size);
         }
         // Send the batch through the deliver channel for further processing.
+        debug!("tx_message capacity: {:?}", self.tx_message.capacity());
         self.tx_message
             .send(serialized)
             .await
