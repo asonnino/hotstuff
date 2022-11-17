@@ -94,6 +94,7 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
                 });
             }
             debug!("tx_digest capacity: {:?}", self.tx_digest.capacity());
+            debug!("Sending digest {} to consensus", &digest);
             self.tx_digest
                 .send(digest)
                 .await

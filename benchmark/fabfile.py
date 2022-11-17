@@ -57,14 +57,14 @@ def local(ctx):
         'faults': 0,
         'nodes': 10,
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': 150000,
+        'rate': 100000,
         'tx_size': 512,
         'duration': 20,
-        'topology': 'fullmesh',
+        'topology': 'binomial',
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 1_000,
+            'timeout_delay': 5_000,
             'sync_retry_delay': 10_000,
         },
         'mempool': {
@@ -77,14 +77,14 @@ def local(ctx):
         }
     }
     try:
-        ret = LocalBench(bench_params, node_params).run(debug=False).result()
+        ret = LocalBench(bench_params, node_params).run(debug=True).result()
         print(ret)
     except BenchError as e:
         Print.error(e)
 
 
 @task
-def create(ctx, nodes=20):
+def create(ctx, nodes=2):
     ''' Create a testbed'''
     try:
         InstanceManager.make().create_instances(nodes)
@@ -142,13 +142,13 @@ def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
         'faults': 0,
-        'nodes': 30,
+        'nodes': 29,
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': [100_000],
+        'rate': [150_000],
         'tx_size': 512,
         'duration': 30,
         'runs': 1,
-        'topology': 'fullmesh',
+        'topology': 'kauri',
         'latency': 0,
         'bandwidth': "",
     }

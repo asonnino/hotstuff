@@ -99,7 +99,7 @@ impl QuorumWaiter {
                         block : batch.clone(),
                         acks : HashSet::new(),
                     });
-
+                    debug!("Broadcasting batch {:?} to {:?}", digest, self.mempool_addresses);
                     let handlers = self
                         .network
                         .broadcast(self.mempool_addresses.clone(), Bytes::from(batch))
