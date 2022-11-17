@@ -41,6 +41,7 @@ pub struct Core {
     timer: Timer,
     aggregator: Aggregator,
     network: SimpleSender,
+    last_proposed_round: Round,
 }
 
 impl Core {
@@ -79,6 +80,7 @@ impl Core {
                 timer: Timer::new(timeout_delay),
                 aggregator: Aggregator::new(committee),
                 network: SimpleSender::new(),
+                last_proposed_round: 0,
             }
             .run()
             .await
@@ -285,10 +287,13 @@ impl Core {
         if self.tx_proposer.capacity() < 10 {
             warn!("tx_proposer capacity {}", self.tx_proposer.capacity());
         }
-        self.tx_proposer
-            .send(ProposerMessage::Make(self.round, self.high_qc.clone(), tc))
-            .await
-            .expect("Failed to send message to proposer");
+        if self.last_proposed_round < self.round {
+            self.last_proposed_round = self.round;
+            self.tx_proposer
+                .send(ProposerMessage::Make(self.round, self.high_qc.clone(), tc))
+                .await
+                .expect("Failed to send message to proposer");
+        }
     }
 
     async fn cleanup_proposer(&mut self, b0: &Block, b1: &Block, block: &Block) {
