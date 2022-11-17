@@ -15,17 +15,17 @@ def docker(ctx):
     bench_params = {
         'faults': 0,                     # Number of faults
         'nodes': 30,                     # Number of nodes
-        'clients': 1,                    # Number of clients
+        'clients': 30,                    # Number of clients
         'rate': [50000],                # Total rate of transactions per second
         'tx_size': 512,                  # Transaction size in bytes
         'duration': 60,                  # Duration in s
         'latency': 0,                    # Latency in ms
         'bandwidth': "",                 # Bandwidth in Mbps
-        'topology': 'binomial',          # 'kauri', 'fullmesh', 'binomial'
+        'topology': 'fullmesh',          # 'kauri', 'fullmesh', 'binomial'
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 5_000,
+            'timeout_delay': 1_000,
             'sync_retry_delay': 10_000,
         },
         'mempool': {
@@ -33,12 +33,12 @@ def docker(ctx):
             'sync_retry_delay': 5_000,
             'sync_retry_nodes': 3,
             'batch_size': 500_000,
-            'max_batch_delay': 10,
+            'max_batch_delay': 50,
             'fanout': 3,
         }
     }
     settings = dict({
-        "branch" : "main",
+        "branch" : "debug",
         "repo_name" : "SuperHotStuff",
         "consensus_port": 8000,
         "mempool_port": 7000,

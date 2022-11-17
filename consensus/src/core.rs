@@ -284,6 +284,7 @@ impl Core {
 
     #[async_recursion]
     async fn generate_proposal(&mut self, tc: Option<TC>) {
+        debug!("Generating proposal for round {}", self.round);
         if self.tx_proposer.capacity() < 10 {
             warn!("tx_proposer capacity {}", self.tx_proposer.capacity());
         }
