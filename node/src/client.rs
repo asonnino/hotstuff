@@ -4,7 +4,7 @@ use bytes::BytesMut;
 use clap::Parser;
 use env_logger::Env;
 use futures::future::join_all;
-use futures::sink::SinkExt as _;
+use futures::SinkExt;
 use log::{info, warn};
 use rand::Rng;
 use std::net::SocketAddr;
@@ -120,10 +120,14 @@ impl Client {
                 tx.resize(self.size, 0u8);
                 let bytes = tx.split().freeze();
 
-                if let Err(e) = transport.send(bytes).await {
+                if let Err(e) = transport.feed(bytes).await {
                     warn!("Failed to send transaction: {}", e);
                     break 'main;
                 }
+            }
+            if let Err(e) = transport.flush().await {
+                warn!("Failed to flush: {}", e);
+                break 'main;
             }
             if now.elapsed().as_millis() > BURST_DURATION as u128 {
                 // NOTE: This log entry is used to compute performance.

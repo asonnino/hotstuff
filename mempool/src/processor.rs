@@ -93,6 +93,7 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
                     join_all(handlers).await;
                 });
             }
+            debug!("Sending digest {} to consensus", &digest);
             self.tx_digest
                 .send(digest)
                 .await
