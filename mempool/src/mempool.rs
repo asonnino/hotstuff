@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use crypto::{Digest, PublicKey};
 use futures::sink::SinkExt as _;
-use log::{debug, info, warn};
+use log::{info, warn};
 use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -98,7 +98,7 @@ where
             tx_consensus,
             topology,
         };
-        let (tx_ack, rx_ack) = channel(CHANNEL_CAPACITY);
+        let (tx_ack, rx_ack) = channel(1000 * CHANNEL_CAPACITY);
 
         // Spawn all mempool tasks.
         mempool.handle_consensus_messages(rx_consensus);
@@ -132,7 +132,7 @@ where
 
     /// Spawn all tasks responsible to handle clients transactions.
     fn handle_clients_transactions(&mut self, rx_ack: Receiver<(PublicKey, Digest)>) {
-        let (tx_batch_maker, rx_batch_maker) = channel(CHANNEL_CAPACITY);
+        let (tx_batch_maker, rx_batch_maker) = channel(10 * CHANNEL_CAPACITY);
         let (tx_quorum_waiter, rx_quorum_waiter) = channel(CHANNEL_CAPACITY);
         let (tx_processor, rx_processor) = channel(CHANNEL_CAPACITY);
 
@@ -246,10 +246,12 @@ struct TxReceiverHandler {
 impl MessageHandler for TxReceiverHandler {
     async fn dispatch(&self, _writer: &mut Writer, message: Bytes) -> Result<(), Box<dyn Error>> {
         // Send the transaction to the batch maker.
-        debug!(
-            "tx_batch_maker capacity: {:?}",
-            self.tx_batch_maker.capacity()
-        );
+        if self.tx_batch_maker.capacity() < 10 {
+            warn!(
+                "tx_batch_maker capacity: {:?}",
+                self.tx_batch_maker.capacity()
+            );
+        }
         self.tx_batch_maker
             .send(message.to_vec())
             .await
@@ -279,7 +281,9 @@ impl MessageHandler for MempoolReceiverHandler {
             Ok(MempoolMessage::Batch(batch_with_sender)) => {
                 // Send the batch to the digest processor.
                 let digest = Digest::hash(&serialized);
-                debug!("tx_processor capacity: {:?}", self.tx_processor.capacity());
+                if self.tx_processor.capacity() < 10 {
+                    warn!("tx_processor capacity: {:?}", self.tx_processor.capacity());
+                }
                 self.tx_processor
                     .send((serialized.to_vec(), digest, batch_with_sender.sender))
                     .await
@@ -291,7 +295,9 @@ impl MessageHandler for MempoolReceiverHandler {
                 .await
                 .expect("Failed to send batch request"),
             Ok(MempoolMessage::Ack((peer, digest))) => {
-                debug!("tx_ack capacity: {:?}", self.tx_ack.capacity());
+                if self.tx_ack.capacity() < 10 {
+                    warn!("tx_ack capacity: {:?}", self.tx_ack.capacity());
+                }
                 self.tx_ack
                     .send((peer, digest))
                     .await
