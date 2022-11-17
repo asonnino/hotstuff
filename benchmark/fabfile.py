@@ -38,7 +38,7 @@ def docker(ctx):
         }
     }
     settings = dict({
-        "branch" : "fix_ack",
+        "branch" : "main",
         "repo_name" : "SuperHotStuff",
         "consensus_port": 8000,
         "mempool_port": 7000,
