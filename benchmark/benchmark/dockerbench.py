@@ -178,7 +178,7 @@ class DockerBench:
         duration = bench_parameters.duration
         for _ in progress_bar(range(20), prefix=f'Running benchmark ({duration} sec):'):
             sleep(ceil(duration / 20))
-        #self.stop()
+        self.stop()
 
     def _logs(self, faults):
         # Delete local logs (if any).
@@ -306,4 +306,4 @@ class DockerBench:
                         self.kill()
                         Print.error(BenchError('Benchmark failed', e))
                         continue
-                #self.kill()
+                self.kill()

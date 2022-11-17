@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use bytes::Bytes;
 use crypto::{Digest, PublicKey};
 use futures::future::join_all;
@@ -63,44 +65,48 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
     }
 
     async fn run(&mut self) {
+        let mut seen = HashSet::new();
         while let Some((batch, digest, source)) = self.rx_batch.recv().await {
-            self.store.write(digest.to_vec(), batch.clone()).await;
-            if source != self.name {
-                // If peer is not the current node then the message was received by another peer and should be ack'd then relayed.
-                let source_addr = self
-                    .committee
-                    .mempool_address(&source)
-                    .expect("Did not find source");
-                let payload = Bytes::from(
-                    bincode::serialize(&MempoolMessage::Ack((self.name, digest.clone()))).unwrap(),
-                );
-                let handler = self.network.send(source_addr, payload).await;
-                debug!("Sent Ack to {} for batch {}", source_addr, &digest);
-                // Await the handlers
-                tokio::spawn(async { handler.await });
+            if seen.insert(digest.clone()) {
+                self.store.write(digest.to_vec(), batch.clone()).await;
+                if source != self.name {
+                    // If peer is not the current node then the message was received by another peer and should be ack'd then relayed.
+                    let source_addr = self
+                        .committee
+                        .mempool_address(&source)
+                        .expect("Did not find source");
+                    let payload = Bytes::from(
+                        bincode::serialize(&MempoolMessage::Ack((self.name, digest.clone())))
+                            .unwrap(),
+                    );
+                    let handler = self.network.send(source_addr, payload).await;
+                    debug!("Sent Ack to {} for batch {}", source_addr, &digest);
+                    // Await the handlers
+                    tokio::spawn(async { handler.await });
 
-                // Send the batch to other peers.
-                let peers = self
-                    .topology
-                    .broadcast_peers(source)
-                    .iter()
-                    .map(|e| e.1)
-                    .collect();
-                debug!("Relaying batch {} to {:?}", &digest, &peers);
-                let handlers = self.network.broadcast(peers, batch.into()).await;
-                // Await the handlers
-                tokio::spawn(async move {
-                    join_all(handlers).await;
-                });
+                    // Send the batch to other peers.
+                    let peers = self
+                        .topology
+                        .broadcast_peers(source)
+                        .iter()
+                        .map(|e| e.1)
+                        .collect();
+                    debug!("Relaying batch {} to {:?}", &digest, &peers);
+                    let handlers = self.network.broadcast(peers, batch.into()).await;
+                    // Await the handlers
+                    tokio::spawn(async move {
+                        join_all(handlers).await;
+                    });
+                }
+                if self.tx_digest.capacity() < 10 {
+                    warn!("tx_digest capacity: {:?}", self.tx_digest.capacity());
+                }
+                debug!("Sending digest {} to consensus", &digest);
+                self.tx_digest
+                    .send(digest)
+                    .await
+                    .expect("Failed to send batch digest");
             }
-            if self.tx_digest.capacity() < 10 {
-                warn!("tx_digest capacity: {:?}", self.tx_digest.capacity());
-            }
-            debug!("Sending digest {} to consensus", &digest);
-            self.tx_digest
-                .send(digest)
-                .await
-                .expect("Failed to send batch digest");
         }
     }
 }

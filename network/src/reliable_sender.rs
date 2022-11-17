@@ -3,7 +3,7 @@ use crate::error::NetworkError;
 use bytes::Bytes;
 use futures::sink::SinkExt as _;
 use futures::stream::StreamExt as _;
-use log::{info, warn};
+use log::{debug, info, warn};
 use rand::prelude::SliceRandom as _;
 use rand::rngs::SmallRng;
 use rand::SeedableRng as _;
@@ -79,6 +79,7 @@ impl ReliableSender {
         data: Bytes,
     ) -> Vec<CancelHandler> {
         let mut handlers = Vec::new();
+        debug!("Broadcasting {} bytes", data.len() * addresses.len());
         for address in addresses {
             let handler = self.send(address, data.clone()).await;
             handlers.push(handler);
