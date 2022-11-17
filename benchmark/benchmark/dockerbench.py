@@ -140,11 +140,11 @@ class DockerBench:
         timeout = node_parameters.timeout_delay
         client_logs = [PathMaker.client_log_file(i) for i in range(len(hosts))]
         number_of_clients = 0
-        for container, addr, log_file in zip(self.docker_client.containers.list(), addresses, client_logs):
+        for container, log_file in zip(self.docker_client.containers.list(), client_logs):
             if number_of_clients >= max_clients:
                 rate_share = 0
             cmd = CommandMaker.run_client(
-                addr,
+                f'127.0.0.1:{self.settings["front_port"]}',
                 bench_parameters.tx_size,
                 rate_share,
                 timeout,
