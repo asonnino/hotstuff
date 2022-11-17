@@ -24,7 +24,7 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 pub mod mempool_tests;
 
 /// The default channel capacity for each channel of the mempool.
-pub const CHANNEL_CAPACITY: usize = 1_000;
+pub const CHANNEL_CAPACITY: usize = 100_000;
 
 /// The consensus round number.
 pub type Round = u64;
