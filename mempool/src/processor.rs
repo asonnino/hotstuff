@@ -1,7 +1,7 @@
 use bytes::Bytes;
 use crypto::{Digest, PublicKey};
 use futures::future::join_all;
-use log::debug;
+use log::{debug, warn};
 use network::ReliableSender;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -93,7 +93,9 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
                     join_all(handlers).await;
                 });
             }
-            debug!("tx_digest capacity: {:?}", self.tx_digest.capacity());
+            if self.tx_digest.capacity() < 10 {
+                warn!("tx_digest capacity: {:?}", self.tx_digest.capacity());
+            }
             debug!("Sending digest {} to consensus", &digest);
             self.tx_digest
                 .send(digest)

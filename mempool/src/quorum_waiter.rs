@@ -5,7 +5,7 @@ use crypto::{Digest, PublicKey};
 use futures::future::join_all;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt as _;
-use log::{debug, info};
+use log::{debug, info, warn};
 use network::ReliableSender;
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
@@ -120,7 +120,9 @@ impl QuorumWaiter {
                             if block_in_process.stake >= self.committee.quorum_threshold() {
                                 // Deliver the batch
                                 let block_in_process = stake_map.remove(&digest).expect("The block should be in the map");
-                                debug!("tx_batch capacity: {:?}", self.tx_batch.capacity());
+                                if self.tx_batch.capacity() < 10 {
+                                    warn!("tx_batch_ack capacity: {:?}", self.tx_batch.capacity());
+                                }
                                 let _ = self.tx_batch.send((block_in_process.block, digest, self.name)).await;
                             }
                         }
