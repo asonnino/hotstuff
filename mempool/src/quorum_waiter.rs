@@ -10,6 +10,7 @@ use network::ReliableSender;
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::task::yield_now;
 use tokio::time::{sleep, Duration};
 
 #[cfg(test)]
@@ -87,9 +88,35 @@ impl QuorumWaiter {
 
     /// Main loop.
     async fn run(&mut self) {
-        let mut stake_map = HashMap::new();
+        let mut stake_map = HashMap::<Digest, BlockInProcess>::new();
         let mut my_block_queue = FuturesUnordered::new();
         loop {
+            // Handle acknowledgements.
+            while let Ok((peer, digest)) = self.rx_ack.try_recv() {
+                debug!(
+                    "Received ack from {:?} for {:?}",
+                    self.committee.mempool_address(&peer),
+                    digest
+                );
+                // Check if an ack was not already received from this peer
+                if let Some(block_in_process) = stake_map.get_mut(&digest) {
+                    if block_in_process.acks.insert(peer) {
+                        // Update the stake and read it
+                        block_in_process.stake += self.committee.stake(&peer);
+                        if block_in_process.stake >= self.committee.quorum_threshold() {
+                            // Deliver the batch
+                            let block_in_process = stake_map
+                                .remove(&digest)
+                                .expect("The block should be in the map");
+                            debug!("tx_batch capacity: {:?}", self.tx_batch.capacity());
+                            let _ = self
+                                .tx_batch
+                                .send((block_in_process.block, digest, self.name))
+                                .await;
+                        }
+                    }
+                }
+            }
             tokio::select! {
                 // Broadcast the batch to the network.
                 Some(batch) = self.rx_message.recv() => {
@@ -108,23 +135,6 @@ impl QuorumWaiter {
 
                     // Spawn a new task to wait for the handlers
                     tokio::spawn(async move { join_all(handlers).await });
-                },
-                // Handle acknowledgements.
-                Some((peer, digest)) = self.rx_ack.recv() => {
-                    debug!("Received ack from {:?} for {:?}", self.committee.mempool_address(&peer), digest);
-                    // Check if an ack was not already received from this peer
-                    if let Some(block_in_process) = stake_map.get_mut(&digest) {
-                        if block_in_process.acks.insert(peer){
-                            // Update the stake and read it
-                            block_in_process.stake += self.committee.stake(&peer);
-                            if block_in_process.stake >= self.committee.quorum_threshold() {
-                                // Deliver the batch
-                                let block_in_process = stake_map.remove(&digest).expect("The block should be in the map");
-                                debug!("tx_batch capacity: {:?}", self.tx_batch.capacity());
-                                let _ = self.tx_batch.send((block_in_process.block, digest, self.name)).await;
-                            }
-                        }
-                    }
                 },
                 Some((digest, index)) = my_block_queue.next() => {
                     // For each (digest, index) in the queue, send the batch to the indirect peer for which no ack was received
@@ -151,6 +161,7 @@ impl QuorumWaiter {
                     }
                 },
             }
+            yield_now().await;
         }
     }
 }

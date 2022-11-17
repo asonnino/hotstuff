@@ -13,15 +13,15 @@ from benchmark.remote import Bench, BenchError
 def docker(ctx):
     """run a benchmark on docker"""
     bench_params = {
-        'faults': 0,                    # Number of faults
-        'nodes': 30,                    # Number of nodes
-        'clients': 1,                   # Number of clients
-        'rate': [30000],                # Total rate of transactions per second
-        'tx_size': 512,                 # Transaction size in bytes
-        'duration': 20,                 # Duration in s
-        'latency': 10,                  # Latency in ms
-        'bandwidth': "1000",            # Bandwidth in Mbps
-        'topology': 'binomial',         # 'kauri', 'fullmesh', 'binomial'
+        'faults': 0,                     # Number of faults
+        'nodes': 10,                     # Number of nodes
+        'clients': 1,                    # Number of clients
+        'rate': [50000],                # Total rate of transactions per second
+        'tx_size': 512,                  # Transaction size in bytes
+        'duration': 60,                  # Duration in s
+        'latency': 0,                    # Latency in ms
+        'bandwidth': "",                 # Bandwidth in Mbps
+        'topology': 'binomial',          # 'kauri', 'fullmesh', 'binomial'
     }
     node_params = {
         'consensus': {
@@ -38,6 +38,8 @@ def docker(ctx):
         }
     }
     settings = dict({
+        "branch" : "main",
+        "repo_name" : "SuperHotStuff",
         "consensus_port": 8000,
         "mempool_port": 7000,
         "front_port": 6000
@@ -57,14 +59,14 @@ def local(ctx):
         'faults': 0,
         'nodes': 10,
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': 100000,
+        'rate': 50000,
         'tx_size': 512,
-        'duration': 20,
-        'topology': 'binomial',
+        'duration': 60,
+        'topology': 'fullmesh',
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 5_000,
+            'timeout_delay': 1_000,
             'sync_retry_delay': 10_000,
         },
         'mempool': {
@@ -84,7 +86,7 @@ def local(ctx):
 
 
 @task
-def create(ctx, nodes=2):
+def create(ctx, nodes=29):
     ''' Create a testbed'''
     try:
         InstanceManager.make().create_instances(nodes)
@@ -102,7 +104,7 @@ def destroy(ctx):
 
 
 @task
-def start(ctx, max=30):
+def start(ctx, max=28):
     ''' Start at most `max` machines per data center '''
     try:
         InstanceManager.make().start_instances(max)
@@ -144,11 +146,11 @@ def remote(ctx):
         'faults': 0,
         'nodes': 29,
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': [150_000],
+        'rate': [100_000],
         'tx_size': 512,
         'duration': 30,
-        'runs': 1,
-        'topology': 'kauri',
+        'runs': 2,
+        'topology': 'fullmesh',
         'latency': 0,
         'bandwidth': "",
     }
@@ -161,7 +163,7 @@ def remote(ctx):
             'gc_depth': 50,
             'sync_retry_delay': 5_000,
             'sync_retry_nodes': 3,
-            'batch_size': 1_000_000,
+            'batch_size': 500_000,
             'max_batch_delay': 100,
             'fanout' : 3,
         }
