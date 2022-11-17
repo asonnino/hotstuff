@@ -219,6 +219,7 @@ impl Core {
 
             // Make a new block if we are the next leader.
             if self.name == self.leader_elector.get_leader(self.round) {
+                debug!("V: Generating proposal for round {}", self.round);
                 self.generate_proposal(None).await;
             }
         }
@@ -260,6 +261,7 @@ impl Core {
 
             // Make a new block if we are the next leader.
             if self.name == self.leader_elector.get_leader(self.round) {
+                debug!("Timeout : Generating proposal for round {}", self.round);
                 self.generate_proposal(Some(tc)).await;
             }
         }
@@ -280,7 +282,6 @@ impl Core {
     }
 
     async fn generate_proposal(&mut self, tc: Option<TC>) {
-        debug!("Generating proposal for round {}", self.round);
         if self.tx_proposer.capacity() < 10 {
             warn!("tx_proposer capacity {}", self.tx_proposer.capacity());
         }
@@ -405,6 +406,7 @@ impl Core {
     async fn handle_tc(&mut self, tc: TC) -> ConsensusResult<()> {
         self.advance_round(tc.round);
         if self.name == self.leader_elector.get_leader(self.round) {
+            debug!("TC : Generating proposal for round {}", self.round);
             self.generate_proposal(Some(tc)).await;
         }
         Ok(())
