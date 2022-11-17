@@ -104,7 +104,7 @@ def destroy(ctx):
 
 
 @task
-def start(ctx, max=28):
+def start(ctx, max=29):
     ''' Start at most `max` machines per data center '''
     try:
         InstanceManager.make().start_instances(max)
@@ -145,11 +145,11 @@ def remote(ctx):
     bench_params = {
         'faults': 0,
         'nodes': 29,
-        'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': [100_000],
+        'clients': 29,  # Must be the same length as nodes or an integer
+        'rate': [150_000],
         'tx_size': 512,
         'duration': 30,
-        'runs': 2,
+        'runs': 1,
         'topology': 'fullmesh',
         'latency': 0,
         'bandwidth': "",

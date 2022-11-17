@@ -149,6 +149,9 @@ impl Core {
                 }
             }
             debug!("Committed {:?}", block);
+            if self.tx_commit.capacity() < 10 {
+                warn!("tx_commit capacity {}", self.tx_commit.capacity());
+            }
             if let Err(e) = self.tx_commit.send(block).await {
                 warn!("Failed to send block through the commit channel: {}", e);
             }
@@ -281,6 +284,9 @@ impl Core {
 
     #[async_recursion]
     async fn generate_proposal(&mut self, tc: Option<TC>) {
+        if self.tx_proposer.capacity() < 10 {
+            warn!("tx_proposer capacity {}", self.tx_proposer.capacity());
+        }
         self.tx_proposer
             .send(ProposerMessage::Make(self.round, self.high_qc.clone(), tc))
             .await
@@ -295,6 +301,9 @@ impl Core {
             .chain(b1.payload.iter().cloned())
             .chain(block.payload.iter().cloned())
             .collect();
+        if self.tx_proposer.capacity() < 10 {
+            warn!("tx_proposer capacity {}", self.tx_proposer.capacity());
+        }
         self.tx_proposer
             .send(ProposerMessage::Cleanup(digests))
             .await

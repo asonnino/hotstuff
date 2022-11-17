@@ -5,7 +5,7 @@ use bytes::Bytes;
 use crypto::{Digest, PublicKey, SignatureService};
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
-use log::{debug, info};
+use log::{debug, info, warn};
 use network::{CancelHandler, ReliableSender};
 use std::collections::HashSet;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -97,6 +97,9 @@ impl Proposer {
             .await;
 
         // Send our block to the core for processing.
+        if self.tx_loopback.capacity() < 10 {
+            warn!("tx_loopback capacity {}", self.tx_loopback.capacity());
+        }
         self.tx_loopback
             .send(block)
             .await

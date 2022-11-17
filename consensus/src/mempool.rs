@@ -6,7 +6,7 @@ use crypto::Hash as _;
 use futures::future::try_join_all;
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
-use log::error;
+use log::{error, warn};
 use mempool::ConsensusMempoolMessage;
 use std::collections::HashMap;
 use store::Store;
@@ -50,11 +50,19 @@ impl MempoolDriver {
         }
 
         let message = ConsensusMempoolMessage::Synchronize(missing.clone(), block.author);
+        if self.tx_mempool.capacity() < 10 {
+            warn!("tx_mempool capacity {}", self.tx_mempool.capacity());
+        }
         self.tx_mempool
             .send(message)
             .await
             .expect("Failed to send sync message");
-
+        if self.tx_payload_waiter.capacity() < 10 {
+            warn!(
+                "tx_payload_waiter capacity {}",
+                self.tx_payload_waiter.capacity()
+            );
+        }
         self.tx_payload_waiter
             .send(PayloadWaiterMessage::Wait(missing, Box::new(block)))
             .await
@@ -65,11 +73,19 @@ impl MempoolDriver {
 
     pub async fn cleanup(&mut self, round: Round) {
         // Cleanup the mempool.
+        if self.tx_mempool.capacity() < 10 {
+            warn!("tx_mempool capacity {}", self.tx_mempool.capacity());
+        }
         self.tx_mempool
             .send(ConsensusMempoolMessage::Cleanup(round))
             .await
             .expect("Failed to send cleanup message");
-
+        if self.tx_payload_waiter.capacity() < 10 {
+            warn!(
+                "tx_payload_waiter capacity {}",
+                self.tx_payload_waiter.capacity()
+            );
+        }
         // Cleanup the payload waiter.
         self.tx_payload_waiter
             .send(PayloadWaiterMessage::Cleanup(round))
@@ -158,6 +174,12 @@ impl PayloadWaiter {
                     match result {
                         Ok(Some(block)) => {
                             let _ = pending.remove(&block.digest());
+                            if self.tx_loopback.capacity() < 10 {
+                                warn!(
+                                    "tx_loopback capacity {}",
+                                    self.tx_loopback.capacity()
+                                );
+                            }
                             self.tx_loopback.send(*block).await.expect("Failed to send consensus message");
                         },
                         Ok(None) => (),

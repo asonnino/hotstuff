@@ -84,6 +84,7 @@ async fn handle_proposal() {
 
     // Send a block to the core.
     let message = ConsensusMessage::Propose(block.clone());
+
     tx_core.send(message).await.unwrap();
 
     // Ensure the next leaders gets the vote.

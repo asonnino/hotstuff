@@ -7,7 +7,7 @@ use crypto::Hash as _;
 use crypto::{Digest, PublicKey};
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
-use log::{debug, error};
+use log::{debug, error, warn};
 use network::SimpleSender;
 use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -75,6 +75,12 @@ impl Synchronizer {
                         Ok(block) => {
                             let _ = pending.remove(&block.digest());
                             let _ = requests.remove(block.parent());
+                            if tx_loopback.capacity() < 10 {
+                                warn!(
+                                    "tx_loopback capacity {}",
+                                    tx_loopback.capacity()
+                                );
+                            }
                             if let Err(e) = tx_loopback.send(block).await {
                                 panic!("Failed to send message through core channel: {}", e);
                             }
