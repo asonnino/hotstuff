@@ -25,7 +25,7 @@ def docker(ctx):
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 1_000,
+            'timeout_delay': 5_000,
             'sync_retry_delay': 10_000,
         },
         'mempool': {
@@ -57,16 +57,16 @@ def local(ctx):
     ''' Run benchmarks on localhost '''
     bench_params = {
         'faults': 0,
-        'nodes': 10,
-        'clients': 10,  # Must be the same length as nodes or an integer
-        'rate': 1000,
+        'nodes': 30,
+        'clients': 30,  # Must be the same length as nodes or an integer
+        'rate': 50000,
         'tx_size': 512,
-        'duration': 60,
+        'duration': 20,
         'topology': 'fullmesh',
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 1_000,
+            'timeout_delay': 5_000,
             'sync_retry_delay': 10_000,
         },
         'mempool': {
