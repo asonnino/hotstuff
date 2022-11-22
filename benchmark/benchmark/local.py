@@ -86,7 +86,7 @@ class LocalBench:
                     self.tx_size,
                     rate_share,
                     timeout,
-                    nodes=addresses
+                    #nodes=addresses
                 )
                 self._background_run(cmd, log_file)
 
