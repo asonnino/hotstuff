@@ -49,10 +49,10 @@ async fn wait_block<T>(duration: Duration, value: T) -> T {
 }
 
 // Duration before sending batches to the indirect peers if no ack was received
-const INDIRECT_PEERS_TIMEOUT: Duration = Duration::from_millis(500);
+const INDIRECT_PEERS_TIMEOUT: Duration = Duration::from_millis(1500);
 
 // Duration before sending a batch to a second indirect peer when we already sent it to one
-const SLOW_PEERS_TIMEOUT: Duration = Duration::from_millis(50);
+const SLOW_PEERS_TIMEOUT: Duration = Duration::from_millis(200);
 
 impl QuorumWaiter {
     /// Spawn a new QuorumWaiter.
@@ -138,6 +138,7 @@ impl QuorumWaiter {
                             let (peer, address) = self.indirect_peers[i];
                             if !block_in_process.acks.contains(&peer) {
                                 // Send the batch to the indirect peer
+                                debug!("Sending batch {:?} to indirect peer {:?}", digest, &peer);
                                 let handler = self
                                     .network
                                     .send(address, Bytes::from(block_in_process.block.clone()))
