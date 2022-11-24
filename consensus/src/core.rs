@@ -8,7 +8,6 @@ use crate::messages::{Block, Timeout, Vote, QC, TC};
 use crate::proposer::ProposerMessage;
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
-use async_recursion::async_recursion;
 use bytes::Bytes;
 use crypto::Hash as _;
 use crypto::{PublicKey, SignatureService};
@@ -42,6 +41,7 @@ pub struct Core {
     timer: Timer,
     aggregator: Aggregator,
     network: SimpleSender,
+    last_proposed_round: Round,
 }
 
 impl Core {
@@ -80,6 +80,7 @@ impl Core {
                 timer: Timer::new(timeout_delay),
                 aggregator: Aggregator::new(committee),
                 network: SimpleSender::new(),
+                last_proposed_round: 0,
             }
             .run()
             .await
@@ -202,7 +203,6 @@ impl Core {
         self.handle_timeout(&timeout).await
     }
 
-    #[async_recursion]
     async fn handle_vote(&mut self, vote: &Vote) -> ConsensusResult<()> {
         debug!("Processing {:?}", vote);
         if vote.round < self.round {
@@ -244,7 +244,7 @@ impl Core {
             debug!("Assembled {:?}", tc);
 
             // Try to advance the round.
-            self.advance_round(tc.round).await;
+            self.advance_round(tc.round);
 
             // Broadcast the TC.
             debug!("Broadcasting {:?}", tc);
@@ -268,29 +268,35 @@ impl Core {
         Ok(())
     }
 
-    #[async_recursion]
-    async fn advance_round(&mut self, round: Round) {
+    fn advance_round(&mut self, round: Round) {
         if round < self.round {
             return;
         }
         // Reset the timer and advance round.
         self.timer.reset();
         self.round = round + 1;
-        debug!("Moved to round {}", self.round);
+        debug!(
+            "Moved to round {}, leader : {}",
+            self.round,
+            self.leader_elector.get_leader(self.round)
+        );
 
         // Cleanup the vote aggregator.
         self.aggregator.cleanup(&self.round);
     }
 
-    #[async_recursion]
     async fn generate_proposal(&mut self, tc: Option<TC>) {
         if self.tx_proposer.capacity() < 10 {
             warn!("tx_proposer capacity {}", self.tx_proposer.capacity());
         }
-        self.tx_proposer
-            .send(ProposerMessage::Make(self.round, self.high_qc.clone(), tc))
-            .await
-            .expect("Failed to send message to proposer");
+        if self.last_proposed_round < self.round {
+            self.last_proposed_round = self.round;
+            debug!("Generating proposal for round {}", self.round);
+            self.tx_proposer
+                .send(ProposerMessage::Make(self.round, self.high_qc.clone(), tc))
+                .await
+                .expect("Failed to send message to proposer");
+        }
     }
 
     async fn cleanup_proposer(&mut self, b0: &Block, b1: &Block, block: &Block) {
@@ -311,11 +317,10 @@ impl Core {
     }
 
     async fn process_qc(&mut self, qc: &QC) {
-        self.advance_round(qc.round).await;
+        self.advance_round(qc.round);
         self.update_high_qc(qc);
     }
 
-    #[async_recursion]
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
         debug!("Processing {:?}", block);
 
@@ -334,13 +339,14 @@ impl Core {
 
         // Store the block only if we have already processed all its ancestors.
         self.store_block(block).await;
-
         self.cleanup_proposer(&b0, &b1, block).await;
 
         // Check if we can commit the head of the 2-chain.
         // Note that we commit blocks only if we have all its ancestors.
         if b0.round + 1 == b1.round {
+            debug!("Cleaning mempool driver {}", block.digest());
             self.mempool_driver.cleanup(b0.round).await;
+            debug!("Committing block {}", block.digest());
             self.commit(b0).await?;
         }
 
@@ -392,7 +398,7 @@ impl Core {
 
         // Process the TC (if any). This may also allow us to advance round.
         if let Some(ref tc) = block.tc {
-            self.advance_round(tc.round).await;
+            self.advance_round(tc.round);
         }
 
         // Let's see if we have the block's data. If we don't, the mempool
@@ -407,7 +413,8 @@ impl Core {
     }
 
     async fn handle_tc(&mut self, tc: TC) -> ConsensusResult<()> {
-        self.advance_round(tc.round).await;
+        debug!("Processing {:?}", tc);
+        self.advance_round(tc.round);
         if self.name == self.leader_elector.get_leader(self.round) {
             self.generate_proposal(Some(tc)).await;
         }

@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use bytes::Bytes;
 use crypto::{Digest, PublicKey};
 use futures::future::join_all;
@@ -7,6 +9,8 @@ use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::{mempool::MempoolMessage, Committee, Topology};
+
+const MAX_BEFORE_CLEANING: usize = 1000;
 
 #[cfg(test)]
 #[path = "tests/processor_tests.rs"]
@@ -63,7 +67,12 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
     }
 
     async fn run(&mut self) {
+        let mut seen = HashSet::new();
+        let mut count = 0;
         while let Some((batch, digest, source)) = self.rx_batch.recv().await {
+            if !seen.insert(digest.clone()) {
+                continue;
+            }
             self.store.write(digest.to_vec(), batch.clone()).await;
             if source != self.name {
                 // If peer is not the current node then the message was received by another peer and should be ack'd then relayed.
@@ -101,6 +110,12 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
                 .send(digest)
                 .await
                 .expect("Failed to send batch digest");
+            count += 1;
+            // If count is greater than MAX_BEFORE_CLEANING, clean the seen set and reset count.
+            if count > MAX_BEFORE_CLEANING {
+                seen.clear();
+                count = 0;
+            }
         }
     }
 }

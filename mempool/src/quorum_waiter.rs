@@ -111,10 +111,10 @@ impl QuorumWaiter {
                 },
                 // Handle acknowledgements.
                 Some((peer, digest)) = self.rx_ack.recv() => {
-                    debug!("Received ack from {:?} for {:?}", self.committee.mempool_address(&peer), digest);
                     // Check if an ack was not already received from this peer
                     if let Some(block_in_process) = stake_map.get_mut(&digest) {
                         if block_in_process.acks.insert(peer){
+                            debug!("Received ack from {:?} for {:?}", self.committee.mempool_address(&peer), digest);
                             // Update the stake and read it
                             block_in_process.stake += self.committee.stake(&peer);
                             if block_in_process.stake >= self.committee.quorum_threshold() {

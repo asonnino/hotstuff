@@ -3,7 +3,7 @@ use crate::error::NetworkError;
 use bytes::Bytes;
 use futures::sink::SinkExt as _;
 use futures::stream::StreamExt as _;
-use log::{info, warn};
+use log::{debug, info, warn};
 use rand::prelude::SliceRandom as _;
 use rand::rngs::SmallRng;
 use rand::SeedableRng as _;
@@ -78,12 +78,16 @@ impl ReliableSender {
         addresses: Vec<SocketAddr>,
         data: Bytes,
     ) -> Vec<CancelHandler> {
-        let mut handlers = Vec::new();
-        for address in addresses {
-            let handler = self.send(address, data.clone()).await;
-            handlers.push(handler);
+        if data.len() > 0 && addresses.len() > 0 {
+            let mut cancel_handlers = Vec::with_capacity(addresses.len());
+            debug!("Broadcasting {} bytes", data.len() * addresses.len());
+            for address in addresses {
+                cancel_handlers.push(self.send(address, data.clone()).await);
+            }
+            cancel_handlers
+        } else {
+            Vec::new()
         }
-        handlers
     }
 
     /// Pick a few addresses at random (specified by `nodes`) and send the message only to them.
@@ -197,6 +201,7 @@ impl Connection {
                 }
 
                 // Try to send the message.
+                debug!("Sending {} bytes to {}", data.len(), self.address);
                 match writer.send(data.clone()).await {
                     Ok(()) => {
                         // The message has been sent, we remove it from the buffer and add it to

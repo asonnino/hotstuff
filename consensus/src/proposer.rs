@@ -122,6 +122,8 @@ impl Proposer {
                 break;
             }
         }
+
+        tokio::spawn(async move { while let Some(_) = wait_for_quorum.next().await {} });
     }
 
     async fn run(&mut self) {
