@@ -145,12 +145,12 @@ def remote(ctx):
     bench_params = {
         'faults': 0,
         'nodes': 29,
-        'clients': 29,  # Must be the same length as nodes or an integer
-        'rate': [150_000],
+        'clients': 1,  # Must be the same length as nodes or an integer
+        'rate': [120_000],
         'tx_size': 512,
         'duration': 30,
         'runs': 1,
-        'topology': 'fullmesh',
+        'topology': 'binomial',
         'latency': 0,
         'bandwidth': "",
     }
@@ -169,7 +169,7 @@ def remote(ctx):
         }
     }
     try:
-        Bench(ctx).run(bench_params, node_params, debug=False)
+        Bench(ctx).run(bench_params, node_params, debug=True)
     except BenchError as e:
         Print.error(e)
 

@@ -41,7 +41,6 @@ pub struct Core {
     timer: Timer,
     aggregator: Aggregator,
     network: SimpleSender,
-    last_proposed_round: Round,
 }
 
 impl Core {
@@ -80,7 +79,6 @@ impl Core {
                 timer: Timer::new(timeout_delay),
                 aggregator: Aggregator::new(committee),
                 network: SimpleSender::new(),
-                last_proposed_round: 0,
             }
             .run()
             .await
@@ -289,14 +287,11 @@ impl Core {
         if self.tx_proposer.capacity() < 10 {
             warn!("tx_proposer capacity {}", self.tx_proposer.capacity());
         }
-        if self.last_proposed_round < self.round {
-            self.last_proposed_round = self.round;
-            debug!("Generating proposal for round {}", self.round);
-            self.tx_proposer
-                .send(ProposerMessage::Make(self.round, self.high_qc.clone(), tc))
-                .await
-                .expect("Failed to send message to proposer");
-        }
+        debug!("Generating proposal for round {}", self.round);
+        self.tx_proposer
+            .send(ProposerMessage::Make(self.round, self.high_qc.clone(), tc))
+            .await
+            .expect("Failed to send message to proposer");
     }
 
     async fn cleanup_proposer(&mut self, b0: &Block, b1: &Block, block: &Block) {
@@ -413,6 +408,9 @@ impl Core {
     }
 
     async fn handle_tc(&mut self, tc: TC) -> ConsensusResult<()> {
+        if tc.round < self.round {
+            return Ok(());
+        }
         debug!("Processing {:?}", tc);
         self.advance_round(tc.round);
         if self.name == self.leader_elector.get_leader(self.round) {
