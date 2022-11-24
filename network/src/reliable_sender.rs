@@ -78,13 +78,16 @@ impl ReliableSender {
         addresses: Vec<SocketAddr>,
         data: Bytes,
     ) -> Vec<CancelHandler> {
-        let mut handlers = Vec::new();
-        debug!("Broadcasting {} bytes", data.len() * addresses.len());
-        for address in addresses {
-            let handler = self.send(address, data.clone()).await;
-            handlers.push(handler);
+        if data.len() > 0 && addresses.len() > 0 {
+            let mut cancel_handlers = Vec::with_capacity(addresses.len());
+            debug!("Broadcasting {} bytes", data.len() * addresses.len());
+            for address in addresses {
+                cancel_handlers.push(self.send(address, data.clone()).await);
+            }
+            cancel_handlers
+        } else {
+            Vec::new()
         }
-        handlers
     }
 
     /// Pick a few addresses at random (specified by `nodes`) and send the message only to them.

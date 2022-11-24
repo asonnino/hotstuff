@@ -173,6 +173,8 @@ class LogParser:
         for sent, received in zip(self.sent_samples, self.received_samples):
             for tx_id, batch_id in received.items():
                 if batch_id in self.commits:
+                    if tx_id not in sent :
+                        Print.warn(f'Tx {tx_id} was received but not sent')
                     assert tx_id in sent  # We receive txs that we sent.
                     start = sent[tx_id]
                     end = self.commits[batch_id]
