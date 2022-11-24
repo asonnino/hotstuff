@@ -339,13 +339,14 @@ impl Core {
 
         // Store the block only if we have already processed all its ancestors.
         self.store_block(block).await;
-
         self.cleanup_proposer(&b0, &b1, block).await;
 
         // Check if we can commit the head of the 2-chain.
         // Note that we commit blocks only if we have all its ancestors.
         if b0.round + 1 == b1.round {
+            debug!("Cleaning mempool driver {}", block.digest());
             self.mempool_driver.cleanup(b0.round).await;
+            debug!("Committing block {}", block.digest());
             self.commit(b0).await?;
         }
 
@@ -412,6 +413,7 @@ impl Core {
     }
 
     async fn handle_tc(&mut self, tc: TC) -> ConsensusResult<()> {
+        debug!("Processing {:?}", tc);
         self.advance_round(tc.round);
         if self.name == self.leader_elector.get_leader(self.round) {
             self.generate_proposal(Some(tc)).await;

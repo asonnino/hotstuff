@@ -92,6 +92,7 @@ impl Synchronizer {
     }
 
     /// Main loop listening to the consensus' messages.
+    #[allow(unused_variables, unreachable_code)]
     async fn run(&mut self) {
         let mut waiting = FuturesUnordered::new();
 
@@ -103,6 +104,7 @@ impl Synchronizer {
                 // Handle consensus' messages.
                 Some(message) = self.rx_message.recv() => match message {
                     ConsensusMempoolMessage::Synchronize(digests, target) => {
+                        continue; // Remove in order to enable the synchronization.
                         let now = SystemTime::now()
                             .duration_since(UNIX_EPOCH)
                             .expect("Failed to measure time")

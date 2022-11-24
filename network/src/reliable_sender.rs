@@ -201,6 +201,7 @@ impl Connection {
                 }
 
                 // Try to send the message.
+                debug!("Sending {} bytes to {}", data.len(), self.address);
                 match writer.send(data.clone()).await {
                     Ok(()) => {
                         // The message has been sent, we remove it from the buffer and add it to

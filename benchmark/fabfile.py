@@ -58,11 +58,11 @@ def local(ctx):
     bench_params = {
         'faults': 0,
         'nodes': 30,
-        'clients': 30,  # Must be the same length as nodes or an integer
+        'clients': 1,  # Must be the same length as nodes or an integer
         'rate': 50000,
         'tx_size': 512,
         'duration': 20,
-        'topology': 'fullmesh',
+        'topology': 'binomial',
     }
     node_params = {
         'consensus': {
