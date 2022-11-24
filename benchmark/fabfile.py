@@ -15,13 +15,13 @@ def docker(ctx):
     bench_params = {
         'faults': 0,                     # Number of faults
         'nodes': 30,                     # Number of nodes
-        'clients': 30,                    # Number of clients
-        'rate': [50000],                # Total rate of transactions per second
+        'clients': 1,                    # Number of clients
+        'rate': [50000],                 # Total rate of transactions per second
         'tx_size': 512,                  # Transaction size in bytes
         'duration': 60,                  # Duration in s
         'latency': 0,                    # Latency in ms
         'bandwidth': "",                 # Bandwidth in Mbps
-        'topology': 'fullmesh',          # 'kauri', 'fullmesh', 'binomial'
+        'topology': 'binomial',          # 'kauri', 'fullmesh', 'binomial'
     }
     node_params = {
         'consensus': {
