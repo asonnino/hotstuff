@@ -4,7 +4,6 @@ use std::net::SocketAddr;
 
 use crate::Parameters;
 use crypto::PublicKey;
-use log::info;
 
 use crate::topologies::error::TopologyError;
 use crate::topologies::traits::{Topology, TopologyBuilder};
@@ -194,10 +193,6 @@ impl Topology for BinomialTreeTopology {
                 }
                 base >>= 1;
             }
-            info!(
-                "debug peers {}: broadcast_peers({}), my_index ={}, fixed_index = {}, sender_index = {}, res= {:?}",
-                self.name, sender, self.my_index, fixed_index, index, res
-            );
         }
         // Place the sender at the end of the list
         self.peers.rotate_right(index);
