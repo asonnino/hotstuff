@@ -29,8 +29,8 @@ pub struct KauriTopologyBuilder {
 }
 
 impl KauriTopology {
-    pub fn new(peers: Vec<(PublicKey, SocketAddr)>, fanout: usize, name: PublicKey) -> Self {
-        // peers.sort_by(|a, b| a.0.cmp(&b.0));
+    pub fn new(mut peers: Vec<(PublicKey, SocketAddr)>, fanout: usize, name: PublicKey) -> Self {
+        peers.sort_by(|a, b| a.0.cmp(&b.0));
         KauriTopology {
             peers,
             fanout,
@@ -48,8 +48,8 @@ pub struct BinomialTreeTopology {
 }
 
 impl BinomialTreeTopology {
-    pub fn new(peers: Vec<(PublicKey, SocketAddr)>, name: PublicKey) -> Self {
-        // peers.sort_by(|a, b| a.0.cmp(&b.0));
+    pub fn new(mut peers: Vec<(PublicKey, SocketAddr)>, name: PublicKey) -> Self {
+        peers.sort_by(|a, b| a.0.cmp(&b.0));
         let my_index = peers.iter().position(|(p, _)| p == &name).unwrap();
         BinomialTreeTopology {
             peers,
