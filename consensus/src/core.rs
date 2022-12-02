@@ -215,7 +215,7 @@ impl Core {
             debug!("Assembled {:?}", qc);
 
             // Process the QC.
-            self.process_qc(&qc).await;
+            self.process_qc(&qc);
 
             // Make a new block if we are the next leader.
             if self.name == self.leader_elector.get_leader(self.round) {
@@ -235,7 +235,7 @@ impl Core {
         timeout.verify(&self.committee)?;
 
         // Process the QC embedded in the timeout.
-        self.process_qc(&timeout.high_qc).await;
+        self.process_qc(&timeout.high_qc);
 
         // Add the new vote to our aggregator and see if we have a quorum.
         if let Some(tc) = self.aggregator.add_timeout(timeout.clone())? {
@@ -311,7 +311,7 @@ impl Core {
             .expect("Failed to send message to proposer");
     }
 
-    async fn process_qc(&mut self, qc: &QC) {
+    fn process_qc(&mut self, qc: &QC) {
         self.advance_round(qc.round);
         self.update_high_qc(qc);
     }
@@ -389,7 +389,7 @@ impl Core {
         block.verify(&self.committee)?;
 
         // Process the QC. This may allow us to advance round.
-        self.process_qc(&block.qc).await;
+        self.process_qc(&block.qc);
 
         // Process the TC (if any). This may also allow us to advance round.
         if let Some(ref tc) = block.tc {
