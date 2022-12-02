@@ -49,10 +49,10 @@ async fn wait_block<T>(duration: Duration, value: T) -> T {
 }
 
 // Duration before sending batches to the indirect peers if no ack was received
-const INDIRECT_PEERS_TIMEOUT: Duration = Duration::from_millis(1500);
+const INDIRECT_PEERS_TIMEOUT: Duration = Duration::from_millis(2500);
 
 // Duration before sending a batch to a second indirect peer when we already sent it to one
-const SLOW_PEERS_TIMEOUT: Duration = Duration::from_millis(200);
+const SLOW_PEERS_TIMEOUT: Duration = Duration::from_millis(400);
 
 impl QuorumWaiter {
     /// Spawn a new QuorumWaiter.

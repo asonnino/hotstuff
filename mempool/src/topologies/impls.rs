@@ -91,30 +91,33 @@ impl Topology for KauriTopology {
         let mut processes_on_level = 1;
         let mut res = Vec::new();
         let mut i = 0;
-        'building: while i < self.peers.len() {
+
+        'building: loop {
             let remaining = self.peers.len() - i;
             let max_fanout = remaining / processes_on_level;
             let curr_fanout = std::cmp::min(self.fanout, max_fanout);
 
             let mut start = i + processes_on_level;
-            if self.name == self.peers[i].0 {
-                for _ in 0..processes_on_level {
-                    for j in start..start + curr_fanout {
-                        if j >= self.peers.len() {
-                            break 'building;
-                        }
-                        res.push(self.peers[j]);
-                    }
-                    start += curr_fanout;
-                    i += 1;
+
+            for _ in 0..processes_on_level {
+                if i >= self.peers.len() || start >= self.peers.len() {
+                    break 'building;
                 }
-            } else {
-                i += processes_on_level;
+
+                if self.name == self.peers[i].0 {
+                    (start..min(start + curr_fanout, self.peers.len())).for_each(|j| {
+                        res.push(self.peers[j].clone());
+                    });
+                }
+                start += curr_fanout;
+                i += 1;
             }
             processes_on_level = min(curr_fanout * processes_on_level, remaining);
         }
+
         // Place the sender at the end of the list
         self.peers.rotate_right(index);
+
         res
     }
 

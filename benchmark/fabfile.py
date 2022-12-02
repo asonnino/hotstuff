@@ -59,10 +59,10 @@ def local(ctx):
         'faults': 0,
         'nodes': 30,
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': 50000,
+        'rate': 100000,
         'tx_size': 512,
         'duration': 20,
-        'topology': 'binomial',
+        'topology': 'kauri',
     }
     node_params = {
         'consensus': {
