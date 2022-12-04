@@ -101,15 +101,16 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
                 tokio::spawn(async move {
                     join_all(handlers).await;
                 });
+            } else {
+                if self.tx_digest.capacity() < 10 {
+                    warn!("tx_digest capacity: {:?}", self.tx_digest.capacity());
+                }
+                debug!("Sending digest {} to consensus", &digest);
+                self.tx_digest
+                    .send(digest)
+                    .await
+                    .expect("Failed to send batch digest");
             }
-            if self.tx_digest.capacity() < 10 {
-                warn!("tx_digest capacity: {:?}", self.tx_digest.capacity());
-            }
-            debug!("Sending digest {} to consensus", &digest);
-            self.tx_digest
-                .send(digest)
-                .await
-                .expect("Failed to send batch digest");
             count += 1;
             // If count is greater than MAX_BEFORE_CLEANING, clean the seen set and reset count.
             if count > MAX_BEFORE_CLEANING {

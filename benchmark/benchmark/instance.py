@@ -128,11 +128,17 @@ class InstanceManager:
         )
 
     def _get_ami(self, client):
-        # The AMI changes with regions.
+        # The AMI changes with regions. We created our own AMI for each region. Uncomment this code to use the default Ubuntu AMI.
+        # response = client.describe_images(
+        #     Filters=[{
+        #         'Name': 'description',
+        #         'Values': ['Canonical, Ubuntu, 20.04 LTS, arm64 focal image build on 2022-09-14']
+        #     }]
+        # )
         response = client.describe_images(
             Filters=[{
                 'Name': 'description',
-                'Values': ['Canonical, Ubuntu, 20.04 LTS, arm64 focal image build on 2022-09-14']
+                'Values': ['superhotstuff m6g8xl build on 04/12/2022']
             }]
         )
         return response['Images'][0]['ImageId']
