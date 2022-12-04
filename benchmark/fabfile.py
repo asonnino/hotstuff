@@ -38,7 +38,7 @@ def docker(ctx):
         }
     }
     settings = dict({
-        "branch" : "main",
+        "branch" : "refactoring_ack",
         "repo_name" : "SuperHotStuff",
         "consensus_port": 8000,
         "mempool_port": 7000,
@@ -59,7 +59,7 @@ def local(ctx):
         'faults': 0,
         'nodes': 30,
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': 100000,
+        'rate': 50000,
         'tx_size': 512,
         'duration': 20,
         'topology': 'fullmesh',

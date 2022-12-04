@@ -210,7 +210,6 @@ impl BatchMaker {
         let serialized = bincode::serialize(&message).expect("Failed to serialize our own batch");
 
         let digest = Digest::hash(&serialized);
-        let now_2 = Instant::now();
         self.stake_map.insert(
             digest.clone(),
             BlockInProcess {
@@ -219,8 +218,6 @@ impl BatchMaker {
                 acks: HashSet::new(),
             },
         );
-        let elapsed_2 = now_2.elapsed();
-        debug!("Inserting block in process took {:?}", elapsed_2);
         debug!(
             "Broadcasting batch {:?} to {:?}",
             digest, self.mempool_addresses
