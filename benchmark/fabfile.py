@@ -62,7 +62,7 @@ def local(ctx):
         'rate': 100000,
         'tx_size': 512,
         'duration': 20,
-        'topology': 'kauri',
+        'topology': 'fullmesh',
     }
     node_params = {
         'consensus': {

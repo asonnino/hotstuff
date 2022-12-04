@@ -56,32 +56,34 @@ impl QuorumWaiter {
 
     async fn handle_ack(&mut self, peer: PublicKey, digest: Digest) {
         // Check if an ack was not already received from this peer
-        if let Some(mut block_in_process) = self.stake_map.get_mut(&digest) {
-            if block_in_process.acks.insert(peer) {
-                debug!(
-                    "Received ack from {:?} for {:?}",
-                    self.committee.mempool_address(&peer),
-                    digest
-                );
-                // Update the stake and read it
-                block_in_process.stake += self.committee.stake(&peer);
-                if block_in_process.stake >= self.committee.quorum_threshold() {
-                    // Deliver the batch
-                    let (digest, block_in_process) = self
-                        .stake_map
-                        .remove(&digest)
-                        .expect("The block should be in the map");
-                    if self.tx_processor.capacity() < 10 {
-                        warn!(
-                            "tx_processor_ack capacity: {:?}",
-                            self.tx_processor.capacity()
-                        );
-                    }
-                    let _ = self
-                        .tx_processor
-                        .send((block_in_process.block, digest, self.name))
-                        .await;
+        let mut block_in_process = match self.stake_map.get_mut(&digest) {
+            Some(block_in_process) => block_in_process,
+            None => return,
+        };
+        if block_in_process.acks.insert(peer) {
+            debug!(
+                "Received ack from {:?} for {:?}",
+                self.committee.mempool_address(&peer),
+                digest
+            );
+            // Update the stake and read it
+            block_in_process.stake += self.committee.stake(&peer);
+            if block_in_process.stake >= self.committee.quorum_threshold() {
+                // Deliver the batch
+                let (digest, block_in_process) = self
+                    .stake_map
+                    .remove(&digest)
+                    .expect("The block should be in the map");
+                if self.tx_processor.capacity() < 10 {
+                    warn!(
+                        "tx_processor_ack capacity: {:?}",
+                        self.tx_processor.capacity()
+                    );
                 }
+                let _ = self
+                    .tx_processor
+                    .send((block_in_process.block, digest, self.name))
+                    .await;
             }
         }
     }

@@ -168,10 +168,6 @@ impl BatchMaker {
                 // Assemble client transactions into batches of preset size.
                 Some(transaction) = self.rx_transaction.recv() => {
                     self.single_transaction(transaction).await;
-                    // Handle every other transaction
-                    while let Ok(transaction) = self.rx_transaction.try_recv() {
-                        self.single_transaction(transaction).await;
-                    }
                     timer.as_mut().reset(Instant::now() + Duration::from_millis(self.max_batch_delay));
                 },
                 Some((digest, index)) = self.block_queue.next() => {
@@ -190,6 +186,7 @@ impl BatchMaker {
 
     /// Seal and broadcast the current batch.
     async fn seal(&mut self) {
+        let now = Instant::now();
         #[cfg(feature = "benchmark")]
         let size = self.current_batch_size;
 
@@ -213,6 +210,7 @@ impl BatchMaker {
         let serialized = bincode::serialize(&message).expect("Failed to serialize our own batch");
 
         let digest = Digest::hash(&serialized);
+        let now_2 = Instant::now();
         self.stake_map.insert(
             digest.clone(),
             BlockInProcess {
@@ -221,6 +219,8 @@ impl BatchMaker {
                 acks: HashSet::new(),
             },
         );
+        let elapsed_2 = now_2.elapsed();
+        debug!("Inserting block in process took {:?}", elapsed_2);
         debug!(
             "Broadcasting batch {:?} to {:?}",
             digest, self.mempool_addresses
@@ -239,6 +239,8 @@ impl BatchMaker {
         tokio::spawn(async move {
             join_all(handlers).await;
         });
+        let duration = now.elapsed();
+        debug!("Batch sealed in {:?}", duration);
 
         #[cfg(feature = "benchmark")]
         {
