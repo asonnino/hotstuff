@@ -59,10 +59,10 @@ def local(ctx):
         'faults': 0,
         'nodes': 30,
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': 50000,
+        'rate': 100000,
         'tx_size': 512,
         'duration': 20,
-        'topology': 'fullmesh',
+        'topology': 'binomial',
     }
     node_params = {
         'consensus': {
@@ -79,7 +79,7 @@ def local(ctx):
         }
     }
     try:
-        ret = LocalBench(bench_params, node_params).run(debug=True).result()
+        ret = LocalBench(bench_params, node_params).run(debug=False).result()
         print(ret)
     except BenchError as e:
         Print.error(e)
