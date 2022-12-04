@@ -106,7 +106,7 @@ impl Topology for KauriTopology {
 
                 if self.name == self.peers[i].0 {
                     (start..min(start + curr_fanout, self.peers.len())).for_each(|j| {
-                        res.push(self.peers[j].clone());
+                        res.push(self.peers[j]);
                     });
                 }
                 start += curr_fanout;

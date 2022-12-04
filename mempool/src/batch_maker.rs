@@ -1,17 +1,11 @@
 use crate::config::Stake;
 use crate::mempool::MempoolMessage;
 use bytes::Bytes;
-#[cfg(feature = "benchmark")]
-use crypto::Digest;
 use crypto::{Digest, PublicKey};
 use dashmap::DashMap;
-#[cfg(feature = "benchmark")]
-use ed25519_dalek::{Digest as _, Sha512};
 use futures::future::join_all;
 use futures::stream::FuturesUnordered;
 use futures::{Future, StreamExt};
-#[cfg(feature = "benchmark")]
-use log::info;
 use log::{debug, info};
 use network::ReliableSender;
 use serde::{Deserialize, Serialize};
@@ -70,8 +64,10 @@ pub struct BatchMaker {
     /// Network sender to broadcast the batches to the other mempools.
     network: ReliableSender,
     /// block_queue to program sending batches to indirect_peers.
-    block_queue: FuturesUnordered<Pin<Box<dyn Future<Output = (Digest, usize)> + Send>>>,
+    block_queue: FuturesUnordered<IndirectPeerFuture>,
 }
+
+type IndirectPeerFuture = Pin<Box<dyn Future<Output = (Digest, usize)> + Send>>;
 
 /// Duration before sending batches to the indirect peers if no ack was received
 pub const INDIRECT_PEERS_TIMEOUT: Duration = Duration::from_millis(2500);
@@ -181,7 +177,6 @@ impl BatchMaker {
                 Some((digest, index)) = self.block_queue.next() => {
                     self.send_to_indirect_peers(digest, index).await;
                 },
-
                 // If the timer triggers, seal the batch even if it contains few transactions.
                 () = &mut timer => {
                     if !self.current_batch.is_empty() {
@@ -190,9 +185,6 @@ impl BatchMaker {
                     timer.as_mut().reset(Instant::now() + Duration::from_millis(self.max_batch_delay));
                 }
             }
-
-            // Give the change to schedule other tasks.
-            tokio::task::yield_now().await;
         }
     }
 
@@ -238,8 +230,10 @@ impl BatchMaker {
             .broadcast(self.mempool_addresses.clone(), Bytes::from(serialized))
             .await;
 
-        self.block_queue
-            .push(Box::pin(wait_block(INDIRECT_PEERS_TIMEOUT, (digest, 0))));
+        self.block_queue.push(Box::pin(wait_block(
+            INDIRECT_PEERS_TIMEOUT,
+            (digest.clone(), 0),
+        )));
 
         // Spawn a new task to wait for the handlers
         tokio::spawn(async move {

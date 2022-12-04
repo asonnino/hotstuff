@@ -78,7 +78,7 @@ impl ReliableSender {
         addresses: Vec<SocketAddr>,
         data: Bytes,
     ) -> Vec<CancelHandler> {
-        if data.len() > 0 && addresses.len() > 0 {
+        if !data.is_empty() && !addresses.is_empty() {
             let mut cancel_handlers = Vec::with_capacity(addresses.len());
             debug!("Broadcasting {} bytes", data.len() * addresses.len());
             for address in addresses {
