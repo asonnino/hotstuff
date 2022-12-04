@@ -146,11 +146,11 @@ def remote(ctx):
         'faults': 0,
         'nodes': 30,
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': [50_000],
+        'rate': [80_000],
         'tx_size': 512,
         'duration': 30,
         'runs': 1,
-        'topology': 'binomial',
+        'topology': 'kauri',
         'latency': 0,
         'bandwidth': "",
     }
