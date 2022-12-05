@@ -16,6 +16,7 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
+use tokio::task::yield_now;
 use tokio::time::{sleep, timeout, Duration, Instant};
 
 #[cfg(test)]
@@ -70,7 +71,7 @@ pub struct BatchMaker {
 type IndirectPeerFuture = Pin<Box<dyn Future<Output = (Digest, usize)> + Send>>;
 
 /// Duration before sending batches to the indirect peers if no ack was received
-pub const INDIRECT_PEERS_TIMEOUT: Duration = Duration::from_millis(2500);
+pub const INDIRECT_PEERS_TIMEOUT: Duration = Duration::from_millis(10000);
 
 /// Duration before sending a batch to a second indirect peer when we already sent it to one
 pub const SLOW_PEERS_TIMEOUT: Duration = Duration::from_millis(400);
@@ -253,5 +254,6 @@ impl BatchMaker {
             // NOTE: This log entry is used to compute performance.
             info!("Batch {:?} contains {} B", digest, size);
         }
+        yield_now().await;
     }
 }

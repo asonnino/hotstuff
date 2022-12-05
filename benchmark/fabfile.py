@@ -57,7 +57,7 @@ def local(ctx):
     ''' Run benchmarks on localhost '''
     bench_params = {
         'faults': 0,
-        'nodes': 30,
+        'nodes': 10,
         'clients': 1,  # Must be the same length as nodes or an integer
         'rate': 100000,
         'tx_size': 512,
@@ -104,7 +104,7 @@ def destroy(ctx):
 
 
 @task
-def start(ctx, max=1):
+def start(ctx, max=30):
     ''' Start at most `max` machines per data center '''
     try:
         InstanceManager.make().start_instances(max)
@@ -148,7 +148,7 @@ def remote(ctx):
         'clients': 1,  # Must be the same length as nodes or an integer
         'rate': [80_000],
         'tx_size': 512,
-        'duration': 30,
+        'duration': 60,
         'runs': 1,
         'topology': 'kauri',
         'latency': 0,
