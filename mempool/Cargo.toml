@@ -5,7 +5,7 @@ authors = ["Alberto Sonnino <asonnino@fb.com>", "Ali Benabdallah <ali.benabdalla
 edition = "2018"
 
 [dependencies]
-tokio = { version = "1.5.0", features = ["sync", "rt", "macros"] }
+tokio = { version = "1.5.0", features = ["sync", "rt-multi-thread", "macros"] }
 ed25519-dalek = "1.0.1"
 serde = { version = "1.0", features = ["derive"] }
 bytes = "1.0.1"
