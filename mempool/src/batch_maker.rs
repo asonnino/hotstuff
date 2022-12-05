@@ -16,6 +16,7 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
+use tokio::task::yield_now;
 use tokio::time::{sleep, timeout, Duration, Instant};
 
 #[cfg(test)]
@@ -253,5 +254,6 @@ impl BatchMaker {
             // NOTE: This log entry is used to compute performance.
             info!("Batch {:?} contains {} B", digest, size);
         }
+        yield_now().await;
     }
 }

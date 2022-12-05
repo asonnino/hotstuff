@@ -148,7 +148,7 @@ def remote(ctx):
         'clients': 1,  # Must be the same length as nodes or an integer
         'rate': [80_000],
         'tx_size': 512,
-        'duration': 30,
+        'duration': 60,
         'runs': 1,
         'topology': 'kauri',
         'latency': 0,
