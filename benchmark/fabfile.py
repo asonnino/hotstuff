@@ -57,12 +57,12 @@ def local(ctx):
     ''' Run benchmarks on localhost '''
     bench_params = {
         'faults': 0,
-        'nodes': 30,
+        'nodes': 10,
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': 50000,
+        'rate': 1000,
         'tx_size': 512,
-        'duration': 20,
-        'topology': 'fullmesh',
+        'duration': 5,
+        'topology': 'kauri',
     }
     node_params = {
         'consensus': {
