@@ -202,7 +202,7 @@ impl Connection {
 
                 // Try to send the message.
                 let now = Instant::now();
-                match writer.feed(data.clone()).await {
+                match writer.send(data.clone()).await {
                     Ok(()) => {
                         let duration = now.elapsed();
                         debug!(
