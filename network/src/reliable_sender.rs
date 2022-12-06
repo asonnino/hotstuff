@@ -14,7 +14,7 @@ use std::net::SocketAddr;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::oneshot;
-use tokio::time::{sleep, Duration};
+use tokio::time::{sleep, Duration, Instant};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 #[cfg(test)]
@@ -202,8 +202,16 @@ impl Connection {
 
                 // Try to send the message.
                 debug!("Sending {} bytes to {}", data.len(), self.address);
+                let now = Instant::now();
                 match writer.send(data.clone()).await {
                     Ok(()) => {
+                        let duration = now.elapsed();
+                        debug!(
+                            "Sent {} bytes to {} in {:?}",
+                            data.len(),
+                            self.address,
+                            duration
+                        );
                         // The message has been sent, we remove it from the buffer and add it to
                         // `pending_replies` while we wait for an ACK.
                         pending_replies.push_back((data, handler));

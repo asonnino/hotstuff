@@ -14,14 +14,14 @@ def docker(ctx):
     """run a benchmark on docker"""
     bench_params = {
         'faults': 0,                     # Number of faults
-        'nodes': 30,                     # Number of nodes
+        'nodes': 10,                     # Number of nodes
         'clients': 1,                    # Number of clients
-        'rate': [50000],                 # Total rate of transactions per second
+        'rate': [40000],                 # Total rate of transactions per second
         'tx_size': 512,                  # Transaction size in bytes
-        'duration': 60,                  # Duration in s
-        'latency': 0,                    # Latency in ms
+        'duration': 10,                  # Duration in s
+        'latency': 100,                    # Latency in ms
         'bandwidth': "",                 # Bandwidth in Mbps
-        'topology': 'binomial',          # 'kauri', 'fullmesh', 'binomial'
+        'topology': 'kauri',          # 'kauri', 'fullmesh', 'binomial'
     }
     node_params = {
         'consensus': {

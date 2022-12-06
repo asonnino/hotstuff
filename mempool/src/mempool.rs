@@ -12,7 +12,7 @@ use bytes::Bytes;
 use crypto::{Digest, PublicKey};
 use dashmap::DashMap;
 use futures::sink::SinkExt as _;
-use log::{debug, info, warn};
+use log::{info, warn};
 use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -20,7 +20,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio::time::Instant;
 
 #[cfg(test)]
 #[path = "tests/mempool_tests.rs"]
@@ -277,10 +276,7 @@ struct MempoolReceiverHandler {
 impl MessageHandler for MempoolReceiverHandler {
     async fn dispatch(&self, writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
         // Reply with an ACK.
-        let now = Instant::now();
         let _ = writer.send(Bytes::from("Ack")).await;
-        let elapsed = now.elapsed();
-        debug!("Ack sent in {:?}", elapsed);
         // Deserialize and parse the message.
         match bincode::deserialize(&serialized) {
             Ok(MempoolMessage::Batch(batch_with_sender)) => {
