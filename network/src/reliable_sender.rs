@@ -201,9 +201,8 @@ impl Connection {
                 }
 
                 // Try to send the message.
-                debug!("Sending {} bytes to {}", data.len(), self.address);
                 let now = Instant::now();
-                match writer.send(data.clone()).await {
+                match writer.feed(data.clone()).await {
                     Ok(()) => {
                         let duration = now.elapsed();
                         debug!(
