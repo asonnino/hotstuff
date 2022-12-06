@@ -146,7 +146,7 @@ def remote(ctx):
         'faults': 0,
         'nodes': 30,
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': [80_000],
+        'rate': [30_000],
         'tx_size': 512,
         'duration': 60,
         'runs': 1,
@@ -156,15 +156,15 @@ def remote(ctx):
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 5_000,
-            'sync_retry_delay': 5_000,
+            'timeout_delay': 10_000,
+            'sync_retry_delay': 10_000,
         },
         'mempool': {
             'gc_depth': 50,
-            'sync_retry_delay': 5_000,
+            'sync_retry_delay': 10_000,
             'sync_retry_nodes': 3,
             'batch_size': 500_000,
-            'max_batch_delay': 100,
+            'max_batch_delay': 200,
             'fanout' : 3,
         }
     }

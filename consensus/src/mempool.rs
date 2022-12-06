@@ -6,7 +6,7 @@ use crypto::Hash as _;
 use futures::future::try_join_all;
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt as _;
-use log::{error, warn};
+use log::{debug, error, warn};
 use mempool::ConsensusMempoolMessage;
 use std::collections::HashMap;
 use store::Store;
@@ -48,6 +48,7 @@ impl MempoolDriver {
         if missing.is_empty() {
             return Ok(true);
         }
+        debug!("Missing payload : {:?} round {}", missing, block.round);
 
         let message = ConsensusMempoolMessage::Synchronize(missing.clone(), block.author);
         if self.tx_mempool.capacity() < 10 {
