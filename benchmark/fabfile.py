@@ -38,7 +38,7 @@ def docker(ctx):
         }
     }
     settings = dict({
-        "branch" : "refactoring_ack",
+        "branch" : "main",
         "repo_name" : "SuperHotStuff",
         "consensus_port": 8000,
         "mempool_port": 7000,
@@ -57,12 +57,12 @@ def local(ctx):
     ''' Run benchmarks on localhost '''
     bench_params = {
         'faults': 0,
-        'nodes': 30,
+        'nodes': 10,
         'clients': 1,  # Must be the same length as nodes or an integer
         'rate': 100000,
         'tx_size': 512,
-        'duration': 20,
-        'topology': 'binomial',
+        'duration': 10,
+        'topology': 'kauri',
     }
     node_params = {
         'consensus': {
@@ -79,7 +79,7 @@ def local(ctx):
         }
     }
     try:
-        ret = LocalBench(bench_params, node_params).run(debug=False).result()
+        ret = LocalBench(bench_params, node_params).run(debug=True).result()
         print(ret)
     except BenchError as e:
         Print.error(e)
@@ -150,7 +150,7 @@ def remote(ctx):
         'tx_size': 512,
         'duration': 60,
         'runs': 1,
-        'topology': 'kauri',
+        'topology': 'fullmesh',
         'latency': 0,
         'bandwidth': "",
     }
