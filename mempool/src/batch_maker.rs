@@ -77,7 +77,7 @@ pub const INDIRECT_PEERS_TIMEOUT: Duration = Duration::from_millis(10000);
 pub const SLOW_PEERS_TIMEOUT: Duration = Duration::from_millis(400);
 
 /// Duration before dropping a handler
-pub const HANDLER_TIMEOUT: Duration = Duration::from_secs(10);
+pub const HANDLER_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Sleeps for `duration` and then returns the value.
 async fn wait_block<T>(duration: Duration, value: T) -> T {
@@ -235,7 +235,8 @@ impl BatchMaker {
 
         // Spawn a new task to wait for the handlers
         tokio::spawn(async move {
-            join_all(handlers).await;
+            // Join all with timeout
+            let _ = timeout(HANDLER_TIMEOUT, join_all(handlers)).await;
         });
         let duration = now.elapsed();
         debug!("Batch sealed in {:?}", duration);
