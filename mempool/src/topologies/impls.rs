@@ -140,11 +140,13 @@ impl Topology for KauriTopology {
         let mut i = 1;
 
         'building: loop {
-            let remaining = self.peers.len() - i;
+            let mut start = i + processes_on_level;
+            let remaining = self.peers.len() - start;
+            if remaining == 0 {
+                break 'building;
+            }
             let max_fanout = remaining / processes_on_level;
             let curr_fanout = std::cmp::min(self.fanout, max_fanout);
-
-            let mut start = i + processes_on_level;
 
             for _ in 0..processes_on_level {
                 if i >= self.peers.len() || start >= self.peers.len() {
