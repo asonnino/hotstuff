@@ -130,12 +130,15 @@ class BenchParameters:
 
             clients = json['clients']
             clients = clients if isinstance(clients, list) else [clients for _ in range(len(nodes))]
+
+            self.faults = int(json['faults'])
+
             # Must be the same length as nodes
 
             if not nodes or any(x <= 1 for x in nodes):
                 raise ConfigError('Missing or invalid number of nodes')
 
-            if not clients or any(x <= 0 for x in clients) or len(clients) != len(nodes) or any(x > y for x, y in zip(clients, nodes)):
+            if not clients or any(x <= 0 for x in clients) or len(clients) != len(nodes) or any(x > y - self.faults for x, y in zip(clients, nodes)):
                 raise ConfigError('Missing or invalid number of clients')
 
             rate = json['rate']
@@ -147,7 +150,6 @@ class BenchParameters:
             self.clients = [int(x) for x in clients]
             self.rate = [int(x) for x in rate]
             self.tx_size = int(json['tx_size'])
-            self.faults = int(json['faults'])
             self.duration = int(json['duration'])
             self.runs = int(json['runs']) if 'runs' in json else 1
             self.topology = Topology(json['topology'])
