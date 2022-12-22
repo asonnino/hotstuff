@@ -10,12 +10,14 @@ use crate::TopologyBuilder;
 use async_trait::async_trait;
 use bytes::Bytes;
 use crypto::{Digest, PublicKey};
+use dashmap::DashMap;
 use futures::sink::SinkExt as _;
 use log::{info, warn};
 use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
@@ -133,7 +135,6 @@ where
     /// Spawn all tasks responsible to handle clients transactions.
     fn handle_clients_transactions(&mut self, rx_ack: Receiver<(PublicKey, Digest)>) {
         let (tx_batch_maker, rx_batch_maker) = channel(10 * CHANNEL_CAPACITY);
-        let (tx_quorum_waiter, rx_quorum_waiter) = channel(CHANNEL_CAPACITY);
         let (tx_processor, rx_processor) = channel(CHANNEL_CAPACITY);
 
         // We first receive clients' transactions from the network.
@@ -147,15 +148,7 @@ where
             /* handler */ TxReceiverHandler { tx_batch_maker },
         );
 
-        // The transactions are sent to the `BatchMaker` that assembles them into batches.
-        BatchMaker::spawn(
-            self.name,
-            self.parameters.batch_size,
-            self.parameters.max_batch_delay,
-            /* rx_transaction */ rx_batch_maker,
-            /* tx_message */ tx_quorum_waiter,
-        );
-
+        let stake_map = Arc::new(DashMap::new());
         let (_, mempool_addresses): (Vec<_>, Vec<SocketAddr>) = self
             .topology
             .broadcast_peers(self.name)
@@ -163,8 +156,19 @@ where
             .iter()
             .cloned()
             .unzip();
-
         let indirect_peers = self.topology.indirect_peers();
+
+        // The transactions are sent to the `BatchMaker` that assembles them into batches.
+        BatchMaker::spawn(
+            self.name,
+            self.parameters.batch_size,
+            self.parameters.max_batch_delay,
+            /* rx_transaction */ rx_batch_maker,
+            stake_map.clone(),
+            mempool_addresses,
+            indirect_peers,
+            self.committee.stake(&self.name),
+        );
 
         // The `QuorumWaiter` broadcasts (in a reliable manner) the batches to all other mempools that
         // share the same `id` as us`. It waits for 2f authorities to acknowledge reception of the batch.
@@ -172,12 +176,9 @@ where
         QuorumWaiter::spawn(
             self.name,
             self.committee.clone(),
-            /* stake */ self.committee.stake(&self.name),
-            /* rx_message */ rx_quorum_waiter,
-            /* tx_batch */ tx_processor,
-            /* rx_ack */ rx_ack,
-            mempool_addresses,
-            indirect_peers,
+            tx_processor,
+            rx_ack,
+            stake_map,
         );
 
         // The `Processor` hashes and stores the batch. It then forwards the batch's digest to the consensus and to other nodes.

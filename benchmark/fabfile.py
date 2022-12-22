@@ -14,18 +14,18 @@ def docker(ctx):
     """run a benchmark on docker"""
     bench_params = {
         'faults': 0,                     # Number of faults
-        'nodes': 30,                     # Number of nodes
+        'nodes': 10,                     # Number of nodes
         'clients': 1,                    # Number of clients
-        'rate': [50000],                 # Total rate of transactions per second
+        'rate': [40000],                 # Total rate of transactions per second
         'tx_size': 512,                  # Transaction size in bytes
         'duration': 60,                  # Duration in s
-        'latency': 0,                    # Latency in ms
+        'latency': 100,                    # Latency in ms
         'bandwidth': "",                 # Bandwidth in Mbps
-        'topology': 'binomial',          # 'kauri', 'fullmesh', 'binomial'
+        'topology': 'kauri',          # 'kauri', 'fullmesh', 'binomial'
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 5_000,
+            'timeout_delay': 10_000,
             'sync_retry_delay': 10_000,
         },
         'mempool': {
@@ -33,12 +33,12 @@ def docker(ctx):
             'sync_retry_delay': 5_000,
             'sync_retry_nodes': 3,
             'batch_size': 500_000,
-            'max_batch_delay': 50,
+            'max_batch_delay': 200,
             'fanout': 3,
         }
     }
     settings = dict({
-        "branch" : "main",
+        "branch" : "refactoring_ack",
         "repo_name" : "SuperHotStuff",
         "consensus_port": 8000,
         "mempool_port": 7000,
@@ -57,11 +57,11 @@ def local(ctx):
     ''' Run benchmarks on localhost '''
     bench_params = {
         'faults': 0,
-        'nodes': 30,
+        'nodes': 10,
         'clients': 1,  # Must be the same length as nodes or an integer
         'rate': 100000,
         'tx_size': 512,
-        'duration': 20,
+        'duration': 10,
         'topology': 'kauri',
     }
     node_params = {
@@ -104,7 +104,7 @@ def destroy(ctx):
 
 
 @task
-def start(ctx, max=1):
+def start(ctx, max=30):
     ''' Start at most `max` machines per data center '''
     try:
         InstanceManager.make().start_instances(max)
@@ -146,25 +146,25 @@ def remote(ctx):
         'faults': 0,
         'nodes': 30,
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': [50_000],
+        'rate': [30_000],
         'tx_size': 512,
-        'duration': 30,
+        'duration': 60,
         'runs': 1,
-        'topology': 'binomial',
+        'topology': 'fullmesh',
         'latency': 0,
         'bandwidth': "",
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 5_000,
-            'sync_retry_delay': 5_000,
+            'timeout_delay': 10_000,
+            'sync_retry_delay': 10_000,
         },
         'mempool': {
             'gc_depth': 50,
-            'sync_retry_delay': 5_000,
+            'sync_retry_delay': 10_000,
             'sync_retry_nodes': 3,
             'batch_size': 500_000,
-            'max_batch_delay': 100,
+            'max_batch_delay': 200,
             'fanout' : 3,
         }
     }

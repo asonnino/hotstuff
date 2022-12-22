@@ -6,7 +6,7 @@ edition = "2018"
 publish = false
 
 [dependencies]
-tokio = { version = "1.5.0", features = ["rt", "net", "sync", "macros", "time"] }
+tokio = { version = "1.5.0", features = ["rt-multi-thread", "net", "sync", "macros", "time"] }
 tokio-util = { version = "0.7.3", features = ["codec"] }
 thiserror = "1.0.24"
 bytes = "1.0.1"

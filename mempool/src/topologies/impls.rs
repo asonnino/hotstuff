@@ -93,11 +93,13 @@ impl Topology for KauriTopology {
         let mut i = 0;
 
         'building: loop {
-            let remaining = self.peers.len() - i;
-            let max_fanout = remaining / processes_on_level;
-            let curr_fanout = std::cmp::min(self.fanout, max_fanout);
-
             let mut start = i + processes_on_level;
+            let remaining = self.peers.len() - start;
+            if remaining == 0 {
+                break 'building;
+            }
+            let max_fanout = remaining / processes_on_level;
+            let curr_fanout = min(self.fanout, max_fanout);
 
             for _ in 0..processes_on_level {
                 if i >= self.peers.len() || start >= self.peers.len() {
@@ -106,7 +108,7 @@ impl Topology for KauriTopology {
 
                 if self.name == self.peers[i].0 {
                     (start..min(start + curr_fanout, self.peers.len())).for_each(|j| {
-                        res.push(self.peers[j].clone());
+                        res.push(self.peers[j]);
                     });
                 }
                 start += curr_fanout;
@@ -123,14 +125,46 @@ impl Topology for KauriTopology {
 
     fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr)> {
         // Returns the difference of self.peers and self.broadcast_peers(self.name)
-        let broadcast_set: HashSet<(PublicKey, SocketAddr)> =
-            self.broadcast_peers(self.name).iter().cloned().collect();
-
-        self.peers
+        // Find the index of the peer in the list
+        let index = self
+            .peers
             .iter()
-            .filter(|peer| !broadcast_set.contains(peer) || peer.0 == self.name)
-            .cloned()
-            .collect()
+            .position(|(peer_id, _)| peer_id == &self.name)
+            .unwrap();
+
+        // Place the sender at the beginning of the list
+        self.peers.rotate_left(index);
+
+        let mut processes_on_level = min(self.fanout, self.peers.len() - 1);
+        let mut res = Vec::new();
+        let mut i = 1;
+
+        'building: loop {
+            let mut start = i + processes_on_level;
+            let remaining = self.peers.len() - start;
+            if remaining == 0 {
+                break 'building;
+            }
+            let max_fanout = remaining / processes_on_level;
+            let curr_fanout = std::cmp::min(self.fanout, max_fanout);
+
+            for _ in 0..processes_on_level {
+                if i >= self.peers.len() || start >= self.peers.len() {
+                    break 'building;
+                }
+                (start..min(start + curr_fanout, self.peers.len())).for_each(|j| {
+                    res.push(self.peers[j]);
+                });
+                start += curr_fanout;
+                i += 1;
+            }
+            processes_on_level = min(curr_fanout * processes_on_level, remaining);
+        }
+
+        // Place the sender at the end of the list
+        self.peers.rotate_right(index);
+
+        res
     }
 }
 
