@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use crypto::PublicKey;
 
-use crate::topologies::builders::lib::TopologyBuilder;
+use crate::topologies::builders::traits::TopologyBuilder;
 use crate::Parameters;
 
 use crate::topologies::builders::types::BinomialTreeTopologyBuilder;

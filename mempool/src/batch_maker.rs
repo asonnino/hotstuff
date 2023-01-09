@@ -1,6 +1,7 @@
 use crate::config::Stake;
 use crate::mempool::MempoolMessage;
-use crate::Topology;
+use crate::topologies::traits::Topology;
+use crate::topologies::tree::TreeNodeRef;
 use bytes::Bytes;
 use crypto::{Digest, PublicKey};
 use dashmap::DashMap;
@@ -13,7 +14,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 #[cfg(feature = "benchmark")]
 use std::convert::TryInto as _;
-use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
@@ -70,14 +70,10 @@ where
     block_queue: FuturesUnordered<IndirectPeerFuture>,
 }
 
-type IndirectPeerFuture =
-    Pin<Box<dyn Future<Output = (Digest, Vec<(PublicKey, SocketAddr, usize)>)> + Send>>;
+type IndirectPeerFuture = Pin<Box<dyn Future<Output = (Digest, Vec<TreeNodeRef>)> + Send>>;
 
 /// Duration before sending batches to the indirect peers if no ack was received
 pub const INDIRECT_PEERS_TIMEOUT: Duration = Duration::from_millis(10000);
-
-/// Duration before sending a batch to a second indirect peer when we already sent it to one
-pub const SLOW_PEERS_TIMEOUT: Duration = Duration::from_millis(400);
 
 /// Duration before dropping a handler
 pub const HANDLER_TIMEOUT: Duration = Duration::from_secs(60);
@@ -98,14 +94,12 @@ where
         max_batch_delay: u64,
         rx_transaction: Receiver<Transaction>,
         stake_map: Arc<DashMap<Digest, BlockInProcess>>,
-        topology: T,
+        mut topology: T,
         stake: Stake,
     ) {
-        info!(
-            "Broadcasting batches to {:?}",
-            &topology.broadcast_peers(name)
-        );
-        debug!("Indirectly connected to {:?}", topology.indirect_peers());
+        let peers = topology.broadcast_peers(name).unwrap();
+        info!("Broadcasting batches to {:?}", &peers);
+
         tokio::spawn(async move {
             Self {
                 name,
@@ -136,51 +130,38 @@ where
     }
 
     /// Sends the block to the next indirect_peer for which no ack was received starting from index.
-    async fn send_to_indirect_peers(
-        &mut self,
-        mut indirect_peers: Vec<(PublicKey, SocketAddr, usize)>,
-        digest: Digest,
-        index: usize,
-    ) {
+    async fn send_to_indirect_peers(&mut self, digest: Digest, trees: Vec<TreeNodeRef>) {
         let block_in_process = {
             match self.stake_map.get(&digest) {
                 Some(block_in_process) => block_in_process,
                 None => return,
             }
         };
-        let mut i = index;
-        let current_number_of_hop = indirect_peers[i].2;
-        let mut late_peer = false;
 
-        while i < indirect_peers.len() && indirect_peers[i].2 == current_number_of_hop {
-            let (peer, address, _) = indirect_peers[i];
-            if !block_in_process.acks.contains(&peer) {
-                // Send the batch to the indirect peer
-                debug!("Sending batch {:?} to indirect peer {:?}", digest, &peer);
-                let handler = self
-                    .network
-                    .send(address, Bytes::from(block_in_process.block.clone()))
-                    .await;
-                // Spawn a new task to wait for the handlers
-                tokio::spawn(async move {
-                    let _ = timeout(HANDLER_TIMEOUT, handler).await;
-                });
-                late_peer = true;
-            }
-            i += 1;
-        }
-
-        if i < indirect_peers.len() {
-            let mut wait_duration = INDIRECT_PEERS_TIMEOUT
-                .saturating_mul((indirect_peers[i].2 - current_number_of_hop) as u32);
-
-            if late_peer {
-                // If a peer is late
-                wait_duration += INDIRECT_PEERS_TIMEOUT;
-            }
-            // Schedule sending the batch to the next indirect peers
-            self.block_queue
-                .push(Box::pin(wait_block(SLOW_PEERS_TIMEOUT, (digest, i))));
+        for t in trees {
+            let (peer, address) = {
+                let t = t.read().unwrap();
+                (t.pub_key, t.addr)
+            };
+            let wait_duration = {
+                if block_in_process.acks.contains(&peer) {
+                    INDIRECT_PEERS_TIMEOUT
+                } else {
+                    debug!("Sending batch {:?} to indirect peer {:?}", &digest, &peer);
+                    let handler = self
+                        .network
+                        .send(address, Bytes::from(block_in_process.block.clone()))
+                        .await;
+                    tokio::spawn(async move {
+                        let _ = timeout(HANDLER_TIMEOUT, handler).await;
+                    });
+                    INDIRECT_PEERS_TIMEOUT.saturating_mul(2)
+                }
+            };
+            self.block_queue.push(Box::pin(wait_block(
+                wait_duration,
+                (digest.clone(), t.read().unwrap().get_children()),
+            )));
         }
     }
 
@@ -196,8 +177,8 @@ where
                     self.single_transaction(transaction).await;
                     timer.as_mut().reset(Instant::now() + Duration::from_millis(self.max_batch_delay));
                 },
-                Some((digest, index)) = self.block_queue.next() => {
-                    self.send_to_indirect_peers(digest, index).await;
+                Some((digest, tree)) = self.block_queue.next() => {
+                    self.send_to_indirect_peers(digest, tree).await;
                 },
                 // If the timer triggers, seal the batch even if it contains few transactions.
                 () = &mut timer => {
@@ -246,24 +227,27 @@ where
         );
         debug!("Broadcasting batch {:?}", digest);
 
+        let children = self
+            .topology
+            .broadcast_peers(self.name)
+            .unwrap()
+            .read()
+            .unwrap()
+            .get_children();
+
         let handlers = self
             .network
             .broadcast(
-                self.topology
-                    .broadcast_peers(self.name)
-                    .into_iter()
-                    .map(|(_, addr)| addr)
-                    .collect(),
+                children.iter().map(|t| t.read().unwrap().addr).collect(),
                 Bytes::from(serialized),
             )
             .await;
 
         // Schedule sending the batch to the indirect peers
-        let indirect_peers = self.topology.indirect_peers();
-        if !indirect_peers.is_empty() {
+        if !children.is_empty() {
             self.block_queue.push(Box::pin(wait_block(
                 3 * INDIRECT_PEERS_TIMEOUT,
-                (digest.clone(), indirect_peers),
+                (digest.clone(), children.to_vec()),
             )));
         }
         // Spawn a new task to wait for the handlers

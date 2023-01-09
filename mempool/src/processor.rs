@@ -8,7 +8,8 @@ use network::ReliableSender;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::{mempool::MempoolMessage, Committee, Topology};
+use crate::topologies::traits::Topology;
+use crate::{mempool::MempoolMessage, Committee};
 
 const MAX_BEFORE_CLEANING: usize = 1000;
 
@@ -93,7 +94,7 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
                     .topology
                     .broadcast_peers(source)
                     .iter()
-                    .map(|e| e.1)
+                    .map(|e| e.read().unwrap().addr)
                     .collect();
                 debug!("Relaying batch {} to {:?}", &digest, &peers);
                 let handlers = self.network.broadcast(peers, batch.into()).await;

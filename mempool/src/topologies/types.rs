@@ -1,8 +1,6 @@
-use std::{collections::HashMap, net::SocketAddr};
-
-use crate::topologies::tree::Tree;
-
+use crate::topologies::tree::TreeNodeRef;
 use crypto::PublicKey;
+use std::{collections::HashMap, net::SocketAddr};
 
 /// `FullMeshTopology` is a topology where every node is connected to every other node.
 #[derive(Clone, Debug)]
@@ -18,7 +16,7 @@ pub struct KauriTopology {
     pub(crate) peers: Vec<(PublicKey, SocketAddr)>,
     pub(crate) fanout: usize,
     pub(crate) pub_key: PublicKey,
-    pub(crate) addr: SocketAddr,
+    pub(crate) _addr: SocketAddr,
 }
 
 impl KauriTopology {
@@ -33,7 +31,7 @@ impl KauriTopology {
             peers,
             fanout,
             pub_key,
-            addr,
+            _addr: addr,
         }
     }
 }
@@ -67,7 +65,7 @@ impl BinomialTreeTopology {
 #[derive(Clone, Debug)]
 pub struct CacheTopology<T> {
     pub(crate) inner: T,
-    pub(crate) direct_peers_cache: HashMap<PublicKey, Tree>,
+    pub(crate) direct_peers_cache: HashMap<PublicKey, TreeNodeRef>,
 }
 
 impl<T> CacheTopology<T> {
