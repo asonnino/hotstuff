@@ -5,7 +5,6 @@ use crate::processor::{Processor, SerializedBatchMessage};
 use crate::quorum_waiter::QuorumWaiter;
 use crate::synchronizer::Synchronizer;
 use crate::topologies::types::CacheTopology;
-use crate::topologies::Topology;
 use crate::TopologyBuilder;
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -16,7 +15,6 @@ use log::{info, warn};
 use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
-use std::net::SocketAddr;
 use std::sync::Arc;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -81,7 +79,7 @@ where
     ) {
         // NOTE: This log entry is used to compute performance.
         parameters.log();
-        topology_builder.set_params(&parameters, name);
+        topology_builder.set_params(&parameters, name, committee.mempool_address(&name).unwrap());
         let mut peers = committee.broadcast_addresses(&name);
         peers.push((name, committee.mempool_address(&name).unwrap()));
 
@@ -149,14 +147,6 @@ where
         );
 
         let stake_map = Arc::new(DashMap::new());
-        let (_, mempool_addresses): (Vec<_>, Vec<SocketAddr>) = self
-            .topology
-            .broadcast_peers(self.name)
-            .to_vec()
-            .iter()
-            .cloned()
-            .unzip();
-        let indirect_peers = self.topology.indirect_peers();
 
         // The transactions are sent to the `BatchMaker` that assembles them into batches.
         BatchMaker::spawn(
@@ -165,8 +155,7 @@ where
             self.parameters.max_batch_delay,
             /* rx_transaction */ rx_batch_maker,
             stake_map.clone(),
-            mempool_addresses,
-            indirect_peers,
+            self.topology.clone(),
             self.committee.stake(&self.name),
         );
 
