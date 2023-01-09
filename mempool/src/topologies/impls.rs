@@ -45,7 +45,7 @@ impl Topology for FullMeshTopology {
         }
     }
 
-    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr)> {
+    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr, usize)> {
         vec![]
     }
 }
@@ -123,7 +123,7 @@ impl Topology for KauriTopology {
         res
     }
 
-    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr)> {
+    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr, usize)> {
         // Returns the difference of self.peers and self.broadcast_peers(self.name)
         // Find the index of the peer in the list
         let index = self
@@ -138,6 +138,7 @@ impl Topology for KauriTopology {
         let mut processes_on_level = min(self.fanout, self.peers.len() - 1);
         let mut res = Vec::new();
         let mut i = 1;
+        let mut hop = 1;
 
         'building: loop {
             let mut start = i + processes_on_level;
@@ -153,12 +154,13 @@ impl Topology for KauriTopology {
                     break 'building;
                 }
                 (start..min(start + curr_fanout, self.peers.len())).for_each(|j| {
-                    res.push(self.peers[j]);
+                    res.push((self.peers[j].0, self.peers[j].1, hop));
                 });
                 start += curr_fanout;
                 i += 1;
             }
             processes_on_level = min(curr_fanout * processes_on_level, remaining);
+            hop += 1
         }
 
         // Place the sender at the end of the list
@@ -236,7 +238,7 @@ impl Topology for BinomialTreeTopology {
         res
     }
 
-    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr)> {
+    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr, usize)> {
         self.peers.rotate_left(self.my_index);
         let children: HashSet<_> = self.broadcast_peers(self.name).into_iter().collect();
         let mut res_set = HashSet::new();
@@ -246,10 +248,11 @@ impl Topology for BinomialTreeTopology {
             bitmask <<= 1;
         }
         bitmask >>= 1;
-        let mut subchildren = vec![bitmask, 0];
-
+        let mut subchildren = vec![bitmask];
+        let mut hop = 1;
         while bitmask > 0 {
             bitmask >>= 1;
+            hop += 1;
             for i in 0..subchildren.len() {
                 let v = subchildren[i] | bitmask;
                 subchildren.push(v);
@@ -258,7 +261,7 @@ impl Topology for BinomialTreeTopology {
                     && res_set.insert(self.peers[v])
                     && self.peers[v].0 != self.name
                 {
-                    res.push(self.peers[v]);
+                    res.push((self.peers[v].0, self.peers[v].1, hop));
                 }
             }
         }
@@ -283,7 +286,7 @@ where
         }
     }
 
-    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr)> {
+    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr, usize)> {
         if let Some(peers) = &self.indirect_peers_cache {
             peers.clone()
         } else {

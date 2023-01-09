@@ -15,7 +15,8 @@ pub trait Topology: Clone + Send + Sync + 'static {
     fn broadcast_peers(&mut self, name: PublicKey) -> Vec<(PublicKey, SocketAddr)>;
 
     /// `indirect peers` returns a slice of the peers to broadcast a batch to if an ack is not received before a given period.
-    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr)>;
+    /// it also returns the number of hops needed to reach this peer.
+    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr, usize)>;
 }
 
 /// `TopologyBuilder` is a trait that allows to build a topology.

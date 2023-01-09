@@ -68,7 +68,7 @@ pub struct BinomialTreeTopologyBuilder {
 pub struct CacheTopology<T> {
     pub(crate) inner: T,
     pub(crate) direct_peers_cache: HashMap<PublicKey, Vec<(PublicKey, SocketAddr)>>,
-    pub(crate) indirect_peers_cache: Option<Vec<(PublicKey, SocketAddr)>>,
+    pub(crate) indirect_peers_cache: Option<Vec<(PublicKey, SocketAddr, usize)>>,
 }
 
 impl<T> CacheTopology<T> {
