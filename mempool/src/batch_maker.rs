@@ -155,7 +155,7 @@ where
                     tokio::spawn(async move {
                         let _ = timeout(HANDLER_TIMEOUT, handler).await;
                     });
-                    INDIRECT_PEERS_TIMEOUT.saturating_mul(2)
+                    2 * INDIRECT_PEERS_TIMEOUT
                 }
             };
             self.block_queue.push(Box::pin(wait_block(
