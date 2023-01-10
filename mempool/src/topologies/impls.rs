@@ -179,16 +179,11 @@ where
 {
     fn broadcast_peers(&mut self, id: PublicKey) -> Option<TreeNodeRef> {
         if let Some(peers) = self.direct_peers_cache.get(&id) {
-            Some(peers.clone())
+            peers.clone()
         } else {
             let peers = self.inner.broadcast_peers(id);
-            match peers {
-                Some(peers) => {
-                    self.direct_peers_cache.insert(id, peers.clone());
-                    Some(peers)
-                }
-                None => None,
-            }
+            self.direct_peers_cache.insert(id, peers.clone());
+            peers
         }
     }
 }

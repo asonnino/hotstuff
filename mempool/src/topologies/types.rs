@@ -45,7 +45,7 @@ impl BinomialTreeTopology {
 #[derive(Clone, Debug)]
 pub struct CacheTopology<T> {
     pub(crate) inner: T,
-    pub(crate) direct_peers_cache: HashMap<PublicKey, TreeNodeRef>,
+    pub(crate) direct_peers_cache: HashMap<PublicKey, Option<TreeNodeRef>>,
 }
 
 impl<T> CacheTopology<T> {

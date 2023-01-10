@@ -90,12 +90,19 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
                 tokio::spawn(async { handler.await });
 
                 // Send the batch to other peers.
-                let peers = self
-                    .topology
-                    .broadcast_peers(source)
-                    .iter()
-                    .map(|e| e.read().unwrap().addr)
-                    .collect();
+                let peers = {
+                    match self.topology.broadcast_peers(source) {
+                        Some(peer) => peer
+                            .read()
+                            .unwrap()
+                            .get_children()
+                            .iter()
+                            .map(|t| t.read().unwrap().addr)
+                            .collect(),
+                        None => vec![],
+                    }
+                };
+
                 debug!("Relaying batch {} to {:?}", &digest, &peers);
                 let handlers = self.network.broadcast(peers, batch.into()).await;
                 // Await the handlers
