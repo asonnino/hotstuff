@@ -235,19 +235,24 @@ where
             .unwrap()
             .get_children();
 
+        let direct_peers = children.iter().map(|t| t.read().unwrap().addr).collect();
+        debug!("direct_peers : {:?}", direct_peers);
+
         let handlers = self
             .network
-            .broadcast(
-                children.iter().map(|t| t.read().unwrap().addr).collect(),
-                Bytes::from(serialized),
-            )
+            .broadcast(direct_peers, Bytes::from(serialized))
             .await;
 
         // Schedule sending the batch to the indirect peers
-        if !children.is_empty() {
+        let subchildren: Vec<TreeNodeRef> = children
+            .iter()
+            .flat_map(|t| t.read().unwrap().get_children())
+            .collect();
+
+        if !subchildren.is_empty() {
             self.block_queue.push(Box::pin(wait_block(
                 3 * INDIRECT_PEERS_TIMEOUT,
-                (digest.clone(), children.to_vec()),
+                (digest.clone(), subchildren),
             )));
         }
         // Spawn a new task to wait for the handlers

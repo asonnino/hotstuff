@@ -2,6 +2,7 @@ use std::cmp::min;
 use std::sync::{Arc, RwLock};
 
 use crypto::PublicKey;
+use log::debug;
 
 use crate::topologies::traits::Topology;
 use crate::topologies::tree::{Tree, TreeNodeRef};
@@ -12,12 +13,20 @@ use crate::topologies::types::{
 impl Topology for FullMeshTopology {
     fn broadcast_peers(&mut self, name: PublicKey) -> Option<TreeNodeRef> {
         if name == self.pub_key {
-            let mut tree = Tree::new(self.pub_key, self.addr);
+            let (key, addr) = self
+                .peers
+                .iter()
+                .find(|(peer_id, _)| peer_id == &self.pub_key)
+                .unwrap();
+            // Find the current node
+            let mut tree = Tree::new(key.clone(), addr.clone());
+            // Return all the peers except self
             let children = self
                 .peers
                 .clone()
                 .into_iter()
-                .map(|(key, addr)| Tree::new(key, addr))
+                .filter(|(peer_id, _)| peer_id != &self.pub_key)
+                .map(|(key, addr)| Arc::new(RwLock::new(Tree::new(key, addr))))
                 .collect();
             tree.add_children(children);
             Some(Arc::new(RwLock::new(tree)))
@@ -39,14 +48,19 @@ impl Topology for KauriTopology {
         // Place the sender at the beginning of the list
         self.peers.rotate_left(index);
 
-        let root = Arc::new(RwLock::new(Tree::new(
-            self.peers[index].0,
-            self.peers[index].1,
-        )));
+        debug!("self peers apres rotation: {:?}", self.peers);
+
+        let root = Arc::new(RwLock::new(Tree::new(self.peers[0].0, self.peers[0].1)));
 
         let mut tree_on_level = vec![root.clone()];
         let mut i = 0;
-        let mut res = None;
+        let mut res = {
+            if id == self.pub_key {
+                Some(root.clone())
+            } else {
+                None
+            }
+        };
 
         'building: loop {
             let mut start = i + tree_on_level.len();
@@ -62,12 +76,15 @@ impl Topology for KauriTopology {
                     break 'building;
                 }
                 let mut tree = tree_on_level[elem].write().unwrap();
-                tree.add_children(
-                    self.peers[start..min(start + curr_fanout, self.peers.len())]
-                        .iter()
-                        .map(|(pub_key, addr)| Tree::new(pub_key.clone(), addr.clone()))
-                        .collect(),
-                );
+
+                let children = self.peers[start..min(start + curr_fanout, self.peers.len())]
+                    .iter()
+                    .map(|(pub_key, addr)| {
+                        Arc::new(RwLock::new(Tree::new(pub_key.clone(), addr.clone())))
+                    })
+                    .collect();
+
+                tree.add_children(children);
 
                 if tree.pub_key == self.pub_key {
                     res = Some(tree_on_level[elem].clone())
@@ -87,6 +104,7 @@ impl Topology for KauriTopology {
         // Place the sender at the end of the list
         self.peers.rotate_right(index);
 
+        debug!("Kauri topology: {:?}", res);
         res
     }
 }
@@ -97,7 +115,6 @@ impl Topology for BinomialTreeTopology {
             return None;
         }
 
-        let mut res = None;
         // Find the index of the peer in the list
         let index = self
             .peers
@@ -109,10 +126,15 @@ impl Topology for BinomialTreeTopology {
         self.peers.rotate_left(index);
 
         // The sender is the root of the tree
-        let root = Arc::new(RwLock::new(Tree::new(
-            self.peers[index].0,
-            self.peers[index].1,
-        )));
+        let root = Arc::new(RwLock::new(Tree::new(self.peers[0].0, self.peers[0].1)));
+
+        let mut res = {
+            if sender == self.pub_key {
+                Some(root.clone())
+            } else {
+                None
+            }
+        };
 
         if self.peers.len() == 1 {
             return Some(root);

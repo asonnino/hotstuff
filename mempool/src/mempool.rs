@@ -79,7 +79,7 @@ where
     ) {
         // NOTE: This log entry is used to compute performance.
         parameters.log();
-        topology_builder.set_params(&parameters, name, committee.mempool_address(&name).unwrap());
+        topology_builder.set_params(&parameters, name);
         let mut peers = committee.broadcast_addresses(&name);
         peers.push((name, committee.mempool_address(&name).unwrap()));
 

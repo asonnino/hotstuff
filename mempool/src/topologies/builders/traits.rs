@@ -9,8 +9,11 @@ use crate::topologies::builders::error::TopologyError;
 pub trait TopologyBuilder: Clone {
     type Topology: Topology;
 
+    /// 'new' initializes a TopologyBuilder with default parameters.
+    fn new() -> Self;
+
     /// 'set_params' sets the parameters of the topology.
-    fn set_params(&mut self, params: &Parameters, pub_key: PublicKey, addr: SocketAddr);
+    fn set_params(&mut self, params: &Parameters, pub_key: PublicKey);
 
     /// `build` builds a topology from a list of peers.
     fn build(&self, peers: Vec<(PublicKey, SocketAddr)>) -> Result<Self::Topology, TopologyError>;

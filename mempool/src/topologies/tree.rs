@@ -30,11 +30,8 @@ impl Tree {
         self.children.push(child);
     }
 
-    pub fn add_children(&mut self, children: Vec<Tree>) {
-        self.children = children
-            .into_iter()
-            .map(|elem| Arc::new(RwLock::new(elem)))
-            .collect();
+    pub fn add_children(&mut self, children: Vec<TreeNodeRef>) {
+        self.children.extend(children);
     }
 
     pub fn get_children(&self) -> Vec<TreeNodeRef> {

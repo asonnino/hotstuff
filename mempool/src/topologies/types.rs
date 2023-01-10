@@ -7,7 +7,6 @@ use std::{collections::HashMap, net::SocketAddr};
 pub struct FullMeshTopology {
     pub(crate) peers: Vec<(PublicKey, SocketAddr)>,
     pub(crate) pub_key: PublicKey,
-    pub(crate) addr: SocketAddr,
 }
 
 /// `KauriTopology` is a simple tree topology parametrized by the number of children per node.
@@ -16,22 +15,15 @@ pub struct KauriTopology {
     pub(crate) peers: Vec<(PublicKey, SocketAddr)>,
     pub(crate) fanout: usize,
     pub(crate) pub_key: PublicKey,
-    pub(crate) _addr: SocketAddr,
 }
 
 impl KauriTopology {
-    pub fn new(
-        mut peers: Vec<(PublicKey, SocketAddr)>,
-        fanout: usize,
-        pub_key: PublicKey,
-        addr: SocketAddr,
-    ) -> Self {
+    pub fn new(mut peers: Vec<(PublicKey, SocketAddr)>, fanout: usize, pub_key: PublicKey) -> Self {
         peers.sort_by(|a, b| a.0.cmp(&b.0));
         KauriTopology {
             peers,
             fanout,
             pub_key,
-            _addr: addr,
         }
     }
 }
@@ -41,24 +33,12 @@ impl KauriTopology {
 pub struct BinomialTreeTopology {
     pub(crate) peers: Vec<(PublicKey, SocketAddr)>,
     pub(crate) pub_key: PublicKey,
-    pub(crate) addr: SocketAddr,
-    pub(crate) my_index: usize,
 }
 
 impl BinomialTreeTopology {
-    pub fn new(
-        mut peers: Vec<(PublicKey, SocketAddr)>,
-        pub_key: PublicKey,
-        addr: SocketAddr,
-    ) -> Self {
+    pub fn new(mut peers: Vec<(PublicKey, SocketAddr)>, pub_key: PublicKey) -> Self {
         peers.sort_by(|a, b| a.0.cmp(&b.0));
-        let my_index = peers.iter().position(|(p, _)| p == &pub_key).unwrap();
-        BinomialTreeTopology {
-            peers,
-            pub_key,
-            addr,
-            my_index,
-        }
+        BinomialTreeTopology { peers, pub_key }
     }
 }
 
