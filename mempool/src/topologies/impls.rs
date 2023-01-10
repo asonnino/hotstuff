@@ -48,8 +48,6 @@ impl Topology for KauriTopology {
         // Place the sender at the beginning of the list
         self.peers.rotate_left(index);
 
-        debug!("self peers apres rotation: {:?}", self.peers);
-
         let root = Arc::new(RwLock::new(Tree::new(self.peers[0].0, self.peers[0].1)));
 
         let mut tree_on_level = vec![root.clone()];
@@ -104,7 +102,6 @@ impl Topology for KauriTopology {
         // Place the sender at the end of the list
         self.peers.rotate_right(index);
 
-        debug!("Kauri topology: {:?}", res);
         res
     }
 }

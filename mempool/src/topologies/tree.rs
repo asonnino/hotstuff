@@ -5,7 +5,6 @@ use std::{
 };
 
 use crypto::PublicKey;
-use log::debug;
 
 pub type TreeNodeRef = Arc<RwLock<Tree>>;
 
@@ -32,7 +31,6 @@ impl Tree {
     }
 
     pub fn add_children(&mut self, children: Vec<TreeNodeRef>) {
-        debug!("{:?} adding children: {:?}", self.addr, children);
         self.children.extend(children);
     }
 
