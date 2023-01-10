@@ -2,7 +2,6 @@ use std::cmp::min;
 use std::sync::{Arc, RwLock};
 
 use crypto::PublicKey;
-use log::debug;
 
 use crate::topologies::traits::Topology;
 use crate::topologies::tree::{Tree, TreeNodeRef};
