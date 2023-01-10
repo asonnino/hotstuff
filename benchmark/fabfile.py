@@ -62,7 +62,7 @@ def local(ctx):
         'rate': 100000,
         'tx_size': 512,
         'duration': 10,
-        'topology': 'kauri',
+        'topology': 'binomial',
     }
     node_params = {
         'consensus': {

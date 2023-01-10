@@ -146,7 +146,7 @@ impl Topology for BinomialTreeTopology {
         }
         base >>= 1;
 
-        let mut node_queue = vec![(root.clone(), index, base)];
+        let mut node_queue = vec![(root.clone(), 0, base)];
 
         while !node_queue.is_empty() {
             let (parent, parent_index, mut bitmask) = node_queue.pop().unwrap();
@@ -154,7 +154,11 @@ impl Topology for BinomialTreeTopology {
                 res = Some(parent.clone());
             }
 
-            while bitmask > 0 && bitmask + parent_index < self.peers.len() {
+            while bitmask > 0 {
+                if parent_index + bitmask >= self.peers.len() {
+                    bitmask >>= 1;
+                    continue;
+                }
                 let child_index = parent_index + bitmask;
 
                 let child = Arc::new(RwLock::new(Tree::new(
@@ -163,7 +167,7 @@ impl Topology for BinomialTreeTopology {
                 )));
                 parent.write().unwrap().add_child(child.clone());
 
-                bitmask <<= 1;
+                bitmask >>= 1;
                 node_queue.push((child, child_index, bitmask));
             }
         }
