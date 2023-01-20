@@ -107,6 +107,9 @@ class NodeParameters:
             inputs += [json['mempool']['sync_retry_nodes']]
             inputs += [json['mempool']['batch_size']]
             inputs += [json['mempool']['max_batch_delay']]
+            inputs += [json['mempool']['max_hop_delay']]
+            inputs += [json['mempool']['max_batch_delay']]
+            inputs += [json['mempool']['fanout']]
         except KeyError as e:
             raise ConfigError(f'Malformed parameters: missing key {e}')
 

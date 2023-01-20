@@ -34,6 +34,7 @@ def docker(ctx):
             'sync_retry_nodes': 3,
             'batch_size': 500_000,
             'max_batch_delay': 200,
+            'max_hop_delay': 10000,
             'fanout': 3,
         }
     }
@@ -57,7 +58,7 @@ def local(ctx):
     ''' Run benchmarks on localhost '''
     bench_params = {
         'faults': 0,
-        'nodes': 30,
+        'nodes': 15,
         'clients': 1,  # Must be the same length as nodes or an integer
         'rate': 100000,
         'tx_size': 512,
@@ -75,6 +76,7 @@ def local(ctx):
             'sync_retry_nodes': 3,
             'batch_size': 500_000,
             'max_batch_delay': 50,
+            'max_hop_delay': 10000,
             'fanout': 3,
         }
     }
@@ -165,6 +167,7 @@ def remote(ctx):
             'sync_retry_nodes': 3,
             'batch_size': 500_000,
             'max_batch_delay': 200,
+            'max_hop_delay': 10000,
             'fanout' : 3,
         }
     }

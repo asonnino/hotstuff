@@ -52,6 +52,8 @@ where
     batch_size: usize,
     /// The maximum delay after which to seal the batch (in ms).
     max_batch_delay: u64,
+    /// Duration before sending batches to the indirect peers if no ack was received (in ms).
+    max_hop_delay: u64,
     /// Channel to receive transactions from the network.
     rx_transaction: Receiver<Transaction>,
     /// Holds the current batch.
@@ -72,9 +74,6 @@ where
 
 type IndirectPeerFuture = Pin<Box<dyn Future<Output = (Digest, Vec<TreeNodeRef>)> + Send>>;
 
-/// Duration before sending batches to the indirect peers if no ack was received
-pub const INDIRECT_PEERS_TIMEOUT: Duration = Duration::from_millis(10000);
-
 /// Duration before dropping a handler
 pub const HANDLER_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -92,6 +91,7 @@ where
         name: PublicKey,
         batch_size: usize,
         max_batch_delay: u64,
+        max_hop_delay: u64,
         rx_transaction: Receiver<Transaction>,
         stake_map: Arc<DashMap<Digest, BlockInProcess>>,
         mut topology: T,
@@ -105,6 +105,7 @@ where
                 name,
                 batch_size,
                 max_batch_delay,
+                max_hop_delay,
                 rx_transaction,
                 current_batch: Batch::with_capacity(batch_size * 2),
                 current_batch_size: 0,
@@ -145,7 +146,7 @@ where
             };
             let wait_duration = {
                 if block_in_process.acks.contains(&peer) {
-                    INDIRECT_PEERS_TIMEOUT
+                    self.max_hop_delay
                 } else {
                     debug!("Sending batch {:?} to indirect peer {:?}", &digest, &peer);
                     let handler = self
@@ -155,13 +156,16 @@ where
                     tokio::spawn(async move {
                         let _ = timeout(HANDLER_TIMEOUT, handler).await;
                     });
-                    2 * INDIRECT_PEERS_TIMEOUT
+                    2 * self.max_hop_delay
                 }
             };
-            self.block_queue.push(Box::pin(wait_block(
-                wait_duration,
-                (digest.clone(), t.read().unwrap().get_children()),
-            )));
+            let children = t.read().unwrap().get_children();
+            if !children.is_empty() {
+                self.block_queue.push(Box::pin(wait_block(
+                    Duration::from_millis(wait_duration),
+                    (digest.clone(), children),
+                )));
+            }
         }
     }
 
@@ -251,7 +255,7 @@ where
 
         if !subchildren.is_empty() {
             self.block_queue.push(Box::pin(wait_block(
-                3 * INDIRECT_PEERS_TIMEOUT,
+                3 * Duration::from_millis(self.max_hop_delay),
                 (digest.clone(), subchildren),
             )));
         }

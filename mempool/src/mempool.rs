@@ -153,6 +153,7 @@ where
             self.name,
             self.parameters.batch_size,
             self.parameters.max_batch_delay,
+            self.parameters.max_hop_delay,
             /* rx_transaction */ rx_batch_maker,
             stake_map.clone(),
             self.topology.clone(),
