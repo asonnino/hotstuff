@@ -6,6 +6,7 @@ import io
 from math import ceil
 import os
 from posixpath import basename, splitext
+from random import choice, sample
 import tarfile
 from time import sleep
 from benchmark.config import Committee, Key, NodeParameters, BenchParameters, ConfigError
@@ -89,7 +90,7 @@ class DockerBench:
         for container in self.docker_client.containers.list():
             container.exec_run(cmd)
     
-    def _config(self, hosts, node_parameters):
+    def _config(self, containers, hosts, node_parameters):
         Print.info('Generating configuration files...')
 
         # Cleanup all local configuration files.
@@ -113,7 +114,7 @@ class DockerBench:
 
         node_parameters.print(PathMaker.parameters_file())
 
-        for container in self.docker_client.containers.list():
+        for container in containers:
             # Cleanup all nodes.
             cmd = f'{CommandMaker.cleanup()} || true'
             container.exec_run(docker_cmd(cmd))
@@ -122,7 +123,7 @@ class DockerBench:
             container.exec_run(docker_cmd(cmd))
 
         # Upload configuration files.
-        progress = progress_bar(self.docker_client.containers.list(), prefix='Uploading config files:')
+        progress = progress_bar(containers, prefix='Uploading config files:')
         for i, container in enumerate(progress):
             copy_to_container(container, PathMaker.committee_file())
             copy_to_container(container, PathMaker.parameters_file())
@@ -130,19 +131,18 @@ class DockerBench:
 
         return committee
     
-    def _run_single(self, hosts, max_clients, rate, bench_parameters, node_parameters, debug=False):
+    def _run_single(self, containers, hosts, max_clients, rate, bench_parameters, node_parameters, debug=False):
         Print.info('Booting testbed...')
         self.stop(delete_logs=True)
         # Run the clients (they will wait for the nodes to be ready).
         # Filter all faulty nodes from the client addresses (or they will wait
         # for the faulty nodes to be online).
-        committee = Committee.load(PathMaker.committee_file())
-        addresses = [f'{x}:{self.settings["front_port"]}' for x in hosts]
         rate_share = ceil(rate / max_clients)  # Doesn't take faults into account.
         timeout = node_parameters.timeout_delay
         client_logs = [PathMaker.client_log_file(i) for i in range(len(hosts))]
         number_of_clients = 0
-        for container, log_file in zip(self.docker_client.containers.list(), client_logs):
+
+        for container, log_file in zip(containers, client_logs):
             if number_of_clients >= max_clients:
                 rate_share = 0
             cmd = CommandMaker.run_client(
@@ -150,7 +150,6 @@ class DockerBench:
                 bench_parameters.tx_size,
                 rate_share,
                 timeout,
-                nodes=addresses
             )
             self._background_run(container, cmd, log_file)
             number_of_clients += 1
@@ -159,7 +158,7 @@ class DockerBench:
         key_files = [PathMaker.key_file(i) for i in range(len(hosts))]
         dbs = [PathMaker.db_path(i) for i in range(len(hosts))]
         node_logs = [PathMaker.node_log_file(i) for i in range(len(hosts))]
-        for container, key_file, db, log_file in zip(self.docker_client.containers.list(), key_files, dbs, node_logs):
+        for container, key_file, db, log_file in zip(containers, key_files, dbs, node_logs):
             cmd = CommandMaker.run_node(
                 key_file,
                 PathMaker.committee_file(),
@@ -180,13 +179,13 @@ class DockerBench:
             sleep(ceil(duration / 20))
         self.stop()
 
-    def _logs(self, faults):
+    def _logs(self, containers, faults):
         # Delete local logs (if any).
         cmd = CommandMaker.clean_logs()
         subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
 
         # Download log files.
-        progress = progress_bar(self.docker_client.containers.list(), prefix='Downloading logs:')
+        progress = progress_bar(containers, prefix='Downloading logs:')
         for i, container in enumerate(progress):
             copy_from_container(container, PathMaker.node_log_file(i), PathMaker.node_log_file(i))
             copy_from_container(container, PathMaker.client_log_file(i), PathMaker.client_log_file(i))
@@ -267,40 +266,40 @@ class DockerBench:
         # Run benchmarks.
         for i, n in enumerate(self.bench_parameters.nodes):
             for r in self.bench_parameters.rate:
+                # Launch n-faulty containers
                 self.launch_containers(n)
 
                 Print.heading(f'\nRunning {n} nodes (input rate: {r:,} tx/s)')
-
                 Print.info(f'Containers : {self.docker_client.containers.list()}')
                 # Get the ip addresses of the containers
                 hosts = []
                 for container in self.docker_client.containers.list():
                     hosts.append(container.attrs['NetworkSettings']['Networks']['benchNet']['IPAddress'])
                 Print.info(f'hosts : {hosts}')
-
+                faults = self.bench_parameters.faults
                 clients = self.clients[i]
+                number_of_nodes = n - faults 
+                containers = sample(self.docker_client.containers.list(), number_of_nodes)
+
 
                 # Upload all configuration files.
                 try:
-                    self._config(hosts, self.node_parameters)
+                    self._config(containers, hosts, self.node_parameters)
                 except (subprocess.SubprocessError) as e:
                     Print.error(BenchError('Failed to configure nodes', e))
                     continue
                 
-                # Do not boot faulty nodes.
-                faults = self.bench_parameters.faults
-                hosts = hosts[:n-faults]
-
                 # Run the benchmark.
                 for j in range(self.bench_parameters.runs):
                     Print.heading(f'Run {j+1}/{self.bench_parameters.runs}')
                     try:
                         self._run_single(
-                            hosts, clients, r, self.bench_parameters, self.node_parameters, debug
+                            containers, hosts, clients, r, self.bench_parameters, self.node_parameters, debug
                         )
                         # faults, nodes, rate, tx_size, latency, bandwidth, clients
-                        self._logs(faults).print(PathMaker.result_file(
-                            faults, n, r, self.bench_parameters.tx_size, self.latency, self.bandwidth if self.bandwidth != "" else "max", clients, self.topology.name
+                        bandwidth = self.bandwidth if self.bandwidth != "" else "max"
+                        self._logs(containers, faults).print(PathMaker.result_file(
+                            faults, n, r, self.bench_parameters.tx_size, self.latency, bandwidth, clients, self.topology.name
                         ))
                     except (subprocess.SubprocessError, ParseError) as e:
                         self.kill()

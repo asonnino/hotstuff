@@ -1,3 +1,4 @@
+from random import sample
 from fabric import Connection, ThreadingGroup as Group
 from fabric.exceptions import GroupException
 from paramiko import RSAKey
@@ -291,7 +292,9 @@ class Bench:
 
                 # Do not boot faulty nodes.
                 faults = bench_parameters.faults
-                hosts = hosts[:n-faults]
+                # select n-f random nodes
+                hosts = sample(hosts, n-faults)
+
                 clients = bench_parameters.clients
 
                 # Run the benchmark.

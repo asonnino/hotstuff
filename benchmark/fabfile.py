@@ -16,12 +16,12 @@ def docker(ctx):
         'faults': 0,                     # Number of faults
         'nodes': 10,                     # Number of nodes
         'clients': 1,                    # Number of clients
-        'rate': [40000],                 # Total rate of transactions per second
+        'rate': [1000],                 # Total rate of transactions per second
         'tx_size': 512,                  # Transaction size in bytes
-        'duration': 60,                  # Duration in s
-        'latency': 100,                    # Latency in ms
+        'duration': 30,                  # Duration in s
+        'latency': 0,                    # Latency in ms
         'bandwidth': "",                 # Bandwidth in Mbps
-        'topology': 'kauri',          # 'kauri', 'fullmesh', 'binomial'
+        'topology': 'fullmesh',          # 'kauri', 'fullmesh', 'binomial'
     }
     node_params = {
         'consensus': {
@@ -39,7 +39,7 @@ def docker(ctx):
         }
     }
     settings = dict({
-        "branch" : "refactoring_ack",
+        "branch" : "main",
         "repo_name" : "SuperHotStuff",
         "consensus_port": 8000,
         "mempool_port": 7000,
@@ -57,13 +57,13 @@ def docker(ctx):
 def local(ctx):
     ''' Run benchmarks on localhost '''
     bench_params = {
-        'faults': 0,
-        'nodes': 15,
+        'faults': 3,
+        'nodes': 10,
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': 100000,
+        'rate': 50000,
         'tx_size': 512,
-        'duration': 30,
-        'topology': 'binomial',
+        'duration': 300,
+        'topology': 'fullmesh',
     }
     node_params = {
         'consensus': {
