@@ -398,6 +398,7 @@ impl Core {
     }
 
     async fn handle_tc(&mut self, tc: TC) -> ConsensusResult<()> {
+        tc.verify(&self.committee)?;
         if tc.round < self.round {
             return Ok(());
         }
