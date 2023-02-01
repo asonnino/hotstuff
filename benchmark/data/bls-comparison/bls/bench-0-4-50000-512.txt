@@ -1,0 +1,160 @@
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Faults: 0 nodes
+ Committee size: 4 nodes
+ Input rate: 50,000 tx/s
+ Transaction size: 512 B
+ Execution time: 302 s
+
+ Consensus timeout delay: 5,000 ms
+ Consensus sync retry delay: 5,000 ms
+ Mempool GC depth: 50 rounds
+ Mempool sync retry delay: 5,000 ms
+ Mempool sync retry nodes: 3 nodes
+ Mempool batch size: 500,000 B
+ Mempool max batch delay: 100 ms
+
+ + RESULTS:
+ Consensus TPS: 49,985 tx/s
+ Consensus BPS: 25,592,136 B/s
+ Consensus latency: 488 ms
+
+ End-to-end TPS: 49,870 tx/s
+ End-to-end BPS: 25,533,323 B/s
+ End-to-end latency: 857 ms
+
+ Max transactions per block: 977 tx/block
+ Actual transactions per block: 964.56 tx/block
+ Blocks per second: 52 blocks/s
+-----------------------------------------
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Faults: 0 nodes
+ Committee size: 4 nodes
+ Input rate: 50,000 tx/s
+ Transaction size: 512 B
+ Execution time: 302 s
+
+ Consensus timeout delay: 5,000 ms
+ Consensus sync retry delay: 5,000 ms
+ Mempool GC depth: 50 rounds
+ Mempool sync retry delay: 5,000 ms
+ Mempool sync retry nodes: 3 nodes
+ Mempool batch size: 500,000 B
+ Mempool max batch delay: 100 ms
+
+ + RESULTS:
+ Consensus TPS: 49,988 tx/s
+ Consensus BPS: 25,593,619 B/s
+ Consensus latency: 482 ms
+
+ End-to-end TPS: 49,868 tx/s
+ End-to-end BPS: 25,532,235 B/s
+ End-to-end latency: 851 ms
+
+ Max transactions per block: 977 tx/block
+ Actual transactions per block: 962.93 tx/block
+ Blocks per second: 52 blocks/s
+-----------------------------------------
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Faults: 0 nodes
+ Committee size: 4 nodes
+ Input rate: 50,000 tx/s
+ Transaction size: 512 B
+ Execution time: 162 s
+
+ Consensus timeout delay: 5,000 ms
+ Consensus sync retry delay: 5,000 ms
+ Mempool GC depth: 50 rounds
+ Mempool sync retry delay: 5,000 ms
+ Mempool sync retry nodes: 3 nodes
+ Mempool batch size: 500,000 B
+ Mempool max batch delay: 100 ms
+
+ + RESULTS:
+ Consensus TPS: 49,985 tx/s
+ Consensus BPS: 25,592,142 B/s
+ Consensus latency: 466 ms
+
+ End-to-end TPS: 49,711 tx/s
+ End-to-end BPS: 25,451,916 B/s
+ End-to-end latency: 821 ms
+
+ Max transactions per block: 977 tx/block
+ Actual transactions per block: 966.88 tx/block
+ Blocks per second: 51 blocks/s
+-----------------------------------------
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Faults: 0 nodes
+ Committee size: 4 nodes
+ Input rate: 50,000 tx/s
+ Transaction size: 512 B
+ Execution time: 162 s
+
+ Consensus timeout delay: 5,000 ms
+ Consensus sync retry delay: 5,000 ms
+ Mempool GC depth: 50 rounds
+ Mempool sync retry delay: 5,000 ms
+ Mempool sync retry nodes: 3 nodes
+ Mempool batch size: 500,000 B
+ Mempool max batch delay: 100 ms
+
+ + RESULTS:
+ Consensus TPS: 50,038 tx/s
+ Consensus BPS: 25,619,594 B/s
+ Consensus latency: 476 ms
+
+ End-to-end TPS: 49,758 tx/s
+ End-to-end BPS: 25,476,256 B/s
+ End-to-end latency: 835 ms
+
+ Max transactions per block: 977 tx/block
+ Actual transactions per block: 961.58 tx/block
+ Blocks per second: 52 blocks/s
+-----------------------------------------
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Faults: 0 nodes
+ Committee size: 4 nodes
+ Input rate: 50,000 tx/s
+ Transaction size: 512 B
+ Execution time: 162 s
+
+ Consensus timeout delay: 5,000 ms
+ Consensus sync retry delay: 5,000 ms
+ Mempool GC depth: 50 rounds
+ Mempool sync retry delay: 5,000 ms
+ Mempool sync retry nodes: 3 nodes
+ Mempool batch size: 500,000 B
+ Mempool max batch delay: 100 ms
+
+ + RESULTS:
+ Consensus TPS: 49,946 tx/s
+ Consensus BPS: 25,572,444 B/s
+ Consensus latency: 481 ms
+
+ End-to-end TPS: 49,743 tx/s
+ End-to-end BPS: 25,468,269 B/s
+ End-to-end latency: 842 ms
+
+ Max transactions per block: 977 tx/block
+ Actual transactions per block: 961.89 tx/block
+ Blocks per second: 52 blocks/s
+-----------------------------------------
