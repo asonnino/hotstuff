@@ -10,20 +10,29 @@ from benchmark.utils import PathMaker
 
 
 class Setup:
-    def __init__(self, nodes, rate, tx_size, faults):
+    def __init__(self, nodes, rate, tx_size, faults, topology, bandwidth, latency, clients):
         self.nodes = nodes
         self.rate = rate
         self.tx_size = tx_size
         self.faults = faults
         self.max_latency = 'any'
 
+        self.topology = topology
+        self.tc_bandwidth = bandwidth
+        self.tc_latency = latency
+        self.clients = clients
+
     def __str__(self):
         return (
+            f' Topology: {self.topology}\n'
             f' Faults: {self.faults} nodes\n'
             f' Committee size: {self.nodes} nodes\n'
             f' Input rate: {self.rate} tx/s\n'
             f' Transaction size: {self.tx_size} B\n'
             f' Max latency: {self.max_latency} ms\n'
+            f' Latency limit: {self.tc_latency} ms\n'
+            f' Bandwidth limit: {self.tc_bandwidth} Mbps\n'
+            f' Clients: {self.clients}\n'
         )
 
     def __eq__(self, other):
@@ -34,11 +43,15 @@ class Setup:
 
     @classmethod
     def from_str(cls, raw):
+        topology = search(r'.* Topology: (.*)', raw).group(1)
         nodes = int(search(r'.* Committee size: (\d+)', raw).group(1))
         rate = int(search(r'.* Input rate: (\d+)', raw).group(1))
         tx_size = int(search(r'.* Transaction size: (\d+)', raw).group(1))
         faults = int(search(r'.* Faults: (\d+)', raw).group(1))
-        return cls(nodes, rate, tx_size, faults)
+        latency = int(search(r'.* Latency limit: (\d+)', raw).group(1))
+        bandwidth = int(search(r'.* Bandwidth limit: (\d+)', raw).group(1))
+        clients = int(search(r'.* Clients: (\d+)', raw).group(1))
+        return cls(nodes, rate, tx_size, faults, topology, bandwidth, latency, clients)
 
 
 class Result:
