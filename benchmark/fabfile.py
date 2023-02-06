@@ -88,7 +88,7 @@ def local(ctx):
 
 
 @task
-def create(ctx, nodes=6):
+def create(ctx, nodes=30):
     ''' Create a testbed'''
     try:
         InstanceManager.make().create_instances(nodes)
@@ -148,11 +148,11 @@ def remote(ctx):
         'faults': 0,
         'nodes': 30,
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': [30_000],
+        'rate': [250000],
         'tx_size': 512,
         'duration': 60,
         'runs': 1,
-        'topology': 'fullmesh',
+        'topology': 'kauri',
         'latency': 0,
         'bandwidth': "",
     }

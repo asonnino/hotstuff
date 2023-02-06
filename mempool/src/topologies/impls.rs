@@ -62,7 +62,7 @@ impl Topology for KauriTopology {
         'building: loop {
             let mut start = i + tree_on_level.len();
             let remaining = self.peers.len() - start;
-            if remaining == 0 {
+            if remaining == 0 || tree_on_level.is_empty() {
                 break 'building;
             }
             let max_fanout = remaining / tree_on_level.len();

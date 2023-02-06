@@ -139,3 +139,4 @@ cython_debug/
 
 settings.json
 plots/
+results*/

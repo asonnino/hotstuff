@@ -1,4 +1,4 @@
-from random import sample
+from random import sample, shuffle
 from fabric import Connection, ThreadingGroup as Group
 from fabric.exceptions import GroupException
 from paramiko import RSAKey
@@ -288,6 +288,7 @@ class Bench:
             for r in bench_parameters.rate:
                 Print.heading(f'\nRunning {n} nodes (input rate: {r:,} tx/s)')
                 hosts = selected_hosts[:n]
+                shuffle(hosts)
 
                 # Upload all configuration files.
                 try:
@@ -298,7 +299,7 @@ class Bench:
                     continue
 
                 # select n-f random nodes
-                hosts = sample(hosts, n-faults)
+                hosts = hosts[:n-faults]
 
                 # Run the benchmark.
                 for j in range(bench_parameters.runs):
