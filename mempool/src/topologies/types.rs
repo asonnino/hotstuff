@@ -9,6 +9,13 @@ pub struct FullMeshTopology {
     pub(crate) pub_key: PublicKey,
 }
 
+impl FullMeshTopology {
+    pub fn new(mut peers: Vec<(PublicKey, SocketAddr)>, pub_key: PublicKey) -> Self {
+        peers.sort_by(|a, b| a.0.cmp(&b.0));
+        FullMeshTopology { peers, pub_key }
+    }
+}
+
 /// `KauriTopology` is a simple tree topology parametrized by the number of children per node.
 #[derive(Clone, Debug)]
 pub struct KauriTopology {

@@ -1,8 +1,6 @@
 use super::*;
-use crate::{
-    common::{batch_digest, committee_with_base_port, keys, listener, transaction},
-    FullMeshTopologyBuilder,
-};
+use crate::common::{batch_digest, committee_with_base_port, keys, listener, transaction};
+use crate::topologies::builders::types::FullMeshTopologyBuilder;
 use network::SimpleSender;
 use std::fs;
 
@@ -26,13 +24,15 @@ async fn handle_clients_transactions() {
     let (_tx_consensus_to_mempool, rx_consensus_to_mempool) = channel(1);
     let (tx_mempool_to_consensus, mut rx_mempool_to_consensus) = channel(1);
     Mempool::spawn(
-        name,
+        name.clone(),
         committee.clone(),
         parameters,
         store,
         rx_consensus_to_mempool,
         tx_mempool_to_consensus,
-        FullMeshTopologyBuilder { name: Some(name) },
+        FullMeshTopologyBuilder {
+            pub_key: Some(name),
+        },
     );
 
     // Spawn enough mempools' listeners to acknowledge our batches.

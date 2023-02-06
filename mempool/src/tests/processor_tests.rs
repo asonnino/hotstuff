@@ -1,7 +1,7 @@
 use super::*;
 use crate::common::{batch, committee_with_base_port, keys};
 use crate::mempool::MempoolMessage;
-use crate::FullMeshTopology;
+use crate::topologies::types::FullMeshTopology;
 use std::fs;
 use tokio::sync::mpsc::channel;
 
@@ -25,7 +25,7 @@ async fn hash_and_store() {
         tx_digest,
         FullMeshTopology {
             peers: vec![],
-            name: name,
+            pub_key: name,
         },
     );
 

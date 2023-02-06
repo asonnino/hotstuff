@@ -37,7 +37,7 @@ impl TopologyBuilder for FullMeshTopologyBuilder {
             return Err(TopologyError::NoPeers);
         }
 
-        Ok(FullMeshTopology { peers, pub_key })
+        Ok(FullMeshTopology::new(peers, pub_key))
     }
 }
 
