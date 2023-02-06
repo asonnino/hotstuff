@@ -179,7 +179,7 @@ class DockerBench:
             sleep(ceil(duration / 20))
         self.stop()
 
-    def _logs(self, containers, faults):
+    def _logs(self, containers, config):
         # Delete local logs (if any).
         cmd = CommandMaker.clean_logs()
         subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
@@ -192,7 +192,7 @@ class DockerBench:
             
         # Parse logs and return the parser.
         Print.info('Parsing logs and computing performance...')
-        return LogParser.process(PathMaker.logs_path(), faults=faults)
+        return LogParser.process(PathMaker.logs_path(), config = config)
 
     def launch_containers(self, n):
         # Remove the previous service
@@ -298,7 +298,14 @@ class DockerBench:
                         )
                         # faults, nodes, rate, tx_size, latency, bandwidth, clients
                         bandwidth = self.bandwidth if self.bandwidth != "" else "max"
-                        self._logs(containers, faults).print(PathMaker.result_file(
+                        config = {
+                            'faults': faults,
+                            'tc_latency': self.latency,
+                            'tc_bandwidth': bandwidth,
+                            'number_of_clients': clients,
+                            'topology': self.topology.name,
+                        }
+                        self._logs(containers, config).print(PathMaker.result_file(
                             faults, n, r, self.bench_parameters.tx_size, self.latency, bandwidth, clients, self.topology.name
                         ))
                     except (subprocess.SubprocessError, ParseError) as e:

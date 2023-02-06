@@ -232,7 +232,7 @@ class Bench:
             sleep(ceil(duration / 20))
         self.kill(hosts=hosts, delete_logs=False)
 
-    def _logs(self, hosts, faults):
+    def _logs(self, hosts, config):
         # Delete local logs (if any).
         cmd = CommandMaker.clean_logs()
         subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
@@ -248,7 +248,7 @@ class Bench:
 
         # Parse logs and return the parser.
         Print.info('Parsing logs and computing performance...')
-        return LogParser.process(PathMaker.logs_path(), faults=faults)
+        return LogParser.process(PathMaker.logs_path(), config)
 
     def run(self, bench_parameters_dict, node_parameters_dict, debug=False):
         assert isinstance(debug, bool)
@@ -276,6 +276,13 @@ class Bench:
             e = FabricError(e) if isinstance(e, GroupException) else e
             raise BenchError('Failed to update nodes', e)
 
+
+        # Number of clients
+        clients = bench_parameters.clients
+
+        # Do not boot faulty nodes.
+        faults = bench_parameters.faults
+
         # Run benchmarks.
         for i, n in enumerate(bench_parameters.nodes):
             for r in bench_parameters.rate:
@@ -290,12 +297,8 @@ class Bench:
                     Print.error(BenchError('Failed to configure nodes', e))
                     continue
 
-                # Do not boot faulty nodes.
-                faults = bench_parameters.faults
                 # select n-f random nodes
                 hosts = sample(hosts, n-faults)
-
-                clients = bench_parameters.clients
 
                 # Run the benchmark.
                 for j in range(bench_parameters.runs):
@@ -304,7 +307,15 @@ class Bench:
                         self._run_single(
                             hosts, clients[i], r, bench_parameters, node_parameters, debug
                         )
-                        self._logs(hosts, faults).print(PathMaker.result_file(
+                        config = {
+                            'faults': faults,
+                            'tc_latency': bench_parameters.latency,
+                            'tc_bandwidth': bench_parameters.bandwidth,
+                            'number_of_clients': clients[i],
+                            'topology': bench_parameters.topology.name,
+                        }
+
+                        self._logs(hosts, config).print(PathMaker.result_file(
                             faults, 
                             n, 
                             r, 

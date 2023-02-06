@@ -126,7 +126,14 @@ class LocalBench:
 
             # Parse logs and return the parser.
             Print.info('Parsing logs...')
-            return LogParser.process('./logs', faults=self.faults)
+            config = {
+                'number_of_clients' : max_clients,
+                'faults' : self.faults,
+                'tc_bandwidth' : "max",
+                'tc_latency': 0,
+                'topology': self.topology.name,
+            }
+            return LogParser.process('./logs', config)
 
         except (subprocess.SubprocessError, ParseError) as e:
             self._kill_nodes()

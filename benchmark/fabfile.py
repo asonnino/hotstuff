@@ -57,12 +57,12 @@ def docker(ctx):
 def local(ctx):
     ''' Run benchmarks on localhost '''
     bench_params = {
-        'faults': 3,
+        'faults': 0,
         'nodes': 10,
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': 50000,
+        'rate': 1000,
         'tx_size': 512,
-        'duration': 300,
+        'duration': 30,
         'topology': 'fullmesh',
     }
     node_params = {
@@ -208,6 +208,6 @@ def kill(ctx):
 def logs(ctx):
     ''' Print a summary of the logs '''
     try:
-        print(LogParser.process('./logs', faults='?').result())
+        print(LogParser.process('./logs').result())
     except ParseError as e:
         Print.error(BenchError('Failed to parse logs', e))

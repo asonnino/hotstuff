@@ -13,15 +13,26 @@ class ParseError(Exception):
 
 
 class LogParser:
-    def __init__(self, clients, nodes, faults):
+    def __init__(self, clients, nodes, config = None):
         inputs = [clients, nodes]
         assert all(isinstance(x, list) for x in inputs)
         assert all(isinstance(x, str) for y in inputs for x in y)
         assert all(x for x in inputs)
+        if config is not None:
+            self.number_of_clients = config['number_of_clients']
+            self.topology = config['topology']
+            self.tc_bandwidth = config['tc_bandwidth']
+            self.tc_latency = config['tc_latency']
+            self.faults = config['faults']
+        else:
+            self.number_of_clients = '?'
+            self.topology = '?'
+            self.tc_bandwidth = '?'
+            self.tc_latency = '?'
+            self.faults = '?'
 
-        self.faults = faults
-        if isinstance(faults, int):
-            self.committee_size = len(nodes) + int(faults)
+        if isinstance(self.faults, int):
+            self.committee_size = len(nodes) + int(self.faults)
         else:
             self.committee_size = '?'
 
@@ -201,11 +212,15 @@ class LogParser:
             ' SUMMARY:\n'
             '-----------------------------------------\n'
             ' + CONFIG:\n'
+            f' Topology: {self.topology}\n'
             f' Faults: {self.faults} nodes\n'
             f' Committee size: {self.committee_size} nodes\n'
             f' Input rate: {sum(self.rate):,} tx/s\n'
             f' Transaction size: {self.size[0]:,} B\n'
             f' Execution time: {round(duration):,} s\n'
+            f' Latency limit: {self.tc_latency} ms\n'
+            f' Bandwidth limit: {self.tc_bandwidth} Mbps\n'
+            f' Clients: {self.number_of_clients} nodes\n'
             '\n'
             f' Consensus timeout delay: {consensus_timeout_delay:,} ms\n'
             f' Consensus sync retry delay: {consensus_sync_retry_delay:,} ms\n'
@@ -232,7 +247,7 @@ class LogParser:
             f.write(self.result())
 
     @classmethod
-    def process(cls, directory, faults):
+    def process(cls, directory, config = None):
         assert isinstance(directory, str)
 
         clients = []
@@ -244,4 +259,4 @@ class LogParser:
             with open(filename, 'r') as f:
                 nodes += [f.read()]
 
-        return cls(clients, nodes, faults)
+        return cls(clients, nodes, config)
