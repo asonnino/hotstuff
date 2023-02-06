@@ -67,6 +67,50 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
         });
     }
 
+    async fn send_ack(&mut self, digest: Digest, source: &PublicKey) {
+        let source_addr = self
+            .committee
+            .mempool_address(&source)
+            .expect("Did not find source");
+        let payload = Bytes::from(
+            bincode::serialize(&MempoolMessage::Ack((self.name, digest.clone()))).unwrap(),
+        );
+        let handler = self.network.send(source_addr, payload).await;
+        debug!("Sent Ack to {} for batch {}", source_addr, &digest);
+        tokio::spawn(async { handler.await });
+    }
+
+    async fn relay_batch(
+        &mut self,
+        batch: SerializedBatchMessage,
+        digest: Digest,
+        source: PublicKey,
+    ) {
+        let peers = {
+            match self.topology.broadcast_peers(source) {
+                Some(peer) => peer
+                    .read()
+                    .unwrap()
+                    .get_children()
+                    .iter()
+                    .map(|t| t.read().unwrap().addr)
+                    .collect(),
+                None => vec![],
+            }
+        };
+
+        if peers.is_empty() {
+            return;
+        }
+
+        debug!("Relaying batch {} to {:?}", &digest, &peers);
+        let handlers = self.network.broadcast(peers, batch.into()).await;
+        // Await the handlers
+        tokio::spawn(async move {
+            join_all(handlers).await;
+        });
+    }
+
     async fn run(&mut self) {
         let mut seen = HashSet::new();
         let mut count = 0;
@@ -76,39 +120,11 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
             }
             self.store.write(digest.to_vec(), batch.clone()).await;
             if source != self.name {
-                // If peer is not the current node then the message was received by another peer and should be ack'd then relayed.
-                let source_addr = self
-                    .committee
-                    .mempool_address(&source)
-                    .expect("Did not find source");
-                let payload = Bytes::from(
-                    bincode::serialize(&MempoolMessage::Ack((self.name, digest.clone()))).unwrap(),
-                );
-                let handler = self.network.send(source_addr, payload).await;
-                debug!("Sent Ack to {} for batch {}", source_addr, &digest);
-                // Await the handlers
-                tokio::spawn(async { handler.await });
+                // Send an ack to the source.
+                self.send_ack(digest.clone(), &source).await;
 
                 // Send the batch to other peers.
-                let peers = {
-                    match self.topology.broadcast_peers(source) {
-                        Some(peer) => peer
-                            .read()
-                            .unwrap()
-                            .get_children()
-                            .iter()
-                            .map(|t| t.read().unwrap().addr)
-                            .collect(),
-                        None => vec![],
-                    }
-                };
-
-                debug!("Relaying batch {} to {:?}", &digest, &peers);
-                let handlers = self.network.broadcast(peers, batch.into()).await;
-                // Await the handlers
-                tokio::spawn(async move {
-                    join_all(handlers).await;
-                });
+                self.relay_batch(batch, digest.clone(), source).await;
             }
             if self.tx_digest.capacity() < 10 {
                 warn!("tx_digest capacity: {:?}", self.tx_digest.capacity());

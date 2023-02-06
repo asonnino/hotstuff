@@ -15,7 +15,7 @@ def docker(ctx):
     bench_params = {
         'faults': 0,                     # Number of faults
         'nodes': 10,                     # Number of nodes
-        'clients': 1,                    # Number of clients
+        'clients': 10,                    # Number of clients
         'rate': [1000],                 # Total rate of transactions per second
         'tx_size': 512,                  # Transaction size in bytes
         'duration': 30,                  # Duration in s
@@ -25,8 +25,8 @@ def docker(ctx):
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 10_000,
-            'sync_retry_delay': 10_000,
+            'timeout_delay': 5_000,
+            'sync_retry_delay': 5_000,
         },
         'mempool': {
             'gc_depth': 50,
@@ -39,7 +39,7 @@ def docker(ctx):
         }
     }
     settings = dict({
-        "branch" : "main",
+        "branch" : "script_with_failure",
         "repo_name" : "SuperHotStuff",
         "consensus_port": 8000,
         "mempool_port": 7000,
