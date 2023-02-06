@@ -190,6 +190,24 @@ class PlotParameters:
                 raise ConfigError('Missing max latency')
             self.max_latency = [int(x) for x in max_lat]
 
+            topology = json['topology']
+            topology = topology if isinstance(topology, list) else [topology]
+            if not topology:
+                raise ConfigError('Missing topology')
+            self.topology = topology
+
+            tc_latency = json['tc_latency']
+            tc_latency = tc_latency if isinstance(tc_latency, list) else [tc_latency]
+            if not tc_latency:
+                raise ConfigError('Missing tc latency')
+            self.tc_latency = [int(x) for x in tc_latency]
+
+            tc_bandwidth = json['tc_bandwidth']
+            tc_bandwidth = tc_bandwidth if isinstance(tc_bandwidth, list) else [tc_bandwidth]
+            if not tc_bandwidth:
+                raise ConfigError('Missing tc bandwidth')
+            self.tc_bandwidth = tc_bandwidth
+
         except KeyError as e:
             raise ConfigError(f'Malformed bench parameters: missing key {e}')
 

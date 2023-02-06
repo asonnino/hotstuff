@@ -184,7 +184,10 @@ def plot(ctx):
         'faults': [0],
         'nodes': [10, 20, 50],
         'tx_size': 512,
-        'max_latency': [2_000, 5_000]
+        'max_latency': [2_000, 5_000],
+        'topology' : ['fullmesh', 'binomial'],
+        'tc_latency' : [0],
+        'tc_bandwidth' : ['max'],
     }
     try:
         Ploter.plot(plot_params)
