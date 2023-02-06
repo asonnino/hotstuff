@@ -80,13 +80,13 @@ class DockerBench:
             sleep(1)
         return
     
-    def stop(self, delete_logs=False):
+    def stop(self, containers, delete_logs=False):
         assert isinstance(delete_logs, bool)
         Print.info(f'Sending stop command, delete_logs={delete_logs}...')
         delete_logs = CommandMaker.clean_logs() if delete_logs else 'true'
         cmd = [delete_logs, f'({CommandMaker.kill()} || true)']
         cmd = docker_cmd(' && '.join(cmd))
-        for container in self.docker_client.containers.list():
+        for container in containers:
             container.exec_run(cmd)
     
     def _config(self, containers, hosts, node_parameters):
@@ -132,7 +132,7 @@ class DockerBench:
     
     def _run_single(self, containers, hosts, max_clients, rate, bench_parameters, node_parameters, debug=False):
         Print.info('Booting testbed...')
-        self.stop(delete_logs=True)
+        self.stop(containers, delete_logs=True)
         # Run the clients (they will wait for the nodes to be ready).
         # Filter all faulty nodes from the client addresses (or they will wait
         # for the faulty nodes to be online).
@@ -179,7 +179,7 @@ class DockerBench:
         duration = bench_parameters.duration
         for _ in progress_bar(range(20), prefix=f'Running benchmark ({duration} sec):'):
             sleep(ceil(duration / 20))
-        self.stop()
+        self.stop(containers)
 
     def _logs(self, containers, config):
         # Delete local logs (if any).
@@ -272,17 +272,17 @@ class DockerBench:
                 self.launch_containers(n)
 
                 Print.heading(f'\nRunning {n} nodes (input rate: {r:,} tx/s)')
-                Print.info(f'Containers : {self.docker_client.containers.list()}')
+                containers = self.docker_client.containers.list()
+                Print.info(f'Containers : {containers}')
                 # Get the ip addresses of the containers
                 hosts = []
-                for container in self.docker_client.containers.list():
+                for container in containers:
                     hosts.append(container.attrs['NetworkSettings']['Networks'][NETWORK]['IPAddress'])
                 Print.info(f'hosts : {hosts}')
                 faults = self.bench_parameters.faults
                 clients = self.clients[i]
-                number_of_nodes = n - faults 
-                containers = sample(self.docker_client.containers.list(), number_of_nodes)
-
+                # Keep only the n-f first nodes
+                containers = containers[:n-faults]
                 # Upload all configuration files.
                 try:
                     self._config(containers, hosts, self.node_parameters)
