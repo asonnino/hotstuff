@@ -77,7 +77,7 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
         );
         let handler = self.network.send(source_addr, payload).await;
         debug!("Sent Ack to {} for batch {}", source_addr, &digest);
-        tokio::spawn(async { handler.await });
+        tokio::spawn(handler);
     }
 
     async fn relay_batch(

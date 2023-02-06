@@ -141,6 +141,8 @@ class DockerBench:
         client_logs = [PathMaker.client_log_file(i) for i in range(len(hosts))]
         number_of_clients = 0
 
+        addresses = [f'{k}:{self.settings["front_port"]}' for k in hosts]
+
         for container, log_file in zip(containers, client_logs):
             if number_of_clients >= max_clients:
                 rate_share = 0
@@ -149,6 +151,7 @@ class DockerBench:
                 bench_parameters.tx_size,
                 rate_share,
                 timeout,
+                addresses,
             )
             self._background_run(container, cmd, log_file)
             number_of_clients += 1
