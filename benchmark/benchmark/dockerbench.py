@@ -51,7 +51,6 @@ def docker_cmd(cmd):
     return f'/bin/bash -c "{cmd}"'
 
 class DockerBench:
-
     def __init__(self, bench_parameters_dict, node_parameters_dict, settings):
         try:
             self.bench_parameters = BenchParameters(bench_parameters_dict)
@@ -274,13 +273,12 @@ class DockerBench:
                 # Get the ip addresses of the containers
                 hosts = []
                 for container in self.docker_client.containers.list():
-                    hosts.append(container.attrs['NetworkSettings']['Networks']['benchNet']['IPAddress'])
+                    hosts.append(container.attrs['NetworkSettings']['Networks'][NETWORK]['IPAddress'])
                 Print.info(f'hosts : {hosts}')
                 faults = self.bench_parameters.faults
                 clients = self.clients[i]
                 number_of_nodes = n - faults 
                 containers = sample(self.docker_client.containers.list(), number_of_nodes)
-
 
                 # Upload all configuration files.
                 try:

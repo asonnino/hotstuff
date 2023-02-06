@@ -15,7 +15,7 @@ def docker(ctx):
     bench_params = {
         'faults': 0,                     # Number of faults
         'nodes': 10,                     # Number of nodes
-        'clients': 10,                    # Number of clients
+        'clients': 1,                    # Number of clients
         'rate': [1000],                 # Total rate of transactions per second
         'tx_size': 512,                  # Transaction size in bytes
         'duration': 30,                  # Duration in s
@@ -33,7 +33,7 @@ def docker(ctx):
             'sync_retry_delay': 5_000,
             'sync_retry_nodes': 3,
             'batch_size': 500_000,
-            'max_batch_delay': 200,
+            'max_batch_delay': 50,
             'max_hop_delay': 10000,
             'fanout': 3,
         }
