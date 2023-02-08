@@ -104,7 +104,7 @@ impl Synchronizer {
                 // Handle consensus' messages.
                 Some(message) = self.rx_message.recv() => match message {
                     ConsensusMempoolMessage::Synchronize(digests, target) => {
-                        continue; // Remove in order to enable the synchronization.
+                        // continue; Uncomment to disable synchronization.
                         let now = SystemTime::now()
                             .duration_since(UNIX_EPOCH)
                             .expect("Failed to measure time")
