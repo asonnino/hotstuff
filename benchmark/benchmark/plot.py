@@ -2,7 +2,7 @@ from re import findall, search, split
 import matplotlib.pyplot as plt
 from matplotlib.ticker import StrMethodFormatter
 from glob import glob
-from itertools import cycle
+from itertools import cycle, product
 
 from benchmark.utils import PathMaker
 from benchmark.config import PlotParameters
@@ -93,6 +93,11 @@ class Ploter:
         f = search(r'Faults: (\d+)', data).group(1)
         faults = f'({f} faulty)' if f != '0' else ''
         return f'{x} nodes {faults}'
+    
+    @staticmethod
+    def topology(data):
+        x = search(r'Topology: (\w+)', data).group(1)
+        return x
 
     @staticmethod
     def max_latency(data):
@@ -115,7 +120,8 @@ class Ploter:
     def plot_latency(cls, files):
         assert isinstance(files, list)
         assert all(isinstance(x, str) for x in files)
-        z_axis = cls.nodes
+        #z_axis = cls.nodes
+        z_axis = cls.topology
         x_label = 'Throughput (tx/s)'
         y_label = ['Latency (ms)']
         ploter = cls(files)
@@ -145,18 +151,20 @@ class Ploter:
         robustness_files, latency_files, tps_files = [], [], []
         tx_size = params.tx_size
         
-        for f in params.faults:
-            for n in params.nodes:
-                robustness_files += glob(
-                    PathMaker.agg_file('robustness', f, n, 'x', tx_size, 'any')
-                )
-                latency_files += glob(
-                    PathMaker.agg_file('latency', f, n, 'any', tx_size, 'any')
-                )
+        for f,n,c, topology, tc_latency, tc_bandwidth in product(params.faults, params.nodes, params.clients, params.topology, params.tc_latency, params.tc_bandwidth):
+            print(PathMaker.agg_file('robustness', topology, f, n, c, 'x', tx_size, tc_latency, tc_bandwidth, 'any'))
+            robustness_files += glob(
+                PathMaker.agg_file('robustness', topology, f, n, c, 'x', tx_size, tc_latency, tc_bandwidth, 'any')
+            )
+            latency_files += glob(
+                PathMaker.agg_file('latency', topology, f, n, c, 'any', tx_size, tc_latency, tc_bandwidth, 'any')
+            )
             for l in params.max_latency:
                 tps_files += glob(
-                    PathMaker.agg_file('tps', f, 'x', 'any', tx_size, l)
+                    PathMaker.agg_file('tps', topology, f, 'x', c, 'any', tx_size, tc_latency, tc_bandwidth, l)
                 )
+
+        print(latency_files)
 
         # Make the plots.
         cls.plot_robustness(robustness_files)

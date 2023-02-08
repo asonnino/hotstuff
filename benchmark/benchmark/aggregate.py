@@ -49,7 +49,7 @@ class Setup:
         tx_size = int(search(r'.* Transaction size: (\d+)', raw).group(1))
         faults = int(search(r'.* Faults: (\d+)', raw).group(1))
         latency = int(search(r'.* Latency limit: (\d+)', raw).group(1))
-        bandwidth = int(search(r'.* Bandwidth limit: (\d+)', raw).group(1))
+        bandwidth = search(r'.* Bandwidth limit: (.*) Mbps', raw).group(1)  
         clients = int(search(r'.* Clients: (\d+)', raw).group(1))
         return cls(nodes, rate, tx_size, faults, topology, bandwidth, latency, clients)
 
@@ -128,10 +128,14 @@ class LogAggregator:
                 )
                 filename = PathMaker.agg_file(
                     name,
+                    setup.topology,
                     setup.faults,
                     setup.nodes, 
+                    setup.clients,
                     setup.rate, 
                     setup.tx_size, 
+                    setup.tc_latency,
+                    setup.tc_bandwidth,
                     max_latency=setup.max_latency
                 )
                 with open(filename, 'w') as f:

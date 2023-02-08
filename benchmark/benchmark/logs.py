@@ -21,7 +21,7 @@ class LogParser:
         if config is not None:
             self.number_of_clients = config['number_of_clients']
             self.topology = config['topology']
-            self.tc_bandwidth = config['tc_bandwidth']
+            self.tc_bandwidth = config['tc_bandwidth'] if config['tc_bandwidth'] else 'max'
             self.tc_latency = config['tc_latency']
             self.faults = config['faults']
         else:
@@ -146,6 +146,7 @@ class LogParser:
                 'max_batch_delay': int(
                     search(r'Max batch delay .* (\d+)', log).group(1)
                 ),
+                # TODO : Max hop delay in logs
             }
         }
 
@@ -205,6 +206,7 @@ class LogParser:
         mempool_sync_retry_nodes = self.configs[0]['mempool']['sync_retry_nodes']
         mempool_batch_size = self.configs[0]['mempool']['batch_size']
         mempool_max_batch_delay = self.configs[0]['mempool']['max_batch_delay']
+        #max_hop_delay = self.configs[0]['mempool']['max_hop_delay']
 
         return (
             '\n'
@@ -229,6 +231,7 @@ class LogParser:
             f' Mempool sync retry nodes: {mempool_sync_retry_nodes:,} nodes\n'
             f' Mempool batch size: {mempool_batch_size:,} B\n'
             f' Mempool max batch delay: {mempool_max_batch_delay:,} ms\n'
+            #f' Mempool max hop delay: {max_hop_delay:,} ms\n'
             '\n'
             ' + RESULTS:\n'
             f' Consensus TPS: {round(consensus_tps):,} tx/s\n'

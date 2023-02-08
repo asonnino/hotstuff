@@ -208,6 +208,9 @@ class PlotParameters:
                 raise ConfigError('Missing tc bandwidth')
             self.tc_bandwidth = tc_bandwidth
 
+            self.clients = json['clients']
+            self.clients = self.clients if isinstance(self.clients, list) else [self.clients]
+
         except KeyError as e:
             raise ConfigError(f'Malformed bench parameters: missing key {e}')
 
