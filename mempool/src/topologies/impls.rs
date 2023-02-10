@@ -1,13 +1,13 @@
 use std::cmp::min;
 use std::sync::{Arc, RwLock};
 
-use crypto::PublicKey;
-
 use crate::topologies::traits::Topology;
 use crate::topologies::tree::{Tree, TreeNodeRef};
 use crate::topologies::types::{
     BinomialTreeTopology, CacheTopology, FullMeshTopology, KauriTopology,
 };
+
+use crypto::PublicKey;
 
 impl Topology for FullMeshTopology {
     fn broadcast_peers(&mut self, name: PublicKey) -> Option<TreeNodeRef> {
@@ -65,7 +65,7 @@ impl Topology for KauriTopology {
             if remaining == 0 || tree_on_level.is_empty() {
                 break 'building;
             }
-            let max_fanout = remaining / tree_on_level.len();
+            let max_fanout = f64::ceil(remaining as f64 / tree_on_level.len() as f64) as usize;
             let curr_fanout = min(self.fanout, max_fanout);
 
             for elem in 0..tree_on_level.len() {
