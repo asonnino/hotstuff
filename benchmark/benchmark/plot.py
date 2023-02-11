@@ -67,7 +67,10 @@ class Ploter:
                 x_values, y_values, yerr=y_err, label=z_axis(result),
                 linestyle='dotted', marker=next(markers), capsize=3
             )
-
+        # Set log scale 
+        if type == 'latency':
+            plt.xscale('log')
+            plt.yscale('log')
         plt.legend(loc='lower center', bbox_to_anchor=(0.5, 1), ncol=2)
         plt.xlim(xmin=0)
         plt.ylim(bottom=0)
