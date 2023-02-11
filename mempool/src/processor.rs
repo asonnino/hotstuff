@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::time::Duration;
 
 use bytes::Bytes;
 use crypto::{Digest, PublicKey};
@@ -7,6 +8,7 @@ use log::{debug, warn};
 use network::ReliableSender;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::time::timeout;
 
 use crate::topologies::traits::Topology;
 use crate::{mempool::MempoolMessage, Committee};
@@ -19,6 +21,9 @@ pub mod processor_tests;
 
 /// Indicates a serialized `MempoolMessage::Batch` message.
 pub type SerializedBatchMessage = Vec<u8>;
+
+/// Duration before dropping a handler
+pub const HANDLER_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Hashes and stores batches, it then outputs the batch's digest.
 pub struct Processor<T: Topology> {
@@ -107,7 +112,8 @@ impl<T: Topology + Send + Sync + 'static> Processor<T> {
         let handlers = self.network.broadcast(peers, batch.into()).await;
         // Await the handlers
         tokio::spawn(async move {
-            join_all(handlers).await;
+            // Join all with timeout
+            let _ = timeout(HANDLER_TIMEOUT, join_all(handlers)).await;
         });
     }
 

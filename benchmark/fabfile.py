@@ -57,13 +57,13 @@ def docker(ctx):
 def local(ctx):
     ''' Run benchmarks on localhost '''
     bench_params = {
-        'faults': 9,
-        'nodes': 30,
+        'faults': 0,
+        'nodes': 10,
         'clients': 1,  # Must be the same length as nodes or an integer
         'rate': 1000,
         'tx_size': 512,
-        'duration': 60,
-        'topology': 'kauri',
+        'duration': 30,
+        'topology': 'fullmesh',
     }
     node_params = {
         'consensus': {
@@ -76,7 +76,7 @@ def local(ctx):
             'sync_retry_nodes': 3,
             'batch_size': 500_000,
             'max_batch_delay': 50,
-            'max_hop_delay': 100,
+            'max_hop_delay': 10000,
             'fanout': 3,
         }
     }
@@ -148,9 +148,9 @@ def remote(ctx):
         'faults': 0,
         'nodes': 30,
         'clients': 1,  # Must be the same length as nodes or an integer
-        'rate': [240000],
+        'rate': [1000, 10000, 50000, 100000, 150000],
         'tx_size': 512,
-        'duration': 60,
+        'duration': 300,
         'runs': 1,
         'topology': 'binomial',
         'latency': 0,
@@ -159,15 +159,15 @@ def remote(ctx):
     node_params = {
         'consensus': {
             'timeout_delay': 10_000,
-            'sync_retry_delay': 10_000,
+            'sync_retry_delay': 5_000,
         },
         'mempool': {
             'gc_depth': 50,
-            'sync_retry_delay': 10_000,
+            'sync_retry_delay': 5_000,
             'sync_retry_nodes': 3,
             'batch_size': 500_000,
             'max_batch_delay': 200,
-            'max_hop_delay': 100000,
+            'max_hop_delay': 5000,
             'fanout' : 3,
         }
     }

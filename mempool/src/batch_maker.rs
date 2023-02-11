@@ -75,7 +75,7 @@ where
 type IndirectPeerFuture = Pin<Box<dyn Future<Output = (Digest, Vec<TreeNodeRef>)> + Send>>;
 
 /// Duration before dropping a handler
-pub const HANDLER_TIMEOUT: Duration = Duration::from_secs(60);
+pub const HANDLER_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Sleeps for `duration` and then returns the value.
 async fn wait_block<T>(duration: Duration, value: T) -> T {
