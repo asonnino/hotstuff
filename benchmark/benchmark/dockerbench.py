@@ -130,7 +130,7 @@ class DockerBench:
 
         return committee
     
-    def _run_single(self, containers, hosts, max_clients, rate, bench_parameters, node_parameters, debug=False):
+    def _run_single(self, containers, topology, hosts, max_clients, rate, bench_parameters, node_parameters, debug=False):
         Print.info('Booting testbed...')
         self.stop(containers, delete_logs=True)
         # Run the clients (they will wait for the nodes to be ready).
@@ -166,7 +166,7 @@ class DockerBench:
                 PathMaker.committee_file(),
                 db,
                 PathMaker.parameters_file(),
-                bench_parameters.topology.name,
+                topology,
                 debug=debug
             )
             self._background_run(container, cmd, log_file)
@@ -268,49 +268,50 @@ class DockerBench:
         # Run benchmarks.
         for i, n in enumerate(self.bench_parameters.nodes):
             for r in self.bench_parameters.rate:
-                # Launch n-faulty containers
-                self.launch_containers(n)
+                for topology in self.bench_parameters.topology:
+                    # Launch n-faulty containers
+                    self.launch_containers(n)
 
-                Print.heading(f'\nRunning {n} nodes (input rate: {r:,} tx/s)')
-                containers = self.docker_client.containers.list()
-                Print.info(f'Containers : {containers}')
-                # Get the ip addresses of the containers
-                hosts = []
-                for container in containers:
-                    hosts.append(container.attrs['NetworkSettings']['Networks'][NETWORK]['IPAddress'])
-                Print.info(f'hosts : {hosts}')
-                faults = self.bench_parameters.faults
-                clients = self.clients[i]
-                # Keep only the n-f first nodes
-                containers = containers[:n-faults]
-                # Upload all configuration files.
-                try:
-                    self._config(containers, hosts, self.node_parameters)
-                except (subprocess.SubprocessError) as e:
-                    Print.error(BenchError('Failed to configure nodes', e))
-                    continue
-                
-                # Run the benchmark.
-                for j in range(self.bench_parameters.runs):
-                    Print.heading(f'Run {j+1}/{self.bench_parameters.runs}')
+                    Print.heading(f'\nRunning {n} nodes (input rate: {r:,} tx/s)')
+                    containers = self.docker_client.containers.list()
+                    Print.info(f'Containers : {containers}')
+                    # Get the ip addresses of the containers
+                    hosts = []
+                    for container in containers:
+                        hosts.append(container.attrs['NetworkSettings']['Networks'][NETWORK]['IPAddress'])
+                    Print.info(f'hosts : {hosts}')
+                    faults = self.bench_parameters.faults
+                    clients = self.clients[i]
+                    # Keep only the n-f first nodes
+                    containers = containers[:n-faults]
+                    # Upload all configuration files.
                     try:
-                        self._run_single(
-                            containers, hosts, clients, r, self.bench_parameters, self.node_parameters, debug
-                        )
-                        # faults, nodes, rate, tx_size, latency, bandwidth, clients
-                        bandwidth = self.bandwidth if self.bandwidth != "" else "max"
-                        config = {
-                            'faults': faults,
-                            'tc_latency': self.latency,
-                            'tc_bandwidth': bandwidth,
-                            'number_of_clients': clients,
-                            'topology': self.topology.name,
-                        }
-                        self._logs(containers, config).print(PathMaker.result_file(
-                            faults, n, r, self.bench_parameters.tx_size, self.latency, bandwidth, clients, self.topology.name
-                        ))
-                    except (subprocess.SubprocessError, ParseError) as e:
-                        self.kill()
-                        Print.error(BenchError('Benchmark failed', e))
+                        self._config(containers, hosts, self.node_parameters)
+                    except (subprocess.SubprocessError) as e:
+                        Print.error(BenchError('Failed to configure nodes', e))
                         continue
-                self.kill()
+                    
+                    # Run the benchmark.
+                    for j in range(self.bench_parameters.runs):
+                        Print.heading(f'Run {j+1}/{self.bench_parameters.runs}')
+                        try:
+                            self._run_single(
+                                containers, topology, hosts, clients, r, self.bench_parameters, self.node_parameters, debug
+                            )
+                            # faults, nodes, rate, tx_size, latency, bandwidth, clients
+                            bandwidth = self.bandwidth if self.bandwidth != "" else "max"
+                            config = {
+                                'faults': faults,
+                                'tc_latency': self.latency,
+                                'tc_bandwidth': bandwidth,
+                                'number_of_clients': clients,
+                                'topology': topology,
+                            }
+                            self._logs(containers, config).print(PathMaker.result_file(
+                                faults, n, r, self.bench_parameters.tx_size, self.latency, bandwidth, clients, topology
+                            ))
+                        except (subprocess.SubprocessError, ParseError) as e:
+                            self.kill()
+                            Print.error(BenchError('Benchmark failed', e))
+                            continue
+                    self.kill()

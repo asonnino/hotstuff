@@ -178,7 +178,7 @@ class Bench:
 
         return committee
 
-    def _run_single(self, hosts, max_clients, rate, bench_parameters, node_parameters, debug=False):
+    def _run_single(self, hosts, topology, max_clients, rate, bench_parameters, node_parameters, debug=False):
         Print.info('Booting testbed...')
 
         # Kill any potentially unfinished run and delete logs.
@@ -217,7 +217,7 @@ class Bench:
                 PathMaker.committee_file(),
                 db,
                 PathMaker.parameters_file(),
-                bench_parameters.topology.name,
+                topology,
                 debug=debug, 
             )
             self._background_run(host, cmd, log_file)
@@ -286,49 +286,50 @@ class Bench:
         # Run benchmarks.
         for i, n in enumerate(bench_parameters.nodes):
             for r in bench_parameters.rate:
-                Print.heading(f'\nRunning {n} nodes (input rate: {r:,} tx/s)')
-                hosts = selected_hosts[:n]
-                shuffle(hosts)
+                for topology in bench_parameters.topology:
+                    Print.heading(f'\nRunning {n} nodes (input rate: {r:,} tx/s)')
+                    hosts = selected_hosts[:n]
+                    shuffle(hosts)
 
-                # Upload all configuration files.
-                try:
-                    self._config(hosts, node_parameters)
-                except (subprocess.SubprocessError, GroupException) as e:
-                    e = FabricError(e) if isinstance(e, GroupException) else e
-                    Print.error(BenchError('Failed to configure nodes', e))
-                    continue
-
-                # select n-f random nodes
-                hosts = hosts[:n-faults]
-
-                # Run the benchmark.
-                for j in range(bench_parameters.runs):
-                    Print.heading(f'Run {j+1}/{bench_parameters.runs}')
+                    # Upload all configuration files.
                     try:
-                        self._run_single(
-                            hosts, clients[i], r, bench_parameters, node_parameters, debug
-                        )
-                        config = {
-                            'faults': faults,
-                            'tc_latency': bench_parameters.latency,
-                            'tc_bandwidth': bench_parameters.bandwidth,
-                            'number_of_clients': clients[i],
-                            'topology': bench_parameters.topology.name,
-                        }
-
-                        self._logs(hosts, config).print(PathMaker.result_file(
-                            faults, 
-                            n, 
-                            r, 
-                            bench_parameters.tx_size, 
-                            bench_parameters.latency, 
-                            bench_parameters.bandwidth if bench_parameters.bandwidth != "" else "max", 
-                            clients[i], 
-                            bench_parameters.topology.name
-                        ))
-                    except (subprocess.SubprocessError, GroupException, ParseError) as e:
-                        self.kill(hosts=hosts)
-                        if isinstance(e, GroupException):
-                            e = FabricError(e)
-                        Print.error(BenchError('Benchmark failed', e))
+                        self._config(hosts, node_parameters)
+                    except (subprocess.SubprocessError, GroupException) as e:
+                        e = FabricError(e) if isinstance(e, GroupException) else e
+                        Print.error(BenchError('Failed to configure nodes', e))
                         continue
+
+                    # select n-f random nodes
+                    hosts = hosts[:n-faults]
+
+                    # Run the benchmark.
+                    for j in range(bench_parameters.runs):
+                        Print.heading(f'Run {j+1}/{bench_parameters.runs}')
+                        try:
+                            self._run_single(
+                                hosts, topology, clients[i], r, bench_parameters, node_parameters, debug
+                            )
+                            config = {
+                                'faults': faults,
+                                'tc_latency': bench_parameters.latency,
+                                'tc_bandwidth': bench_parameters.bandwidth,
+                                'number_of_clients': clients[i],
+                                'topology': topology,
+                            }
+
+                            self._logs(hosts, config).print(PathMaker.result_file(
+                                faults, 
+                                n, 
+                                r, 
+                                bench_parameters.tx_size, 
+                                bench_parameters.latency, 
+                                bench_parameters.bandwidth if bench_parameters.bandwidth != "" else "max", 
+                                clients[i], 
+                                topology
+                            ))
+                        except (subprocess.SubprocessError, GroupException, ParseError) as e:
+                            self.kill(hosts=hosts)
+                            if isinstance(e, GroupException):
+                                e = FabricError(e)
+                            Print.error(BenchError('Benchmark failed', e))
+                            continue

@@ -5,12 +5,6 @@ ACCEPTED_TOPOLOGIES = {'fullmesh', 'kauri', 'binomial'}
 class ConfigError(Exception):
     pass
 
-
-class Topology:
-    def __init__(self, name):
-        assert(name in ACCEPTED_TOPOLOGIES)
-        self.name = name
-
 class Key:
     def __init__(self, name, secret):
         self.name = name
@@ -155,7 +149,13 @@ class BenchParameters:
             self.tx_size = int(json['tx_size'])
             self.duration = int(json['duration'])
             self.runs = int(json['runs']) if 'runs' in json else 1
-            self.topology = Topology(json['topology'])
+            self.topology = json['topology']
+            self.topology = self.topology if isinstance(self.topology, list) else [self.topology]
+            
+            # Verify that every topology is in ACCEPTED_TOPOLOGIES
+            if not all(x in ACCEPTED_TOPOLOGIES for x in self.topology):
+                raise ConfigError('Invalid topology (accepted: ' + str(ACCEPTED_TOPOLOGIES) + ')')
+            
             self.latency = int(json['latency']) if 'latency' in json else 0
             self.bandwidth = json['bandwidth'] if 'bandwidth' in json else ""
             

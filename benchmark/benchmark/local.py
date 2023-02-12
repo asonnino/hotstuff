@@ -73,7 +73,8 @@ class LocalBench:
             names = [x.name for x in keys]
             committee = LocalCommittee(names, self.BASE_PORT)
 
-            print(f'Topology : {self.topology.name}')
+            topology = self.topology[0]
+            print(f'Topology : {topology}')
 
             committee.print(PathMaker.committee_file())
 
@@ -110,7 +111,7 @@ class LocalBench:
                     PathMaker.committee_file(),
                     db,
                     PathMaker.parameters_file(),
-                    topology=self.topology.name,
+                    topology=topology,
                     debug=debug
                 )
                 self._background_run(cmd, log_file)
@@ -131,7 +132,7 @@ class LocalBench:
                 'faults' : self.faults,
                 'tc_bandwidth' : "max",
                 'tc_latency': 0,
-                'topology': self.topology.name,
+                'topology': topology,
             }
             return LogParser.process('./logs', config)
 
