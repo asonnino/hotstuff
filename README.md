@@ -2,7 +2,7 @@
 
 # SuperHotStuff
 
-[![build status](https://img.shields.io/github/workflow/status/AlianBenabdallah/SuperHotStuff/Build/main?style=flat-square&logo=github)](https://github.com/AlianBenabdallah/SuperHotStuff/actions)
+[![build status](https://img.shields.io/github/actions/workflow/status/AlianBenabdallah/SuperHotStuff/build.yml?branch=main?style=flat-square&logo=github)](https://github.com/AlianBenabdallah/SuperHotStuff/actions)
 [![rustc](https://img.shields.io/badge/rustc-1.64+-blue?style=flat-square&logo=rust)](https://www.rust-lang.org)
 [![license](https://img.shields.io/badge/license-Apache-blue.svg?style=flat-square)](LICENSE)
 
