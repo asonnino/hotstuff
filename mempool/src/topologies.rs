@@ -1,7 +1,5 @@
-pub mod error;
+pub mod builders;
 pub mod impls;
 pub mod traits;
+pub mod tree;
 pub mod types;
-
-pub use crate::topologies::traits::{Topology, TopologyBuilder};
-pub use crate::topologies::types::{FullMeshTopologyBuilder, KauriTopologyBuilder};

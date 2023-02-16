@@ -10,10 +10,11 @@ use consensus::Committee as ConsensusCommittee;
 use env_logger::Env;
 use futures::future::join_all;
 use log::error;
-use mempool::{
-    BinomialTreeTopologyBuilder, Committee as MempoolCommittee, FullMeshTopologyBuilder,
-    KauriTopologyBuilder, TopologyBuilder,
+use mempool::topologies::builders::traits::TopologyBuilder;
+use mempool::topologies::builders::types::{
+    BinomialTreeTopologyBuilder, FullMeshTopologyBuilder, KauriTopologyBuilder,
 };
+use mempool::Committee as MempoolCommittee;
 use std::fs;
 use tokio::task::JoinHandle;
 
@@ -112,7 +113,7 @@ async fn main() {
                         committee,
                         parameters,
                         store,
-                        FullMeshTopologyBuilder { name: None },
+                        FullMeshTopologyBuilder::new(),
                     )
                     .await
                 }
@@ -122,10 +123,7 @@ async fn main() {
                         committee,
                         parameters,
                         store,
-                        KauriTopologyBuilder {
-                            fanout: None,
-                            name: None,
-                        },
+                        KauriTopologyBuilder::new(),
                     )
                     .await
                 }
@@ -135,7 +133,7 @@ async fn main() {
                         committee,
                         parameters,
                         store,
-                        BinomialTreeTopologyBuilder { name: None },
+                        BinomialTreeTopologyBuilder::new(),
                     )
                     .await
                 }
@@ -158,15 +156,9 @@ async fn main() {
             topology_builder,
         } => {
             let deployer = match topology_builder.as_str() {
-                "fullmesh" => deploy_testbed(nodes, FullMeshTopologyBuilder { name: None }),
-                "kauri" => deploy_testbed(
-                    nodes,
-                    KauriTopologyBuilder {
-                        fanout: None,
-                        name: None,
-                    },
-                ),
-                "binomial" => deploy_testbed(nodes, BinomialTreeTopologyBuilder { name: None }),
+                "fullmesh" => deploy_testbed(nodes, FullMeshTopologyBuilder::new()),
+                "kauri" => deploy_testbed(nodes, KauriTopologyBuilder::new()),
+                "binomial" => deploy_testbed(nodes, BinomialTreeTopologyBuilder::new()),
                 _ => panic!("Unknown topology"),
             };
             match deployer {

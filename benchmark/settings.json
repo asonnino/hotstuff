@@ -1,0 +1,23 @@
+{
+    "testbed": "SuperHotStuff",
+    "key": {
+        "name": "aws_key",
+        "path": "key"
+    },
+    "ports": {
+        "consensus": 8000,
+        "mempool": 7000,
+        "front": 6000
+    },
+    "repo": {
+        "name": "SuperHotStuff",
+        "url": "https://github.com/AlianBenabdallah/SuperHotStuff.git",
+        "branch": "main"
+    },
+    "instances": {
+        "type": "m6g.8xlarge",
+        "regions": [
+            "us-east-1"
+        ]
+    }
+}

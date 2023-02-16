@@ -1,0 +1,30 @@
+
+-----------------------------------------
+ RESULTS:
+-----------------------------------------
+ Topology: fullmesh
+ Faults: 9 nodes
+ Committee size: 30 nodes
+ Input rate: any tx/s
+ Transaction size: 512 B
+ Max latency: any ms
+ Latency limit: 0 ms
+ Bandwidth limit: max Mbps
+ Clients: 1
+
+ Variable value: X=416
+ TPS: 416 +/- 0 tx/s
+ Latency: 10676 +/- 2 ms
+
+ Variable value: X=20305
+ TPS: 20305 +/- 12 tx/s
+ Latency: 29240 +/- 19 ms
+
+ Variable value: X=46258
+ TPS: 46258 +/- 75 tx/s
+ Latency: 13482 +/- 110 ms
+
+ Variable value: X=28867
+ TPS: 28867 +/- 4739 tx/s
+ Latency: 59691 +/- 23057 ms
+-----------------------------------------

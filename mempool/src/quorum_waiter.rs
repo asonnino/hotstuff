@@ -55,6 +55,12 @@ impl QuorumWaiter {
     }
 
     async fn handle_ack(&mut self, peer: PublicKey, digest: Digest) {
+        debug!(
+            "Received ack from {:?} for {:?}",
+            self.committee.mempool_address(&peer),
+            digest
+        );
+
         // Check if an ack was not already received from this peer
         {
             let mut block_in_process = match self.stake_map.get_mut(&digest) {
@@ -62,11 +68,6 @@ impl QuorumWaiter {
                 None => return,
             };
             if block_in_process.acks.insert(peer) {
-                debug!(
-                    "Received ack from {:?} for {:?}",
-                    self.committee.mempool_address(&peer),
-                    digest
-                );
                 // Update the stake and read it
                 block_in_process.stake += self.committee.stake(&peer);
                 if block_in_process.stake < self.committee.quorum_threshold() {

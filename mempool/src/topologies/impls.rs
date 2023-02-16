@@ -1,83 +1,42 @@
 use std::cmp::min;
-use std::collections::HashSet;
-use std::net::SocketAddr;
+use std::sync::{Arc, RwLock};
 
-use crate::Parameters;
-use crypto::PublicKey;
-
-use crate::topologies::error::TopologyError;
-use crate::topologies::traits::{Topology, TopologyBuilder};
+use crate::topologies::traits::Topology;
+use crate::topologies::tree::{Tree, TreeNodeRef};
 use crate::topologies::types::{
-    BinomialTreeTopology, BinomialTreeTopologyBuilder, FullMeshTopology, FullMeshTopologyBuilder,
-    KauriTopology, KauriTopologyBuilder,
+    BinomialTreeTopology, CacheTopology, FullMeshTopology, KauriTopology,
 };
 
-use super::types::CacheTopology;
-
-impl TopologyBuilder for FullMeshTopologyBuilder {
-    type Topology = FullMeshTopology;
-
-    fn set_params(&mut self, _params: &Parameters, name: PublicKey) {
-        self.name = Some(name);
-    }
-
-    fn build(
-        &self,
-        peers: Vec<(PublicKey, SocketAddr)>,
-    ) -> Result<FullMeshTopology, TopologyError> {
-        let name = self.name.ok_or(TopologyError::MissingParameters {
-            param: "name".to_string(),
-        })?;
-        if peers.is_empty() {
-            return Err(TopologyError::NoPeers);
-        }
-        let peers = peers.into_iter().filter(|(p, _)| p != &name).collect();
-        Ok(FullMeshTopology { peers, name })
-    }
-}
+use crypto::PublicKey;
 
 impl Topology for FullMeshTopology {
-    fn broadcast_peers(&mut self, name: PublicKey) -> Vec<(PublicKey, SocketAddr)> {
-        if name == self.name {
-            self.peers.clone()
+    fn broadcast_peers(&mut self, name: PublicKey) -> Option<TreeNodeRef> {
+        if name == self.pub_key {
+            let (key, addr) = self
+                .peers
+                .iter()
+                .find(|(peer_id, _)| peer_id == &self.pub_key)
+                .unwrap();
+            // Find the current node
+            let mut tree = Tree::new(key.clone(), addr.clone());
+            // Return all the peers except self
+            let children = self
+                .peers
+                .clone()
+                .into_iter()
+                .filter(|(peer_id, _)| peer_id != &self.pub_key)
+                .map(|(key, addr)| Arc::new(RwLock::new(Tree::new(key, addr))))
+                .collect();
+            tree.add_children(children);
+            Some(Arc::new(RwLock::new(tree)))
         } else {
-            vec![]
+            None
         }
-    }
-
-    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr)> {
-        vec![]
-    }
-}
-
-impl TopologyBuilder for KauriTopologyBuilder {
-    type Topology = KauriTopology;
-
-    fn set_params(&mut self, params: &Parameters, name: PublicKey) {
-        self.fanout = params.fanout;
-        self.name = Some(name)
-    }
-
-    // Builds an n-ary tree and add the children of id to peers
-    fn build(&self, peers: Vec<(PublicKey, SocketAddr)>) -> Result<KauriTopology, TopologyError> {
-        if peers.is_empty() {
-            return Err(TopologyError::NoPeers);
-        }
-
-        let fanout = self
-            .fanout
-            .ok_or_else(|| TopologyError::MissingParameters {
-                param: "fanout".to_string(),
-            })?;
-        let name = self.name.ok_or_else(|| TopologyError::MissingParameters {
-            param: "name".to_string(),
-        })?;
-        Ok(KauriTopology::new(peers, fanout, name))
     }
 }
 
 impl Topology for KauriTopology {
-    fn broadcast_peers(&mut self, id: PublicKey) -> Vec<(PublicKey, SocketAddr)> {
+    fn broadcast_peers(&mut self, id: PublicKey) -> Option<TreeNodeRef> {
         // Find the index of the peer in the list
         let index = self
             .peers
@@ -88,110 +47,70 @@ impl Topology for KauriTopology {
         // Place the sender at the beginning of the list
         self.peers.rotate_left(index);
 
-        let mut processes_on_level = 1;
-        let mut res = Vec::new();
+        let root = Arc::new(RwLock::new(Tree::new(self.peers[0].0, self.peers[0].1)));
+
+        let mut tree_on_level = vec![root.clone()];
         let mut i = 0;
+        let mut res = {
+            if id == self.pub_key {
+                Some(root.clone())
+            } else {
+                None
+            }
+        };
 
         'building: loop {
-            let mut start = i + processes_on_level;
+            let mut start = i + tree_on_level.len();
             let remaining = self.peers.len() - start;
-            if remaining == 0 {
+            if remaining == 0 || tree_on_level.is_empty() {
                 break 'building;
             }
-            let max_fanout = remaining / processes_on_level;
+            let max_fanout = f64::ceil(remaining as f64 / tree_on_level.len() as f64) as usize;
             let curr_fanout = min(self.fanout, max_fanout);
 
-            for _ in 0..processes_on_level {
+            for elem in 0..tree_on_level.len() {
                 if i >= self.peers.len() || start >= self.peers.len() {
                     break 'building;
                 }
+                let mut tree = tree_on_level[elem].write().unwrap();
 
-                if self.name == self.peers[i].0 {
-                    (start..min(start + curr_fanout, self.peers.len())).for_each(|j| {
-                        res.push(self.peers[j]);
-                    });
+                let children = self.peers[start..min(start + curr_fanout, self.peers.len())]
+                    .iter()
+                    .map(|(pub_key, addr)| {
+                        Arc::new(RwLock::new(Tree::new(pub_key.clone(), addr.clone())))
+                    })
+                    .collect();
+
+                tree.add_children(children);
+
+                if tree.pub_key == self.pub_key {
+                    res = Some(tree_on_level[elem].clone())
                 }
+
                 start += curr_fanout;
                 i += 1;
             }
-            processes_on_level = min(curr_fanout * processes_on_level, remaining);
+
+            // Update tree_on_level to be the children of the current level
+            tree_on_level = tree_on_level
+                .into_iter()
+                .flat_map(|tree| tree.read().unwrap().get_children())
+                .collect();
         }
 
         // Place the sender at the end of the list
         self.peers.rotate_right(index);
 
         res
-    }
-
-    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr)> {
-        // Returns the difference of self.peers and self.broadcast_peers(self.name)
-        // Find the index of the peer in the list
-        let index = self
-            .peers
-            .iter()
-            .position(|(peer_id, _)| peer_id == &self.name)
-            .unwrap();
-
-        // Place the sender at the beginning of the list
-        self.peers.rotate_left(index);
-
-        let mut processes_on_level = min(self.fanout, self.peers.len() - 1);
-        let mut res = Vec::new();
-        let mut i = 1;
-
-        'building: loop {
-            let mut start = i + processes_on_level;
-            let remaining = self.peers.len() - start;
-            if remaining == 0 {
-                break 'building;
-            }
-            let max_fanout = remaining / processes_on_level;
-            let curr_fanout = std::cmp::min(self.fanout, max_fanout);
-
-            for _ in 0..processes_on_level {
-                if i >= self.peers.len() || start >= self.peers.len() {
-                    break 'building;
-                }
-                (start..min(start + curr_fanout, self.peers.len())).for_each(|j| {
-                    res.push(self.peers[j]);
-                });
-                start += curr_fanout;
-                i += 1;
-            }
-            processes_on_level = min(curr_fanout * processes_on_level, remaining);
-        }
-
-        // Place the sender at the end of the list
-        self.peers.rotate_right(index);
-
-        res
-    }
-}
-
-impl TopologyBuilder for BinomialTreeTopologyBuilder {
-    type Topology = BinomialTreeTopology;
-
-    fn set_params(&mut self, _params: &Parameters, name: PublicKey) {
-        self.name = Some(name)
-    }
-
-    fn build(
-        &self,
-        peers: Vec<(PublicKey, SocketAddr)>,
-    ) -> Result<BinomialTreeTopology, TopologyError> {
-        if peers.is_empty() {
-            return Err(TopologyError::NoPeers);
-        }
-
-        let name = self.name.ok_or_else(|| TopologyError::MissingParameters {
-            param: "name".to_string(),
-        })?;
-        Ok(BinomialTreeTopology::new(peers, name))
     }
 }
 
 impl Topology for BinomialTreeTopology {
-    fn broadcast_peers(&mut self, sender: PublicKey) -> Vec<(PublicKey, SocketAddr)> {
+    fn broadcast_peers(&mut self, sender: PublicKey) -> Option<TreeNodeRef> {
+        if self.peers.is_empty() {
+            return None;
+        }
+
         // Find the index of the peer in the list
         let index = self
             .peers
@@ -202,69 +121,54 @@ impl Topology for BinomialTreeTopology {
         // Place the sender at the beginning of the list
         self.peers.rotate_left(index);
 
-        let mut res = Vec::new();
+        // The sender is the root of the tree
+        let root = Arc::new(RwLock::new(Tree::new(self.peers[0].0, self.peers[0].1)));
+
+        let mut res = {
+            if sender == self.pub_key {
+                Some(root.clone())
+            } else {
+                None
+            }
+        };
+
+        if self.peers.len() == 1 {
+            return Some(root);
+        }
+
         let mut base = 1;
-        if sender == self.name {
-            // If the sender is the current node, then the result is self.peers[2^i] for i in [0, log2(peers.len())]
-            while base < self.peers.len() {
-                base <<= 1;
+        while base < self.peers.len() {
+            base <<= 1;
+        }
+        base >>= 1;
+
+        let mut node_queue = vec![(root.clone(), 0, base)];
+
+        while !node_queue.is_empty() {
+            let (parent, parent_index, mut bitmask) = node_queue.pop().unwrap();
+            if parent.read().unwrap().pub_key == self.pub_key {
+                res = Some(parent.clone());
             }
-            base >>= 1;
-            while base > 0 {
-                res.push(self.peers[base]);
-                base >>= 1;
-            }
-        } else {
-            let mut tmp =
-                (self.my_index as i32 - index as i32).rem_euclid(self.peers.len() as i32) as usize;
-            let fixed_index = tmp;
-            while tmp != 0 && tmp % 2 == 0 {
-                tmp >>= 1;
-                base <<= 1;
-            }
-            base >>= 1;
-            while base > 0 {
-                let child_index = fixed_index + base;
-                if child_index < self.peers.len() {
-                    res.push(self.peers[child_index]);
+
+            while bitmask > 0 {
+                if parent_index + bitmask >= self.peers.len() {
+                    bitmask >>= 1;
+                    continue;
                 }
-                base >>= 1;
+                let child_index = parent_index + bitmask;
+
+                let child = Arc::new(RwLock::new(Tree::new(
+                    self.peers[child_index].0,
+                    self.peers[child_index].1,
+                )));
+                parent.write().unwrap().add_child(child.clone());
+
+                bitmask >>= 1;
+                node_queue.push((child, child_index, bitmask));
             }
         }
-        // Place the sender at the end of the list
+
         self.peers.rotate_right(index);
-        res
-    }
-
-    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr)> {
-        self.peers.rotate_left(self.my_index);
-        let children: HashSet<_> = self.broadcast_peers(self.name).into_iter().collect();
-        let mut res_set = HashSet::new();
-        let mut res = Vec::new();
-        let mut bitmask = 1;
-        while bitmask < self.peers.len() {
-            bitmask <<= 1;
-        }
-        bitmask >>= 1;
-        let mut subchildren = vec![bitmask, 0];
-
-        while bitmask > 0 {
-            bitmask >>= 1;
-            for i in 0..subchildren.len() {
-                let v = subchildren[i] | bitmask;
-                subchildren.push(v);
-                if v < self.peers.len()
-                    && !children.contains(&self.peers[v])
-                    && res_set.insert(self.peers[v])
-                    && self.peers[v].0 != self.name
-                {
-                    res.push(self.peers[v]);
-                }
-            }
-        }
-
-        self.peers.rotate_right(self.my_index);
-
         res
     }
 }
@@ -273,22 +177,12 @@ impl<T> Topology for CacheTopology<T>
 where
     T: Topology,
 {
-    fn broadcast_peers(&mut self, id: PublicKey) -> Vec<(PublicKey, SocketAddr)> {
+    fn broadcast_peers(&mut self, id: PublicKey) -> Option<TreeNodeRef> {
         if let Some(peers) = self.direct_peers_cache.get(&id) {
             peers.clone()
         } else {
             let peers = self.inner.broadcast_peers(id);
             self.direct_peers_cache.insert(id, peers.clone());
-            peers
-        }
-    }
-
-    fn indirect_peers(&mut self) -> Vec<(PublicKey, SocketAddr)> {
-        if let Some(peers) = &self.indirect_peers_cache {
-            peers.clone()
-        } else {
-            let peers = self.inner.indirect_peers();
-            self.indirect_peers_cache = Some(peers.clone());
             peers
         }
     }

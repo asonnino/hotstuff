@@ -1,5 +1,7 @@
 use crate::config::Stake;
 use crate::mempool::MempoolMessage;
+use crate::topologies::traits::Topology;
+use crate::topologies::tree::TreeNodeRef;
 use bytes::Bytes;
 use crypto::{Digest, PublicKey};
 use dashmap::DashMap;
@@ -12,7 +14,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 #[cfg(feature = "benchmark")]
 use std::convert::TryInto as _;
-use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
@@ -41,13 +42,18 @@ pub struct BlockInProcess {
 }
 
 /// Assemble clients transactions into batches.
-pub struct BatchMaker {
+pub struct BatchMaker<T>
+where
+    T: Topology,
+{
     /// Self name.
     name: PublicKey,
     /// The preferred batch size (in bytes).
     batch_size: usize,
     /// The maximum delay after which to seal the batch (in ms).
     max_batch_delay: u64,
+    /// Duration before sending batches to the indirect peers if no ack was received (in ms).
+    max_hop_delay: u64,
     /// Channel to receive transactions from the network.
     rx_transaction: Receiver<Transaction>,
     /// Holds the current batch.
@@ -56,10 +62,8 @@ pub struct BatchMaker {
     current_batch_size: usize,
     /// Stores acknowledged batches.
     stake_map: Arc<DashMap<Digest, BlockInProcess>>,
-    /// Adresses of the authorities directly connected to us.
-    mempool_addresses: Vec<SocketAddr>,
-    /// Peers that are not directly connected to us.
-    indirect_peers: Vec<(PublicKey, SocketAddr)>,
+    /// Topology of the network
+    topology: T,
     /// Stake of current authority.
     stake: Stake,
     /// Network sender to broadcast the batches to the other mempools.
@@ -68,16 +72,10 @@ pub struct BatchMaker {
     block_queue: FuturesUnordered<IndirectPeerFuture>,
 }
 
-type IndirectPeerFuture = Pin<Box<dyn Future<Output = (Digest, usize)> + Send>>;
-
-/// Duration before sending batches to the indirect peers if no ack was received
-pub const INDIRECT_PEERS_TIMEOUT: Duration = Duration::from_millis(10000);
-
-/// Duration before sending a batch to a second indirect peer when we already sent it to one
-pub const SLOW_PEERS_TIMEOUT: Duration = Duration::from_millis(400);
+type IndirectPeerFuture = Pin<Box<dyn Future<Output = (Digest, Vec<TreeNodeRef>)> + Send>>;
 
 /// Duration before dropping a handler
-pub const HANDLER_TIMEOUT: Duration = Duration::from_secs(60);
+pub const HANDLER_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Sleeps for `duration` and then returns the value.
 async fn wait_block<T>(duration: Duration, value: T) -> T {
@@ -85,30 +83,34 @@ async fn wait_block<T>(duration: Duration, value: T) -> T {
     value
 }
 
-impl BatchMaker {
+impl<T> BatchMaker<T>
+where
+    T: Topology,
+{
     pub fn spawn(
         name: PublicKey,
         batch_size: usize,
         max_batch_delay: u64,
+        max_hop_delay: u64,
         rx_transaction: Receiver<Transaction>,
         stake_map: Arc<DashMap<Digest, BlockInProcess>>,
-        mempool_addresses: Vec<SocketAddr>,
-        indirect_peers: Vec<(PublicKey, SocketAddr)>,
+        mut topology: T,
         stake: Stake,
     ) {
-        info!("Broadcasting batches to {:?}", &mempool_addresses);
-        debug!("Indirectly connected to {:?}", indirect_peers);
+        let peers = topology.broadcast_peers(name).unwrap();
+        info!("Broadcasting batches to {:?}", &peers);
+
         tokio::spawn(async move {
             Self {
                 name,
                 batch_size,
                 max_batch_delay,
+                max_hop_delay,
                 rx_transaction,
                 current_batch: Batch::with_capacity(batch_size * 2),
                 current_batch_size: 0,
                 stake_map,
-                mempool_addresses,
-                indirect_peers,
+                topology,
                 stake,
                 network: ReliableSender::new(),
                 block_queue: FuturesUnordered::new(),
@@ -129,33 +131,41 @@ impl BatchMaker {
     }
 
     /// Sends the block to the next indirect_peer for which no ack was received starting from index.
-    async fn send_to_indirect_peers(&mut self, digest: Digest, index: usize) {
+    async fn send_to_indirect_peers(&mut self, digest: Digest, trees: Vec<TreeNodeRef>) {
         let block_in_process = {
             match self.stake_map.get(&digest) {
                 Some(block_in_process) => block_in_process,
                 None => return,
             }
         };
-        let mut i = index;
-        while i < self.indirect_peers.len() {
-            let (peer, address) = self.indirect_peers[i];
-            if !block_in_process.acks.contains(&peer) {
-                // Send the batch to the indirect peer
-                debug!("Sending batch {:?} to indirect peer {:?}", digest, &peer);
-                let handler = self
-                    .network
-                    .send(address, Bytes::from(block_in_process.block.clone()))
-                    .await;
-                // Spawn a new task to wait for the handlers
-                tokio::spawn(async move {
-                    let _ = timeout(HANDLER_TIMEOUT, handler).await;
-                });
-                // Add the block to the queue
-                self.block_queue
-                    .push(Box::pin(wait_block(SLOW_PEERS_TIMEOUT, (digest, i + 1))));
-                break;
+
+        for t in trees {
+            let (peer, address) = {
+                let t = t.read().unwrap();
+                (t.pub_key, t.addr)
+            };
+            let wait_duration = {
+                if block_in_process.acks.contains(&peer) {
+                    self.max_hop_delay
+                } else {
+                    debug!("Sending batch {:?} to indirect peer {:?}", &digest, &peer);
+                    let handler = self
+                        .network
+                        .send(address, Bytes::from(block_in_process.block.clone()))
+                        .await;
+                    tokio::spawn(async move {
+                        let _ = timeout(HANDLER_TIMEOUT, handler).await;
+                    });
+                    2 * self.max_hop_delay
+                }
+            };
+            let children = t.read().unwrap().get_children();
+            if !children.is_empty() {
+                self.block_queue.push(Box::pin(wait_block(
+                    Duration::from_millis(wait_duration),
+                    (digest.clone(), children),
+                )));
             }
-            i += 1;
         }
     }
 
@@ -171,8 +181,8 @@ impl BatchMaker {
                     self.single_transaction(transaction).await;
                     timer.as_mut().reset(Instant::now() + Duration::from_millis(self.max_batch_delay));
                 },
-                Some((digest, index)) = self.block_queue.next() => {
-                    self.send_to_indirect_peers(digest, index).await;
+                Some((digest, tree)) = self.block_queue.next() => {
+                    self.send_to_indirect_peers(digest, tree).await;
                 },
                 // If the timer triggers, seal the batch even if it contains few transactions.
                 () = &mut timer => {
@@ -219,20 +229,36 @@ impl BatchMaker {
                 acks: HashSet::new(),
             },
         );
-        debug!(
-            "Broadcasting batch {:?} to {:?}",
-            digest, self.mempool_addresses
-        );
+        debug!("Broadcasting batch {:?}", digest);
+
+        let children = self
+            .topology
+            .broadcast_peers(self.name)
+            .unwrap()
+            .read()
+            .unwrap()
+            .get_children();
+
+        let direct_peers = children.iter().map(|t| t.read().unwrap().addr).collect();
+        debug!("direct_peers : {:?}", direct_peers);
+
         let handlers = self
             .network
-            .broadcast(self.mempool_addresses.clone(), Bytes::from(serialized))
+            .broadcast(direct_peers, Bytes::from(serialized))
             .await;
 
-        self.block_queue.push(Box::pin(wait_block(
-            INDIRECT_PEERS_TIMEOUT,
-            (digest.clone(), 0),
-        )));
+        // Schedule sending the batch to the indirect peers
+        let subchildren: Vec<TreeNodeRef> = children
+            .iter()
+            .flat_map(|t| t.read().unwrap().get_children())
+            .collect();
 
+        if !subchildren.is_empty() {
+            self.block_queue.push(Box::pin(wait_block(
+                3 * Duration::from_millis(self.max_hop_delay),
+                (digest.clone(), subchildren),
+            )));
+        }
         // Spawn a new task to wait for the handlers
         tokio::spawn(async move {
             // Join all with timeout

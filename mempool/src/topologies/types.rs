@@ -1,40 +1,36 @@
-use std::{collections::HashMap, net::SocketAddr};
-
+use crate::topologies::tree::TreeNodeRef;
 use crypto::PublicKey;
+use std::{collections::HashMap, net::SocketAddr};
 
 /// `FullMeshTopology` is a topology where every node is connected to every other node.
 #[derive(Clone, Debug)]
 pub struct FullMeshTopology {
     pub(crate) peers: Vec<(PublicKey, SocketAddr)>,
-    pub(crate) name: PublicKey,
+    pub(crate) pub_key: PublicKey,
 }
 
-#[derive(Clone, Debug)]
-pub struct FullMeshTopologyBuilder {
-    pub name: Option<PublicKey>,
+impl FullMeshTopology {
+    pub fn new(mut peers: Vec<(PublicKey, SocketAddr)>, pub_key: PublicKey) -> Self {
+        peers.sort_by(|a, b| a.0.cmp(&b.0));
+        FullMeshTopology { peers, pub_key }
+    }
 }
 
 /// `KauriTopology` is a simple tree topology parametrized by the number of children per node.
 #[derive(Clone, Debug)]
 pub struct KauriTopology {
-    pub peers: Vec<(PublicKey, SocketAddr)>,
-    pub fanout: usize,
-    pub name: PublicKey,
-}
-
-#[derive(Clone, Debug)]
-pub struct KauriTopologyBuilder {
-    pub fanout: Option<usize>,
-    pub name: Option<PublicKey>,
+    pub(crate) peers: Vec<(PublicKey, SocketAddr)>,
+    pub(crate) fanout: usize,
+    pub(crate) pub_key: PublicKey,
 }
 
 impl KauriTopology {
-    pub fn new(mut peers: Vec<(PublicKey, SocketAddr)>, fanout: usize, name: PublicKey) -> Self {
+    pub fn new(mut peers: Vec<(PublicKey, SocketAddr)>, fanout: usize, pub_key: PublicKey) -> Self {
         peers.sort_by(|a, b| a.0.cmp(&b.0));
         KauriTopology {
             peers,
             fanout,
-            name,
+            pub_key,
         }
     }
 }
@@ -43,32 +39,20 @@ impl KauriTopology {
 #[derive(Clone, Debug)]
 pub struct BinomialTreeTopology {
     pub(crate) peers: Vec<(PublicKey, SocketAddr)>,
-    pub(crate) name: PublicKey,
-    pub my_index: usize,
+    pub(crate) pub_key: PublicKey,
 }
 
 impl BinomialTreeTopology {
-    pub fn new(mut peers: Vec<(PublicKey, SocketAddr)>, name: PublicKey) -> Self {
+    pub fn new(mut peers: Vec<(PublicKey, SocketAddr)>, pub_key: PublicKey) -> Self {
         peers.sort_by(|a, b| a.0.cmp(&b.0));
-        let my_index = peers.iter().position(|(p, _)| p == &name).unwrap();
-        BinomialTreeTopology {
-            peers,
-            name,
-            my_index,
-        }
+        BinomialTreeTopology { peers, pub_key }
     }
-}
-
-#[derive(Clone, Debug)]
-pub struct BinomialTreeTopologyBuilder {
-    pub name: Option<PublicKey>,
 }
 
 #[derive(Clone, Debug)]
 pub struct CacheTopology<T> {
     pub(crate) inner: T,
-    pub(crate) direct_peers_cache: HashMap<PublicKey, Vec<(PublicKey, SocketAddr)>>,
-    pub(crate) indirect_peers_cache: Option<Vec<(PublicKey, SocketAddr)>>,
+    pub(crate) direct_peers_cache: HashMap<PublicKey, Option<TreeNodeRef>>,
 }
 
 impl<T> CacheTopology<T> {
@@ -76,7 +60,6 @@ impl<T> CacheTopology<T> {
         CacheTopology {
             inner,
             direct_peers_cache: HashMap::new(),
-            indirect_peers_cache: None,
         }
     }
 }

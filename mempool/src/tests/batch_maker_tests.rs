@@ -1,5 +1,6 @@
 use super::*;
 use crate::common::{keys, transaction};
+use crate::topologies::types::FullMeshTopology;
 use std::time::Duration;
 use tokio::sync::mpsc::channel;
 use tokio::time::sleep;
@@ -9,19 +10,21 @@ async fn make_batch() {
     let (tx_transaction, rx_transaction) = channel(1);
     let sender = keys()[0].0;
     let stake_map = Arc::new(DashMap::new());
-    let mempool_addresses = vec![];
-    let indirect_peers = vec![];
     let stake = 0;
+    let topology = FullMeshTopology::new(
+        vec![(sender.clone(), "127.0.0.1:0".parse().unwrap())],
+        sender.clone(),
+    );
 
     // Spawn a `BatchMaker` instance.
     BatchMaker::spawn(
         sender,
         /* max_batch_size */ 200,
         /* max_batch_delay */ 1_000_000, // Ensure the timer is not triggered.
+        /*max_hop_delay */ 10000,
         rx_transaction,
         stake_map.clone(),
-        mempool_addresses,
-        indirect_peers,
+        topology,
         stake,
     );
 
@@ -50,19 +53,21 @@ async fn batch_timeout() {
     let sender = keys()[0].0;
     // Spawn a `BatchMaker` instance.
     let stake_map = Arc::new(DashMap::new());
-    let mempool_addresses = vec![];
-    let indirect_peers = vec![];
     let stake = 1;
+    let topology = FullMeshTopology::new(
+        vec![(sender.clone(), "127.0.0.1:0".parse().unwrap())],
+        sender.clone(),
+    );
 
     // Spawn a `BatchMaker` instance.
     BatchMaker::spawn(
         sender,
         /* max_batch_size */ 200,
-        /* max_batch_delay */ 100, // Ensure the timer is triggered.
+        /* max_batch_delay */ 50, // Ensure the timer is triggered.
+        /*max_hop_delay */ 10000,
         rx_transaction,
         stake_map.clone(),
-        mempool_addresses,
-        indirect_peers,
+        topology,
         stake,
     );
 

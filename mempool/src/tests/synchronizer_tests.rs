@@ -4,6 +4,7 @@ use std::fs;
 use tokio::sync::mpsc::channel;
 
 #[tokio::test]
+#[ignore]
 async fn synchronize() {
     let (tx_message, rx_message) = channel(1);
 

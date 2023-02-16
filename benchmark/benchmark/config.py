@@ -5,12 +5,6 @@ ACCEPTED_TOPOLOGIES = {'fullmesh', 'kauri', 'binomial'}
 class ConfigError(Exception):
     pass
 
-
-class Topology:
-    def __init__(self, name):
-        assert(name in ACCEPTED_TOPOLOGIES)
-        self.name = name
-
 class Key:
     def __init__(self, name, secret):
         self.name = name
@@ -107,6 +101,9 @@ class NodeParameters:
             inputs += [json['mempool']['sync_retry_nodes']]
             inputs += [json['mempool']['batch_size']]
             inputs += [json['mempool']['max_batch_delay']]
+            inputs += [json['mempool']['max_hop_delay']]
+            inputs += [json['mempool']['max_batch_delay']]
+            inputs += [json['mempool']['fanout']]
         except KeyError as e:
             raise ConfigError(f'Malformed parameters: missing key {e}')
 
@@ -130,12 +127,15 @@ class BenchParameters:
 
             clients = json['clients']
             clients = clients if isinstance(clients, list) else [clients for _ in range(len(nodes))]
+
+            self.faults = int(json['faults'])
+
             # Must be the same length as nodes
 
             if not nodes or any(x <= 1 for x in nodes):
                 raise ConfigError('Missing or invalid number of nodes')
 
-            if not clients or any(x <= 0 for x in clients) or len(clients) != len(nodes) or any(x > y for x, y in zip(clients, nodes)):
+            if not clients or any(x <= 0 for x in clients) or len(clients) != len(nodes) or any(x > y - self.faults for x, y in zip(clients, nodes)):
                 raise ConfigError('Missing or invalid number of clients')
 
             rate = json['rate']
@@ -147,10 +147,15 @@ class BenchParameters:
             self.clients = [int(x) for x in clients]
             self.rate = [int(x) for x in rate]
             self.tx_size = int(json['tx_size'])
-            self.faults = int(json['faults'])
             self.duration = int(json['duration'])
             self.runs = int(json['runs']) if 'runs' in json else 1
-            self.topology = Topology(json['topology'])
+            self.topology = json['topology']
+            self.topology = self.topology if isinstance(self.topology, list) else [self.topology]
+            
+            # Verify that every topology is in ACCEPTED_TOPOLOGIES
+            if not all(x in ACCEPTED_TOPOLOGIES for x in self.topology):
+                raise ConfigError('Invalid topology (accepted: ' + str(ACCEPTED_TOPOLOGIES) + ')')
+            
             self.latency = int(json['latency']) if 'latency' in json else 0
             self.bandwidth = json['bandwidth'] if 'bandwidth' in json else ""
             
@@ -184,6 +189,27 @@ class PlotParameters:
             if not max_lat:
                 raise ConfigError('Missing max latency')
             self.max_latency = [int(x) for x in max_lat]
+
+            topology = json['topology']
+            topology = topology if isinstance(topology, list) else [topology]
+            if not topology:
+                raise ConfigError('Missing topology')
+            self.topology = topology
+
+            tc_latency = json['tc_latency']
+            tc_latency = tc_latency if isinstance(tc_latency, list) else [tc_latency]
+            if not tc_latency:
+                raise ConfigError('Missing tc latency')
+            self.tc_latency = [int(x) for x in tc_latency]
+
+            tc_bandwidth = json['tc_bandwidth']
+            tc_bandwidth = tc_bandwidth if isinstance(tc_bandwidth, list) else [tc_bandwidth]
+            if not tc_bandwidth:
+                raise ConfigError('Missing tc bandwidth')
+            self.tc_bandwidth = tc_bandwidth
+
+            self.clients = json['clients']
+            self.clients = self.clients if isinstance(self.clients, list) else [self.clients]
 
         except KeyError as e:
             raise ConfigError(f'Malformed bench parameters: missing key {e}')

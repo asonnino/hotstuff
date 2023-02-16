@@ -1,3 +1,4 @@
+from random import sample, shuffle
 from fabric import Connection, ThreadingGroup as Group
 from fabric.exceptions import GroupException
 from paramiko import RSAKey
@@ -177,7 +178,7 @@ class Bench:
 
         return committee
 
-    def _run_single(self, hosts, max_clients, rate, bench_parameters, node_parameters, debug=False):
+    def _run_single(self, hosts, topology, max_clients, rate, bench_parameters, node_parameters, debug=False):
         Print.info('Booting testbed...')
 
         # Kill any potentially unfinished run and delete logs.
@@ -216,7 +217,7 @@ class Bench:
                 PathMaker.committee_file(),
                 db,
                 PathMaker.parameters_file(),
-                bench_parameters.topology.name,
+                topology,
                 debug=debug, 
             )
             self._background_run(host, cmd, log_file)
@@ -231,7 +232,7 @@ class Bench:
             sleep(ceil(duration / 20))
         self.kill(hosts=hosts, delete_logs=False)
 
-    def _logs(self, hosts, faults):
+    def _logs(self, hosts, config):
         # Delete local logs (if any).
         cmd = CommandMaker.clean_logs()
         subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
@@ -247,7 +248,7 @@ class Bench:
 
         # Parse logs and return the parser.
         Print.info('Parsing logs and computing performance...')
-        return LogParser.process(PathMaker.logs_path(), faults=faults)
+        return LogParser.process(PathMaker.logs_path(), config)
 
     def run(self, bench_parameters_dict, node_parameters_dict, debug=False):
         assert isinstance(debug, bool)
@@ -275,45 +276,60 @@ class Bench:
             e = FabricError(e) if isinstance(e, GroupException) else e
             raise BenchError('Failed to update nodes', e)
 
+
+        # Number of clients
+        clients = bench_parameters.clients
+
+        # Do not boot faulty nodes.
+        faults = bench_parameters.faults
+
         # Run benchmarks.
         for i, n in enumerate(bench_parameters.nodes):
             for r in bench_parameters.rate:
-                Print.heading(f'\nRunning {n} nodes (input rate: {r:,} tx/s)')
-                hosts = selected_hosts[:n]
+                for topology in bench_parameters.topology:
+                    Print.heading(f'\nRunning {n} nodes (input rate: {r:,} tx/s)')
+                    hosts = selected_hosts[:n]
+                    shuffle(hosts)
 
-                # Upload all configuration files.
-                try:
-                    self._config(hosts, node_parameters)
-                except (subprocess.SubprocessError, GroupException) as e:
-                    e = FabricError(e) if isinstance(e, GroupException) else e
-                    Print.error(BenchError('Failed to configure nodes', e))
-                    continue
-
-                # Do not boot faulty nodes.
-                faults = bench_parameters.faults
-                hosts = hosts[:n-faults]
-                clients = bench_parameters.clients
-
-                # Run the benchmark.
-                for j in range(bench_parameters.runs):
-                    Print.heading(f'Run {j+1}/{bench_parameters.runs}')
+                    # Upload all configuration files.
                     try:
-                        self._run_single(
-                            hosts, clients[i], r, bench_parameters, node_parameters, debug
-                        )
-                        self._logs(hosts, faults).print(PathMaker.result_file(
-                            faults, 
-                            n, 
-                            r, 
-                            bench_parameters.tx_size, 
-                            bench_parameters.latency, 
-                            bench_parameters.bandwidth if bench_parameters.bandwidth != "" else "max", 
-                            clients[i], 
-                            bench_parameters.topology.name
-                        ))
-                    except (subprocess.SubprocessError, GroupException, ParseError) as e:
-                        self.kill(hosts=hosts)
-                        if isinstance(e, GroupException):
-                            e = FabricError(e)
-                        Print.error(BenchError('Benchmark failed', e))
+                        self._config(hosts, node_parameters)
+                    except (subprocess.SubprocessError, GroupException) as e:
+                        e = FabricError(e) if isinstance(e, GroupException) else e
+                        Print.error(BenchError('Failed to configure nodes', e))
                         continue
+
+                    # select n-f random nodes
+                    hosts = hosts[:n-faults]
+
+                    # Run the benchmark.
+                    for j in range(bench_parameters.runs):
+                        Print.heading(f'Run {j+1}/{bench_parameters.runs}')
+                        try:
+                            self._run_single(
+                                hosts, topology, clients[i], r, bench_parameters, node_parameters, debug
+                            )
+                            config = {
+                                'faults': faults,
+                                'tc_latency': bench_parameters.latency,
+                                'tc_bandwidth': bench_parameters.bandwidth,
+                                'number_of_clients': clients[i],
+                                'topology': topology,
+                            }
+
+                            self._logs(hosts, config).print(PathMaker.result_file(
+                                faults, 
+                                n, 
+                                r, 
+                                bench_parameters.tx_size, 
+                                bench_parameters.latency, 
+                                bench_parameters.bandwidth if bench_parameters.bandwidth != "" else "max", 
+                                clients[i], 
+                                topology
+                            ))
+                        except (subprocess.SubprocessError, GroupException, ParseError) as e:
+                            self.kill(hosts=hosts)
+                            if isinstance(e, GroupException):
+                                e = FabricError(e)
+                            Print.error(BenchError('Benchmark failed', e))
+                            continue

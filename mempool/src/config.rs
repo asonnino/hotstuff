@@ -19,6 +19,9 @@ pub struct Parameters {
     /// The delay after which the workers seal a batch of transactions, even if `max_batch_size`
     /// is not reached. Denominated in ms.
     pub max_batch_delay: u64,
+    /// The delay after which a node is considered unreachable and the worker should send the batch to
+    /// its neighbours. Denominated in ms.   
+    pub max_hop_delay: u64,
     /// Fanout for Kauri topology
     #[serde(default = "default_fanout")]
     pub fanout: Option<usize>,
@@ -36,6 +39,7 @@ impl Default for Parameters {
             sync_retry_nodes: 3,
             batch_size: 500_000,
             max_batch_delay: 100,
+            max_hop_delay: 10000,
             fanout: default_fanout(),
         }
     }

@@ -3,8 +3,8 @@ use crate::config::{Committee, ConfigError, Parameters, Secret};
 use consensus::{Block, Consensus};
 use crypto::SignatureService;
 use log::info;
+use mempool::topologies::builders::traits::TopologyBuilder;
 use mempool::Mempool;
-use mempool::TopologyBuilder;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver};
 

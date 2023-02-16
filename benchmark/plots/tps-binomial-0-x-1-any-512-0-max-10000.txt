@@ -1,0 +1,18 @@
+
+-----------------------------------------
+ RESULTS:
+-----------------------------------------
+ Topology: binomial
+ Faults: 0 nodes
+ Committee size: x nodes
+ Input rate: any tx/s
+ Transaction size: 512 B
+ Max latency: 10000 ms
+ Latency limit: 0 ms
+ Bandwidth limit: max Mbps
+ Clients: 1
+
+ Variable value: X=30
+ TPS: 117544 +/- 28884 tx/s
+ Latency: 9728 +/- 7576 ms
+-----------------------------------------
