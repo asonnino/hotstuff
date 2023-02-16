@@ -1,0 +1,30 @@
+
+-----------------------------------------
+ RESULTS:
+-----------------------------------------
+ Topology: kauri
+ Faults: 9 nodes
+ Committee size: 30 nodes
+ Input rate: x tx/s
+ Transaction size: 512 B
+ Max latency: any ms
+ Latency limit: 0 ms
+ Bandwidth limit: max Mbps
+ Clients: 1
+
+ Variable value: X=1000
+ TPS: 730 +/- 2 tx/s
+ Latency: 12603 +/- 11 ms
+
+ Variable value: X=30000
+ TPS: 18580 +/- 516 tx/s
+ Latency: 16106 +/- 898 ms
+
+ Variable value: X=60000
+ TPS: 46001 +/- 1281 tx/s
+ Latency: 28478 +/- 1416 ms
+
+ Variable value: X=90000
+ TPS: 32548 +/- 7989 tx/s
+ Latency: 31986 +/- 16218 ms
+-----------------------------------------

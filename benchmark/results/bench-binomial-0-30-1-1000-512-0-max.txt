@@ -1,0 +1,96 @@
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Topology: binomial
+ Faults: 0 nodes
+ Committee size: 30 nodes
+ Input rate: 1,000 tx/s
+ Transaction size: 512 B
+ Execution time: 301 s
+ Latency limit: 0 ms
+ Bandwidth limit: max Mbps
+ Clients: 1 nodes
+
+ Consensus timeout delay: 10,000 ms
+ Consensus sync retry delay: 5,000 ms
+ Mempool GC depth: 50 rounds
+ Mempool sync retry delay: 5,000 ms
+ Mempool sync retry nodes: 3 nodes
+ Mempool batch size: 500,000 B
+ Mempool max batch delay: 200 ms
+
+ + RESULTS:
+ Consensus TPS: 1,003 tx/s
+ Consensus BPS: 513,616 B/s
+ Consensus latency: 13 ms
+
+ End-to-end TPS: 1,000 tx/s
+ End-to-end BPS: 511,959 B/s
+ End-to-end latency: 522 ms
+-----------------------------------------
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Topology: binomial
+ Faults: 0 nodes
+ Committee size: 30 nodes
+ Input rate: 1,000 tx/s
+ Transaction size: 512 B
+ Execution time: 301 s
+ Latency limit: 0 ms
+ Bandwidth limit: max Mbps
+ Clients: 1 nodes
+
+ Consensus timeout delay: 10,000 ms
+ Consensus sync retry delay: 5,000 ms
+ Mempool GC depth: 50 rounds
+ Mempool sync retry delay: 5,000 ms
+ Mempool sync retry nodes: 3 nodes
+ Mempool batch size: 500,000 B
+ Mempool max batch delay: 200 ms
+
+ + RESULTS:
+ Consensus TPS: 1,003 tx/s
+ Consensus BPS: 513,642 B/s
+ Consensus latency: 14 ms
+
+ End-to-end TPS: 1,000 tx/s
+ End-to-end BPS: 511,952 B/s
+ End-to-end latency: 520 ms
+-----------------------------------------
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Topology: binomial
+ Faults: 0 nodes
+ Committee size: 30 nodes
+ Input rate: 1,000 tx/s
+ Transaction size: 512 B
+ Execution time: 301 s
+ Latency limit: 0 ms
+ Bandwidth limit: max Mbps
+ Clients: 1 nodes
+
+ Consensus timeout delay: 10,000 ms
+ Consensus sync retry delay: 5,000 ms
+ Mempool GC depth: 50 rounds
+ Mempool sync retry delay: 5,000 ms
+ Mempool sync retry nodes: 3 nodes
+ Mempool batch size: 500,000 B
+ Mempool max batch delay: 200 ms
+
+ + RESULTS:
+ Consensus TPS: 1,007 tx/s
+ Consensus BPS: 515,355 B/s
+ Consensus latency: 14 ms
+
+ End-to-end TPS: 1,000 tx/s
+ End-to-end BPS: 511,951 B/s
+ End-to-end latency: 644 ms
+-----------------------------------------
