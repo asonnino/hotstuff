@@ -1,8 +1,8 @@
 {
-    "testbed": "hotstuff",
+    "testbed": "alberto-hotstuff",
     "key": {
         "name": "aws",
-        "path": "/absolute/ssh/key/path"
+        "path": "/Users/alberto/.ssh/aws"
     },
     "ports": {
         "consensus": 8000,
