@@ -1,14 +1,17 @@
+use std::collections::HashSet;
+
+use bytes::Bytes;
+use futures::stream::futures_unordered::FuturesUnordered;
+use futures::stream::StreamExt as _;
+use log::{debug, warn};
+use tokio::sync::mpsc::{Receiver, Sender};
+
+use crypto::{Digest, PublicKey, SignatureService};
+use network::{CancelHandler, ReliableSender};
+
 use crate::config::{Committee, Stake};
 use crate::consensus::{ConsensusMessage, Round};
 use crate::messages::{Block, QC, TC};
-use bytes::Bytes;
-use crypto::{Digest, PublicKey, SignatureService};
-use futures::stream::futures_unordered::FuturesUnordered;
-use futures::stream::StreamExt as _;
-use log::{debug, info};
-use network::{CancelHandler, ReliableSender};
-use std::collections::HashSet;
-use tokio::sync::mpsc::{Receiver, Sender};
 
 #[derive(Debug)]
 pub enum ProposerMessage {
@@ -59,6 +62,13 @@ impl Proposer {
     }
 
     async fn make_block(&mut self, round: Round, qc: QC, tc: Option<TC>) {
+        if self.buffer.is_empty() {
+            if tc.is_none() {
+                warn!("Not now to make a new block...");
+                return;
+            }
+        }
+
         // Generate a new block.
         let block = Block::new(
             qc,
@@ -70,15 +80,6 @@ impl Proposer {
         )
         .await;
 
-        if !block.payload.is_empty() {
-            info!("Created {}", block);
-
-            #[cfg(feature = "benchmark")]
-            for x in &block.payload {
-                // NOTE: This log entry is used to compute performance.
-                info!("Created {} -> {:?}", block, x);
-            }
-        }
         debug!("Created {:?}", block);
 
         // Broadcast our new block.
