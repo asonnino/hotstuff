@@ -129,7 +129,7 @@ impl Core {
                 .get_parent_block(&parent)
                 .await?
                 .expect("We should have all the ancestors by now");
-            to_commit.push_front(ancestor.clone());
+            to_commit.push_back(ancestor.clone());
             parent = ancestor;
         }
         to_commit.push_front(block.clone());
