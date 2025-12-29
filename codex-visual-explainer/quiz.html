@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Codex Quiz</title>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, sans-serif;
+      background: radial-gradient(circle at top, #142015, #0b120d);
+      color: #e6e6e6;
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 80px auto;
+      padding: 32px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px;
+    }
+
+    h1, h2 {
+      color: #f1d99b;
+    }
+
+    .progress {
+      height: 8px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: #f1d99b;
+      transition: width 0.3s ease;
+    }
+
+    .question {
+      font-size: 20px;
+      margin-bottom: 20px;
+    }
+
+    /* ===== OPTIONS ===== */
+    .option {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.04);
+      color: #e6e6e6;
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+
+    .option:hover {
+      background: rgba(255,255,255,0.08);
+    }
+
+    /* ✅ CORRECT */
+    .option.correct {
+      background: rgba(46, 204, 113, 0.25);
+      border-color: #2ecc71;
+      color: #c9f7dc;
+    }
+
+    /* ❌ WRONG */
+    .option.wrong {
+      background: rgba(231, 76, 60, 0.25);
+      border-color: #e74c3c;
+      color: #ffd6d1;
+    }
+
+    .option.disabled {
+      pointer-events: none;
+      opacity: 0.9;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .score {
+      font-size: 22px;
+      margin-bottom: 16px;
+    }
+
+    .cta {
+      margin-top: 24px;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 12px 22px;
+      border-radius: 999px;
+      background: #f1d99b;
+      color: #000;
+      font-weight: 600;
+      text-decoration: none;
+      margin-right: 12px;
+    }
+
+    footer {
+      text-align: center;
+      margin: 40px 0;
+      font-size: 14px;
+      color: #a1a1a1;
+    }
+
+    footer a {
+      color: #f1d99b;
+      text-decoration: none;
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- QUIZ -->
+<div class="container" id="quiz-box">
+  <h1>Codex Quiz</h1>
+
+  <div class="progress">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+
+  <div class="question" id="question"></div>
+  <div id="options"></div>
+</div>
+
+<!-- SCORE -->
+<div class="container hidden" id="score-box">
+  <h2>Quiz Completed 🎉</h2>
+  <p class="score" id="scoreText"></p>
+
+  <div class="cta">
+    <a class="btn" href="https://codex.xyz" target="_blank">Learn more about Codex</a>
+    <a class="btn" href="index.html">Back to Home</a>
+  </div>
+</div>
+
+<footer>
+  Built with ❤️ by
+  <a href="https://x.com/TheEncryptedAnt" target="_blank">@TheEncryptedAnt</a>
+</footer>
+
+<script>
+const quiz = [
+  { q: "What is Codex primarily focused on?", o: ["NFTs", "Stablecoins and payments", "Gaming", "Memecoins"], a: 1 },
+  { q: "Which layer is Codex built on?", o: ["Layer 1", "Layer 3", "Layer 2", "Sidechain"], a: 2 },
+  { q: "Where does Codex settle transactions?", o: ["Solana", "Polygon", "Ethereum", "BNB Chain"], a: 2 },
+  { q: "What makes Codex fees special?", o: ["High but fast", "Predictable", "Zero gas", "Dynamic spikes"], a: 1 },
+  { q: "What does Native FX enable?", o: ["NFT swaps", "Low-slippage stablecoin swaps", "Bridges", "Mining"], a: 1 },
+  { q: "Codex is optimized for?", o: ["Speculation", "Meme trading", "Payments", "Gaming"], a: 2 },
+  { q: "Which currency type is Codex built around?", o: ["Volatile tokens", "Stablecoins", "BTC only", "NFTs"], a: 1 },
+  { q: "What ensures security in Codex?", o: ["Validators", "Ethereum settlement", "Oracles", "Multisig"], a: 1 },
+  { q: "What is Atomic Offramps about?", o: ["Instant exits", "Reverting failed compliance", "Bridges", "DEX fees"], a: 1 },
+  { q: "Codex is best described as?", o: ["General L2", "Payment-focused L2", "Game chain", "NFT chain"], a: 1 }
+];
+
+let index = 0;
+let score = 0;
+
+const questionEl = document.getElementById("question");
+const optionsEl = document.getElementById("options");
+const progressBar = document.getElementById("progressBar");
+
+function loadQuestion() {
+  const data = quiz[index];
+  questionEl.textContent = `${index + 1}. ${data.q}`;
+  optionsEl.innerHTML = "";
+  progressBar.style.width = (index / quiz.length) * 100 + "%";
+
+  data.o.forEach((opt, i) => {
+    const btn = document.createElement("button");
+    btn.className = "option";
+    btn.textContent = opt;
+    btn.onclick = () => selectAnswer(i);
+    optionsEl.appendChild(btn);
+  });
+}
+
+function selectAnswer(i) {
+  const buttons = document.querySelectorAll(".option");
+  const correctIndex = quiz[index].a;
+
+  buttons.forEach((btn, idx) => {
+    btn.classList.add("disabled");
+    if (idx === correctIndex) btn.classList.add("correct");
+    if (idx === i && i !== correctIndex) btn.classList.add("wrong");
+  });
+
+  if (i === correctIndex) score++;
+
+  setTimeout(() => {
+    index++;
+    if (index < quiz.length) loadQuestion();
+    else endQuiz();
+  }, 800);
+}
+
+function endQuiz() {
+  document.getElementById("quiz-box").classList.add("hidden");
+  document.getElementById("score-box").classList.remove("hidden");
+  progressBar.style.width = "100%";
+  document.getElementById("scoreText").textContent =
+    `You scored ${score} out of ${quiz.length}`;
+}
+
+loadQuestion();
+</script>
+
+</body>
+</html>
