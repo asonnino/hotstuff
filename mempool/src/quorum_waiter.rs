@@ -104,7 +104,7 @@ impl QuorumWaiter {
                     // Give a bit of extra time to disseminate the batch to slower nodes rather than
                     // immediately dropping the handles.
                     // TODO: We should allocate resource per peer (not in total).
-                    if pending_counter >= DISSEMINATION_QUEUE_MAX {
+                    if pending_counter < DISSEMINATION_QUEUE_MAX {
                         pending.push(async move {
                             tokio::select! {
                                 _ = async move {while let Some(_) = wait_for_quorum.next().await {}} => (),
