@@ -50,3 +50,60 @@ async fn wait_for_quorum() {
     // Ensure the other listeners correctly received the batch.
     assert!(try_join_all(listener_handles).await.is_ok());
 }
+
+#[tokio::test]
+async fn dissemination_deadline_with_stalled_quorum() {
+    let (tx_message, rx_message) = channel(1);
+    let (tx_batch, mut rx_batch) = channel(1);
+    let (myself, _) = keys().pop().unwrap();
+    let committee = committee_with_base_port(7_100);
+    let peers: Vec<_> = committee
+        .broadcast_addresses(&myself)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+
+    // Spawn a `QuorumWaiter` instance.
+    QuorumWaiter::spawn(committee.clone(), /* stake */ 1, rx_message, tx_batch);
+
+    // Send a first batch: two peers acknowledge it (enough for a quorum), the third does not.
+    let mut senders = Vec::new();
+    let mut handlers = Vec::new();
+    for name in &peers {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        senders.push(tx);
+        handlers.push((*name, rx));
+    }
+    let mut slow = senders.pop().unwrap();
+    for sender in senders {
+        sender.send(Bytes::new()).unwrap();
+    }
+    let message = QuorumWaiterMessage {
+        batch: vec![1],
+        handlers,
+    };
+    tx_message.send(message).await.unwrap();
+    assert_eq!(rx_batch.recv().await.unwrap(), vec![1]);
+
+    // Send a second batch that no peer ever acknowledges, so it never reaches a quorum.
+    let mut stalled_senders = Vec::new();
+    let mut handlers = Vec::new();
+    for name in &peers {
+        let (tx, rx) = tokio::sync::oneshot::channel::<Bytes>();
+        stalled_senders.push(tx);
+        handlers.push((*name, rx));
+    }
+    let message = QuorumWaiterMessage {
+        batch: vec![2],
+        handlers,
+    };
+    tx_message.send(message).await.unwrap();
+
+    // The slow peer's handler of the first batch must still be dropped once the dissemination
+    // deadline expires, even though the `QuorumWaiter` is stuck waiting for the second batch.
+    let deadline = Duration::from_millis(DISSEMINATION_DEADLINE * 4);
+    assert!(
+        tokio::time::timeout(deadline, slow.closed()).await.is_ok(),
+        "dissemination handles outlived the deadline while waiting for a stalled quorum"
+    );
+}

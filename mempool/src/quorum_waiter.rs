@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::config::{Committee, Stake};
@@ -8,7 +9,8 @@ use futures::stream::StreamExt as _;
 use network::CancelHandler;
 use tokio::{
     sync::mpsc::{Receiver, Sender},
-    time::sleep,
+    sync::Semaphore,
+    time::timeout,
 };
 
 #[cfg(test)]
@@ -66,59 +68,48 @@ impl QuorumWaiter {
         deliver
     }
 
-    // async fn empty_buffer()
-
     /// Main loop.
     async fn run(&mut self) {
-        // Hold the dissemination handlers of the f slower nodes.
-        let mut pending = FuturesUnordered::new();
-        let mut pending_counter = 0;
+        // Bounds the number of batches whose dissemination to the f slower nodes is in progress.
+        let dissemination_slots = Arc::new(Semaphore::new(DISSEMINATION_QUEUE_MAX));
 
-        // while let Some(QuorumWaiterMessage { batch, handlers }) = self.rx_message.recv().await {
-        loop {
-            tokio::select! {
-                Some(QuorumWaiterMessage { batch, handlers }) = self.rx_message.recv() => {
-                    let mut wait_for_quorum: FuturesUnordered<_> = handlers
-                        .into_iter()
-                        .map(|(name, handler)| {
-                            let stake = self.committee.stake(&name);
-                            Self::waiter(handler, stake)
-                        })
-                        .collect();
+        while let Some(QuorumWaiterMessage { batch, handlers }) = self.rx_message.recv().await {
+            let mut wait_for_quorum: FuturesUnordered<_> = handlers
+                .into_iter()
+                .map(|(name, handler)| {
+                    let stake = self.committee.stake(&name);
+                    Self::waiter(handler, stake)
+                })
+                .collect();
 
-                    // Wait for the first 2f nodes to send back an Ack. Then we consider the batch
-                    // delivered and we send its digest to the consensus (that will include it into
-                    // the dag). This should reduce the amount of synching.
-                    let mut total_stake = self.stake;
-                    while let Some(stake) = wait_for_quorum.next().await {
-                        total_stake += stake;
-                        if total_stake >= self.committee.quorum_threshold() {
-                            self.tx_batch
-                                .send(batch)
-                                .await
-                                .expect("Failed to deliver batch");
-                            break;
-                        }
-                    }
-
-                    // Give a bit of extra time to disseminate the batch to slower nodes rather than
-                    // immediately dropping the handles.
-                    // TODO: We should allocate resource per peer (not in total).
-                    if pending_counter < DISSEMINATION_QUEUE_MAX {
-                        pending.push(async move {
-                            tokio::select! {
-                                _ = async move {while let Some(_) = wait_for_quorum.next().await {}} => (),
-                                () = sleep(Duration::from_millis(DISSEMINATION_DEADLINE)) => ()
-                            }
-                        });
-                        pending_counter += 1;
-                    }
-                },
-                Some(_) = pending.next() =>  {
-                    if pending_counter > 0 {
-                        pending_counter -= 1;
-                    }
+            // Wait for the first 2f nodes to send back an Ack. Then we consider the batch
+            // delivered and we send its digest to the consensus (that will include it into
+            // the dag). This should reduce the amount of synching.
+            let mut total_stake = self.stake;
+            while let Some(stake) = wait_for_quorum.next().await {
+                total_stake += stake;
+                if total_stake >= self.committee.quorum_threshold() {
+                    self.tx_batch
+                        .send(batch)
+                        .await
+                        .expect("Failed to deliver batch");
+                    break;
                 }
+            }
+
+            // Give a bit of extra time to disseminate the batch to slower nodes rather than
+            // immediately dropping the handles. This runs in its own task so that its deadline
+            // holds even while this loop is blocked waiting for the quorum of a later batch.
+            // If all slots are taken, the handles are dropped immediately.
+            // TODO: We should allocate resource per peer (not in total).
+            if let Ok(permit) = dissemination_slots.clone().try_acquire_owned() {
+                tokio::spawn(async move {
+                    let _ = timeout(Duration::from_millis(DISSEMINATION_DEADLINE), async move {
+                        while wait_for_quorum.next().await.is_some() {}
+                    })
+                    .await;
+                    drop(permit);
+                });
             }
         }
     }
